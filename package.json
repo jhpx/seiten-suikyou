@@ -1,0 +1,24 @@
+{
+  "name": "seiten-suikyou",
+  "version": "0.1.0",
+  "description": "星天水镜 - 基于 miao-plugin 评分内核的原神角色养成评估器",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20.6"
+  },
+  "imports": {
+    "#miao": "./vendor/miao/components/index.js",
+    "#miao.models": "./vendor/miao/models/index.js",
+    "#miao.path": "./vendor/miao/tools/path.js"
+  },
+  "dependencies": {
+    "lodash": "^4.18.1"
+  },
+  "scripts": {
+    "sync": "python tools/sync_miao.py",
+    "test": "node test/regression.mjs",
+    "smoke": "node test/smoke.mjs",
+    "verify": "node test/verify.mjs"
+  }
+}
