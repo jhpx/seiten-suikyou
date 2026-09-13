@@ -130,10 +130,13 @@ for (const file of FILES) {
 ok(offenders.length === 0, `vendor/miao 下 ${FILES.length} 个文件的 import 全在边界内`)
 for (const o of offenders.slice(0, 20)) console.log('        ' + o)
 
-// 防止老架构复活：vendor/ 下只应有 miao/ 一个目录
-eq(fs.readdirSync(path.join(ROOT, 'vendor')).sort(), ['miao'],
-  'vendor/ 下只有 miao/（没有手写替身 _runtime.js 之类）')
-ok(fs.existsSync(path.join(VENDOR, 'VENDOR.md')), 'VENDOR.md 生成物标记存在')
+// 防止老架构复活：vendor/ 下只应有生成物目录（miao/ 内核 + i18n/ 名字表），
+// 不许出现手写的替身文件（_runtime.js 之类）。生成物一律带 VENDOR.md 标记。
+eq(fs.readdirSync(path.join(ROOT, 'vendor')).sort(), ['i18n', 'miao'],
+  'vendor/ 下只有生成物目录 miao/ 与 i18n/（没有手写替身 _runtime.js 之类）')
+for (const dir of ['miao', 'i18n']) {
+  ok(fs.existsSync(path.join(ROOT, 'vendor', dir, 'VENDOR.md')), `vendor/${dir}/VENDOR.md 生成物标记存在`)
+}
 
 // ─────────────────────────────────────── 5. 云崽全局变量零残留
 console.log('\n=== 5. 云崽全局变量零残留 ===')

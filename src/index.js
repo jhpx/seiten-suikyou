@@ -36,3 +36,9 @@ export { default as Material } from '../vendor/miao/models/Material.js'
 export { default as Attr } from '../vendor/miao/models/attr/Attr.js'
 
 export { Meta, Format, Data } from '../vendor/miao/components/index.js'
+
+/* 多语言出口。miao 零 i18n 能力（resources/ 全是中文、连键都是中文名），
+   所以显示层必须自带一张表 —— 见 src/i18n/index.js。
+   表的主键是数字 hash / 部位序号 / FIGHT_PROP_*，与展示语言无关。 */
+export * as i18n from './i18n/index.js'
+

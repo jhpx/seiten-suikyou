@@ -20,7 +20,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { ArtisMark, Format, Character } from '../index.js'
+import { ArtisMark, Format, i18n } from '../index.js'
+import { slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
 import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { ingestPayload } from '../adapter/ingest.js'
@@ -28,7 +29,12 @@ import { fetchEnka } from '../adapter/enka.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
 import { diffPanels, REL_TOL, ABS_TOL } from '../adapter/panel-check.js'
 
-const POS_NAME = ['', '生之花', '死之羽', '时之沙', '空之杯', '理之冠']
+/* 界面文字（账号/武器/套装/主/副…）复用 src/i18n/ui.js —— 命令行和网页同一张表，
+   免得两处各写一套、加语言时漏改。 */
+const uiText = (key, locale) => i18n.uiText(key, locale)
+
+/* 部位名 / 词条名的本地化都走 view/shape —— 和网页端共用同一个出口，
+   免得命令行和页面各写一套，回头改一处漏一处。 */
 
 /* ---------------- 参数 ---------------- */
 
@@ -55,6 +61,7 @@ const USAGE = `
   --check            拿游戏给的面板对拍，验证数据有没有翻错（需联网或 --file）
   --db <path>        库文件位置，默认 data/gs.db
   --save-raw <dir>   把原始响应另存一份到该目录
+  --locale <code>    输出语言，默认 chs（chs/cht/en/ja/ko，或 zh-cn / zh-tw / jp / kr 这类别名）
   --json             额外输出结构化结果（给以后的前端/接口用）
   --keys             列出库里用到过的官方文案 key（做多语言时照着要）
   --list             列出库里已有哪些 uid
@@ -78,54 +85,69 @@ function padW (s, n) {
   return s + ' '.repeat(Math.max(0, n - width(s)))
 }
 
-/* 面板属性：生命/攻击/防御是整数，其余是百分比 */
+/* 面板属性：生命/攻击/防御是整数，其余是百分比。标题按语言现查（view/shape.statLabel） */
 const PANEL_ROWS = [
-  ['hp', '生命', 'int'], ['atk', '攻击', 'int'], ['def', '防御', 'int'],
-  ['cpct', '暴击率', 'pct'], ['cdmg', '暴击伤害', 'pct'],
-  ['mastery', '元素精通', 'int'], ['recharge', '元素充能', 'pct'],
-  ['dmg', '元素伤害', 'pct'], ['phy', '物理伤害', 'pct'], ['heal', '治疗加成', 'pct']
+  ['hp', 'int'], ['atk', 'int'], ['def', 'int'],
+  ['cpct', 'pct'], ['cdmg', 'pct'],
+  ['mastery', 'int'], ['recharge', 'pct'],
+  ['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']
 ]
 
-function renderPanel (attr) {
+function renderPanel (attr, locale) {
   const parts = []
-  for (const [key, label, kind] of PANEL_ROWS) {
+  for (const [key, kind] of PANEL_ROWS) {
     const v = attr?.[key]
     if (!v) continue
-    parts.push(`${label} ${kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1)}`)
+    parts.push(`${statLabel(key, locale)} ${kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1)}`)
   }
   return parts.join('  ')
 }
 
-function renderCharacter (profile, result, keyTitle) {
+/* 名字一律从 **库行的 id/hash** 查 i18n 表，不拿 miao 给的中文名反查。
+   miao 那边只有中文（它没有 i18n），所以它的名字只能当「查不到时的兜底」。
+   用 hash 查还有个好处：miao 哪天改了译名也不影响我们。 */
+function renderCharacter (row, profile, result, locale) {
   const char = profile.char
   const out = []
   const talent = deriveTalent(char, (profile._raw?.skill_level_map) || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
+  const dbArtis = new Map((row?.artifacts || []).map(a => [a.pos, a]))
 
-  out.push(`${char.name} ★${char.star || 5} Lv.${profile.level ?? '?'} 命${profile.cons} 好感${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
-  out.push(`  武器  ${profile.weapon.name || '（未识别）'} Lv.${profile.weapon.level} 精${profile.weapon.affix}`)
+  const name = i18n.avatarName(profile.id, locale) || char.name
+  const wname = (row?.weapon_item_id ? i18n.weaponName(row.weapon_item_id, locale) : null) ||
+    profile.weapon.name || '（未识别）'
 
-  const setStr = Object.entries(result.sets || {}).map(([n, c]) => `${n}×${c}`).join(' ')
-  out.push(`  套装  ${setStr || '（无）'}`)
+  /* 主流程里那个同名的 uiText 是模块级的，这里包一层省得每次传 locale */
+  const U = (key) => uiText(key, locale)
+
+  out.push(`${name} ★${char.star || 5} Lv.${profile.level ?? '?'} ${U('cons')}${profile.cons} ${U('fetter')}${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
+  out.push(`  ${U('weapon')}  ${wname} Lv.${profile.weapon.level} ${U('refine')}${profile.weapon.affix}`)
+
+  /* 套装名 miao 给的是官方中文全名，换语言得反查（i18n.fromZh） */
+  const setStr = Object.entries(result.sets || {})
+    .map(([n, c]) => `${i18n.fromZh(n, locale) || n}×${c}`).join(' ')
+  out.push(`  ${U('sets')}  ${setStr || U('none')}`)
 
   for (const idx of [1, 2, 3, 4, 5]) {
     const a = result.artis?.[idx]
-    if (!a || !a.name) { out.push(`  ${idx} ${POS_NAME[idx]}  ——`); continue }
-    out.push(`  ${idx} ${POS_NAME[idx]}  ${padW(a.name, 14)} ★${5} Lv.${padStart(a.level ?? 0, 2)}   ${padStart(a.mark, 6)}  ${a.markClass}`)
+    if (!a || !a.name) { out.push(`  ${idx} ${slotLabel(idx, locale)}  ——`); continue }
+    const dbRow = dbArtis.get(idx)
+    const aname = dbRow?.name_hash ? (i18n.name(dbRow.name_hash, locale) || a.name) : a.name
+    out.push(`  ${idx} ${slotLabel(idx, locale)}  ${padW(aname, 14)} ★${5} Lv.${padStart(a.level ?? 0, 2)}   ${padStart(a.mark, 6)}  ${a.markClass}`)
     if (a.main && a.main.value !== undefined) {
-      out.push(`       主  ${keyTitle[a.main.key] || a.main.key} ${a.main.value}`)
+      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${a.main.value}`)
     }
     const subs = (a.attrs || []).filter(x => x.key)
     if (subs.length) {
-      out.push('       副  ' + subs.map(x =>
-        `${keyTitle[x.key] || x.key} ${x.value}${x.upNum > 1 ? `×${x.upNum}` : ''}`
+      out.push(`       ${U('substat')}  ` + subs.map(x =>
+        `${statLabel(x.key, locale)} ${x.value}${x.upNum > 1 ? `×${x.upNum}` : ''}`
       ).join('  '))
     }
   }
 
-  out.push(`  面板  ${renderPanel(profile.attr)}`)
-  out.push(`  场景  ${result.classTitle}`)
-  out.push(`  总分  ${result.mark}  ${result.markClass}`)
+  out.push(`  ${U('panelSection')}  ${renderPanel(profile.attr, locale)}`)
+  out.push(`  ${U('scene')}  ${result.classTitle}`)
+  out.push(`  ${U('total')}  ${result.mark}  ${result.markClass}`)
   return out.join('\n')
 }
 
@@ -204,15 +226,16 @@ async function main () {
     return 1
   }
 
-  const keyTitle = ArtisMark.getKeyTitleMap('gs')
+  /* 语言在这里归一一次，后面所有名字都按它渲染 */
+  const locale = i18n.resolveLocale(args.locale || i18n.DEFAULT_LOCALE)
   const last = repo.lastFetch(db, uidInDb)
 
   console.log(line())
-  console.log(`账号  ${account?.nickname || '?'}（uid:${uidInDb}）  Lv.${account?.level ?? '?'}  世界等级 ${account?.world_level ?? '?'}`)
+  console.log(`${uiText('account', locale)}  ${account?.nickname || '?'}（uid:${uidInDb}）  Lv.${account?.level ?? '?'}  ${uiText('worldLevel', locale)} ${account?.world_level ?? '?'}`)
   const src = ingestSummary
-    ? `${ingestSummary.source} 本次取得 ${ingestSummary.avatarCount} 个角色`
-    : '库中数据（未联网）'
-  console.log(`数据  ${src}　|　最新抓取 ${last?.fetched_at || '?'}　|　库里共 ${avatars.length} 个角色`)
+    ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.avatarCount} ${uiText('chars', locale)}`
+    : uiText('offline', locale)
+  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${last?.fetched_at || '?'}　|　${avatars.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
   const filter = args.char ? String(args.char) : null
@@ -239,16 +262,17 @@ async function main () {
   }
 
   /* ---- 4. 输出 ---- */
-  for (const { profile, result } of wanted) {
+  for (const { row, profile, result } of wanted) {
     console.log(line())
-    console.log(renderCharacter(profile, result, keyTitle))
+    console.log(renderCharacter(row, profile, result, locale))
   }
 
   console.log(line())
   const sorted = [...wanted].sort((a, b) => b.result._mark - a.result._mark)
-  console.log(`汇总（按总分降序，共 ${sorted.length} 个角色）`)
+  console.log(`${uiText('summary', locale)}（按总分降序，共 ${sorted.length} ${uiText('chars', locale)}）`)
   for (const { profile, result } of sorted) {
-    console.log(`  ${padStart(result.mark, 6)}  ${padEnd(result.markClass, 4)} ${padEnd(profile.char.name, 10)} ${result.classTitle}`)
+    const cname = i18n.avatarName(r.profile.id, locale) || r.profile.char.name
+    console.log(`  ${padStart(r.result.mark, 6)}  ${padEnd(r.result.markClass, 4)} ${padEnd(cname, 10)} ${r.result.classTitle}`)
   }
   console.log(line())
 
@@ -275,17 +299,13 @@ async function main () {
     }
   }
 
+  /* --json 走的是和网页端同一个成型出口（view/shape），
+     这样「命令行能看到的」和「接口能拿到的」是同一份形状，不会各说各话。
+     保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
-    console.log(JSON.stringify(wanted.map(({ profile, result }) => ({
-      uid: profile.uid,
-      avatarId: profile.id,
-      name: profile.char.name,
-      mark: result._mark,
-      markClass: result.markClass,
-      classTitle: result.classTitle,
-      sets: result.sets,
-      charWeight: result.charWeight,
-      artis: result.artis
+    console.log(JSON.stringify(wanted.map(({ row, profile, result }) => ({
+      ...shapeCharacter(row, profile, result, locale),
+      charWeight: result.charWeight
     })), null, 2))
   }
   return 0

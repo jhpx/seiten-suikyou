@@ -123,7 +123,7 @@ enka 原始响应
 
    好消息是**文案主键不用自己造**：enka 的 `flat` 里直接带着官方的 `nameTextMapHash` /
    `setNameTextMapHash`（实测 uid 101242308 的响应里有 132 处），那就是官方全语言文案表的主键
-   —— 存下 hash，将来接上官方 `TextMap` 就一次性拿到全部语言，不需要我们自己翻译。
+   —— 存下 hash，接上官方 `TextMap` 就一次性拿到全部语言，不需要我们自己翻译。
    所以这三个 hash 列（`artifact.name_hash` / `artifact.set_hash` / `avatar.weapon_name_hash`）
    在 ingest 阶段就存下来：enka 白给的东西，丢了要补只能重抓。
    唯一例外是**角色名**：`avatarInfo` 里只有 `avatarId`，没有 hash，得另配一份静态映射。
@@ -143,24 +143,36 @@ seiten-suikyou/
 │   │   ├── ingest.js         #   原始响应 → 库行（挑字段、位置映射、带文案 key，不解析属性）
 │   │   ├── materialize.js    #   库行 → miao profile（id → 中文名/对象 + 算面板）
 │   │   └── panel-check.js    #   拿游戏给的面板对拍，验证数据没翻错
-│   └── cli/score.js          # 命令行评分入口
+│   ├── cli/score.js          # 命令行评分入口
+│   ├── i18n/index.js         # 多语言：hash/id → 文案（读 vendor/i18n/names.json）
+│   └── i18n/ui.js            #   界面文字手写表（按钮/标题/提示，官方表里没有，5 语言 × 20 来条）
+│   ├── view/shape.js         # 视图成型：库行 + 评分结果 → 页面/接口用的对象（含本地化）
+│   └── server/               # HTTP 服务 + 页面
+│       ├── index.js          #   node:http 路由（API + 静态页），零新依赖
+│       └── public/           #   index.html / app.js / style.css（原生，无框架无 CDN）
 ├── vendor/miao/              # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   ├── components/index.js   #   `#miao`        入口（已摘掉 Common / App）
 │   ├── models/index.js       #   `#miao.models` 入口（已摘掉云崽模型）
 │   ├── tools/path.js         #   `#miao.path`   路径工具（零云崽依赖）
 │   └── components/_local/    #   本项目手写的最小实现：Cfg / Version
+├── vendor/i18n/              # 官方文案表（sync_i18n 生成，勿手工编辑）
+│   └── names.json            #   名字组 + hash 索引 + 部位名 + FIGHT_PROP_* 词条名
 ├── tools/
-│   └── sync_miao.py          # 同步脚本（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
+│   ├── sync_miao.py          # 同步脚本（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
+│   └── sync_i18n.py          # 多语言表提取（拉官方 TextMap + enka loc.json，离线压成几百 KB）
 ├── docs/
 │   ├── data-model.md         # 数据模型设计（三层结构、为什么不设计算中间层）
 │   ├── sample-output.txt     # 真实运行的完整输出存档（含面板对拍）
+│   ├── i18n-report.md        # 每次同步生成：各类别条目数 / 每语言命中率 / 未收录清单
 │   └── sync-report.md        # 每次同步生成：同步了什么 / 改了什么 / 增量多少
 └── test/
     ├── fixtures.mjs          测试用的合成数据（手写）
     ├── data/enka-real.json   一份真实 enka 响应（换过 uid，数值没动）
     ├── smoke.mjs             冒烟：内核能否脱离云崽独立加载
     ├── arch.mjs              架构契约：别名解析 / 依赖策略 / vendor 自包含
+    ├── i18n.mjs              #   多语言：各类名字中英两路都对、兜底、表缺失时跳过
     ├── pipeline.mjs          管线：ingest / 库往返 / 迁移 / 真实数据对拍 / materialize 不丢数据
+    ├── server.mjs            服务：真起监听打真 HTTP（路由 / 静态 / 错误形状 / 多语言出口）
     ├── regression.mjs        回归断言：算法常量（上游更新后的安全网）
     └── verify.mjs            端到端评分验证（输出即基线，可 diff）
 ```
@@ -169,12 +181,16 @@ seiten-suikyou/
 
 ```bash
 npm install     # 只需 lodash
-npm test        # 全量：smoke → arch → pipeline → regression → verify
+npm test        # 全量：smoke → arch → pipeline → i18n → server → regression → verify
 npm run smoke   # 只跑冒烟
 npm run arch    # 只跑架构契约
 npm run pipeline# 只跑管线测试
+npm run i18n    # 只跑多语言
+npm run server:test  # 只跑服务测试
 npm run verify  # 只跑评分验证
 npm run sync    # 从 miao-plugin 重新同步（需先设 MIAO_PLUGIN_PATH）
+npm run sync:i18n    # 从官方数据重新提取多语言表（国内需代理，见下）
+npm run server  # 起网页：http://127.0.0.1:8787
 ```
 
 `verify` 的 stdout 就是「基线」——改完内核后可以
@@ -190,6 +206,61 @@ MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_miao.py
 **为什么同步脚本用 Python**：它是开发期工具，不参与运行时。Python 标准库
 （`shutil` / `re` / `subprocess`）写这类「复制 + 文本改写 + 校验 + 出报告」的脚本更顺手，
 也不会让工具代码混进 Node 的模块图。
+
+## 多语言
+
+`src/i18n/` 分两张表，因为它们的**来源和性质完全不同**：
+
+| | `vendor/i18n/names.json` | `src/i18n/ui.js` |
+|---|---|---|
+| 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：读取、抓取、面板属性、命之座… |
+| 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
+| 规模 | 756 个名字组、11931 个 hash | 20 来条 × 5 种语言 |
+| 主键 | hash / avatarId / itemId / setId | 英文 key |
+
+名字表的提取有三个坑，都在脚本注释里记着：
+
+1. **官方把同一段文案复用在几十处** ——「胡桃」有 49 个键、「炽烈的炎之魔女」11 个，
+   enka 返回哪个变体无法预知。所以把所有变体收进**同一个名字组**，任意变体都查得到同一条。
+   同一组在各语言下文案一致（脚本会报冲突，当前 0 处）。
+2. **词条名不能走 hash** —— 走 enka 的 `loc.json`，它的词条区按 `FIGHT_PROP_*` 枚举键控，
+   和 miao 的 `StatType` 一一对应，没有歧义。它的数字 hash 键有 +512 偏移，不能用。
+3. **套装名要拐一道** —— `setId → equipAffixId → EquipAffixExcelConfigData[level=0].nameTextMapHash`。
+
+```bash
+npm run sync:i18n              # 默认 chs,cht,en,ja,ko
+npm run sync:i18n -- --locales chs,en
+I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
+```
+
+表不在时**静默降级**成只有中文（`i18n.available()` 返回 false，页面会提示），不会崩。
+
+## 网页服务
+
+```bash
+npm run server            # http://127.0.0.1:8787
+npm run server -- --port 9000 --host 0.0.0.0 --db data/other.db
+```
+
+**零新依赖**，用 `node:http` 手写。理由是 `test/arch.mjs` 锁死了「运行时依赖只有 lodash」——
+为了一个个人工具引 Fastify 进来，等于把自己定的边界拆了。默认值只绑 `127.0.0.1`，
+这是个本地工具，不该顺手暴露到局域网。
+
+| 接口 | 说明 |
+|---|---|
+| `GET /api/meta` | 有哪些语言、多语言表在不在、以及当前语言的**界面文字表** |
+| `GET /api/health` | 库里有几个 uid |
+| `GET /api/uids` | uid 列表（昵称、等级、角色数、最后抓取时间） |
+| `GET /api/uid/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
+| `POST /api/fetch` | `{uid, locale}` 从 enka 现抓一份并入库，直接回视图 |
+| `GET /` | H5 页面（纯手写 CSS，无 CDN、无框架、无图片） |
+
+页面在 `src/server/public/`，也是零依赖：原生 JS + `<template>` 克隆。
+
+**前端一个词条名都不写死** —— 部位名、词条名、套装名、角色名、武器名全是后端按 `locale` 给好的文本；
+连按钮和分组标题都从 `/api/meta` 的 `ui` 表来。加一门语言不用动前端，
+这也是为什么界面文字要单独手写一张表（`src/i18n/ui.js`）：官方 TextMap 里根本没有
+「读取」「圣遗物」这种我们自己页面的说法。
 
 ## 命令行评分
 
@@ -302,7 +373,8 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 
 ## 下一步
 
-1. `src/i18n/` —— 多语言文案表：接官方 `TextMap`（用 §多语言 里存的 hash 当主键），
-   角色名另配 `avatarId → 文案 key` 静态映射
-2. `server/` —— Fastify 起 API（复用 store + materialize）
-3. `web/` —— H5 前端
+1. 把多语言覆盖到**剩余的中文字面**：`classTitle`（胡桃-护摩这类场景名，miao 自己的中文串）、
+   元素名、以及 `docs/` 里的文档。前两个要给 i18n 表再补两类条目。
+2. 页面加图片：角色头像 / 圣遗物图标现在都是用首字和色块替代的，
+   vendor 里没有图，得另找图源或接 enka 的 UI 端点。
+3. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。

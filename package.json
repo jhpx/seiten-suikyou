@@ -17,12 +17,16 @@
   },
   "scripts": {
     "sync": "python tools/sync_miao.py",
+    "sync:i18n": "python tools/sync_i18n.py",
     "score": "node --disable-warning=ExperimentalWarning src/cli/score.js",
-    "test": "node test/smoke.mjs && node test/arch.mjs && node test/pipeline.mjs && node test/regression.mjs && node test/verify.mjs",
+    "server": "node --disable-warning=ExperimentalWarning src/server/index.js",
+    "test": "node test/smoke.mjs && node test/arch.mjs && node test/pipeline.mjs && node test/i18n.mjs && node --disable-warning=ExperimentalWarning test/server.mjs && node test/regression.mjs && node test/verify.mjs",
     "smoke": "node test/smoke.mjs",
     "arch": "node test/arch.mjs",
     "pipeline": "node --disable-warning=ExperimentalWarning test/pipeline.mjs",
+    "server:test": "node --disable-warning=ExperimentalWarning test/server.mjs",
     "regression": "node test/regression.mjs",
-    "verify": "node test/verify.mjs"
+    "verify": "node test/verify.mjs",
+    "i18n": "node test/i18n.mjs"
   }
 }
