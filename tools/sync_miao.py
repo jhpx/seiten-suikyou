@@ -4,7 +4,8 @@
 星天水镜 / seiten-suikyou —— miao 评分内核同步脚本
 
 把 miao-plugin 里评分用得上的源码搬进 vendor/miao/，并只对「云崽机器人专属」
-的依赖做定点处理。每次同步额外产出 docs/sync-report.md，逐文件列出改动。
+的依赖做定点处理。每次同步额外产出 docs/sync-report.md，讲清三件事：
+同步了哪些数据、改了哪些、相对上一版差在哪。
 
 用法:
     python tools/sync_miao.py
@@ -16,16 +17,18 @@
      云崽专属组件（Common 渲染 / App 应用）、云崽专属模型（User / MysApi / Player…）。
   3. 别名不改写 —— `#miao` / `#miao.models` / `#miao.path` 原样保留，
      由 package.json 的 imports 字段映射到 vendor/miao 下的真实文件。
-  4. 所有改动必须可审计 —— 报告里有 unified diff，改了什么一目了然。
+  4. 所有改动必须可审计 —— 改动用凝练语言描述清楚（不贴 diff，逐行核对走 git）。
+     增量也交给 git 算：vendor/miao 本来就是 git 跟踪的，diff 一下就有，
+     没必要另存一份哈希清单（详见下面「增量」一节）。
 """
 
 from __future__ import annotations
 
-import difflib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -443,6 +446,52 @@ GENERATED = [
     ("components/_local/Version.js", LOCAL_VERSION, "云崽版本检测的最小替代"),
 ]
 
+# 生成文件「为什么不能直接用上游的」——报告第四节要用，写在这儿免得两处对不上
+GEN_NOTES = {
+    "components/_local/Cfg.js": (
+        "上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），"
+        "整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。"
+        "评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），"
+        "所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象），"
+        "`get` 的逻辑逐字照抄上游，保证返回值与上游一致。"
+    ),
+    "components/_local/Version.js": (
+        "上游 `Version` 读 `package.json` / `CHANGELOG.md`，并检测宿主是 Yunzai V2 / V3 还是 AlemonJS，"
+        "这些概念在本项目里都不存在。评分链路只用到 `Version.isMiao`"
+        "（上游在云崽下为 true，这里恒 false）。"
+    ),
+}
+
+# --------------------------------------------------------------------------
+# 报告用的分类（前缀匹配，顺序即展示顺序 —— 长的写在前面）
+# --------------------------------------------------------------------------
+GROUP_ORDER = [
+    ("components/", "miao 入口与组件"),
+    ("models/artis/", "评分算法"),
+    ("models/attr/", "面板属性计算"),
+    ("models/character/", "角色元数据"),
+    ("models/", "领域模型"),
+    ("tools/", "路径工具"),
+    ("resources/meta-gs/character/", "角色数据"),
+    ("resources/meta-gs/weapon/", "武器数据"),
+    ("resources/meta-gs/artifact/", "圣遗物数据"),
+    ("resources/meta-gs/material/", "素材数据"),
+    ("resources/", "其他资源"),
+]
+
+GROUP_PURPOSE = {
+    "miao 入口与组件": "`#miao` 入口、`Data`（路径与 JSON 读取）、`Meta`（元数据注册）、`Format`（数值格式化）、`MiaoError`、`common/Elem`（元素表）",
+    "评分算法": "`Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体",
+    "面板属性计算": "`Attr`（面板计算）＋ `AttrData`（属性基准表）—— 角色评分规则要读 `profile.attr`",
+    "角色元数据": "`CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent`",
+    "领域模型": "`Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口",
+    "路径工具": "`path.js` —— `#miao.path` 别名的目标",
+    "角色数据": "每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",
+    "武器数据": "每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件",
+    "圣遗物数据": "部位与套装数据、副词条基准、评分权重表（`artis-mark.js`）",
+    "素材数据": "突破素材（`CharMeta` 引用了 `Material` 模型）、素材缩写、每日材料",
+}
+
 # 禁止残留的云崽注入全局 —— 同步后扫描，发现即报错
 FORBIDDEN_GLOBALS = ["redis", "logger", "Bot", "segment", "Renderer", "Yunzai"]
 
@@ -475,6 +524,117 @@ def read(p: Path) -> str:
 def write(p: Path, text: str) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8", newline="\n")
+
+
+# --------------------------------------------------------------------------
+# 增量：交给 git 算，不自己维护清单
+# --------------------------------------------------------------------------
+# vendor/miao 是被 git 跟踪的，git 里本来就逐字存着上一版的内容。
+# 所以「相对上一版多了什么、改了什么」是 git 直接能回答的问题，
+# 再自建一份「路径 → 哈希」的清单属于重复造轮子，还得自己处理 CRLF
+# 归一化之类的口径问题（git 早就处理好了）。
+#
+# 早先版本确实这么干过，已废弃 —— 那套东西除了多一个要提交的文件、
+# 多一个 --baseline-from 参数之外，没有提供 git 给不了的信息。
+
+
+def git(*args: str) -> str | None:
+    """跑一条 git 命令。不在 git 仓库、没装 git 等情况下返回 None。
+
+    统一带 `core.quotepath=false`：不然中文路径会被转义成 \344\270\255 那种。
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            capture_output=True,
+            check=True,
+        )
+        return r.stdout.decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def vendor_head() -> tuple[str, str] | None:
+    """同步**之前**调用：最后一个改动过 vendor/miao 的提交（短哈希, 日期）。
+
+    同步是整体重写 vendor/，所以「上一个动过它的提交」就是上一版同步的产物。
+    """
+    out = git("log", "-1", "--format=%h %ai", "--", "vendor/miao")
+    if not out or not out.strip():
+        return None
+    short, _, when = out.strip().partition(" ")
+    return short, when
+
+
+def git_delta(base: str) -> dict:
+    """同步**之后**调用：相对 base 提交的增删改。
+
+    差异要从两个地方凑齐，缺一不可：
+      - `git diff`   —— 已跟踪文件的变化（改动 / 删除，以及 add 过的新文件）
+      - `git status` —— 完全未跟踪的新文件。同步搬进来的新目录（比如头一次
+                        引入的 resources/meta-gs/weapon/）就在这里文件级列出；
+                        `git diff` 对未跟踪文件是视而不见的。
+
+    VENDOR.md 每跑一次都重写（里面有同步时间），一律排除，
+    不然每次都固定报一个「内容变化」，纯噪声。
+    """
+    added: set[str] = set()
+    removed: set[str] = set()
+    changed: set[str] = set()
+
+    # 同步刚把整个 vendor 删掉重建过，git 索引里缓存的文件属性（mtime / inode）
+    # 全过期了。先刷一遍索引，否则首次扫描可能报出并不存在的新增 —— 实测遇到过一次
+    # （同一份内容，第一次算「新增 1」，之后再算就是 0）。
+    # `update-index --refresh` 在有文件需要更新时返回 1，属于正常情况，忽略。
+    subprocess.run(
+        ["git", "update-index", "--refresh", "--", "vendor/miao"],
+        capture_output=True,
+    )
+
+    def rel_of(path: str) -> str:
+        return path.strip().strip('"').replace("vendor/miao/", "", 1)
+
+    out = git("diff", "--name-status", base, "--", "vendor/miao")
+    if out is not None:
+        for line in out.splitlines():
+            bits = line.split("\t")
+            if len(bits) < 2:
+                continue
+            status, path = bits[0], bits[-1]
+            rel = rel_of(path)
+            if not rel or rel == "VENDOR.md":
+                continue
+            if status.startswith("D"):
+                removed.add(rel)
+            elif status.startswith("A"):
+                added.add(rel)
+            else:                       # M / R / T …
+                changed.add(rel)
+
+    out = git("status", "--porcelain", "--untracked-files=all", "--", "vendor/miao")
+    if out is not None:
+        for line in out.splitlines():
+            if len(line) < 4:
+                continue
+            if line[:2] != "??":
+                continue
+            rel = rel_of(line[3:])
+            if rel and rel != "VENDOR.md":
+                added.add(rel)
+
+    # 「未动」= 基准那版有、这次既没删也没改的。
+    # 分母要排掉 VENDOR.md —— 它每次重写，既不在上面三类里，也不该算「没动」。
+    out = git("ls-tree", "-r", "--name-only", base, "--", "vendor/miao")
+    base_files = [x.strip() for x in (out or "").splitlines() if x.strip()]
+    base_total = len([x for x in base_files if not x.endswith("vendor/miao/VENDOR.md")])
+
+    return {
+        "base": base,
+        "added": sorted(added),
+        "removed": sorted(removed),
+        "changed": sorted(changed),
+        "unchanged": max(0, base_total - len(removed) - len(changed)) if base_total else None,
+    }
 
 
 def collect() -> list[str]:
@@ -523,7 +683,31 @@ def apply_patch(code: str, patch: dict, rel: str) -> str:
     return code
 
 
-def main() -> int:
+USAGE = """
+用法:
+    python tools/sync_miao.py
+
+环境变量:
+    MIAO_PLUGIN_PATH   指定 miao-plugin 源码目录，默认取同级目录下的 miao-plugin
+
+报告的「相对上一版」一节由 git 算出：基准取「最后一个改动 vendor/miao 的提交」。
+不在 git 仓库里跑也能正常同步，只是这一节会说明算不了。
+"""
+
+
+def parse_args(argv: list[str]) -> dict:
+    args: dict = {}
+    for a in argv:
+        if a in ("-h", "--help"):
+            print(USAGE.strip())
+            sys.exit(0)
+        print(f"[warn] 忽略未知参数：{a}")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv if argv is not None else sys.argv[1:])
+
     if not MIAO.is_dir():
         print(f"[错误] 找不到 miao-plugin 源目录：{MIAO}")
         print("       可用环境变量 MIAO_PLUGIN_PATH 指定")
@@ -534,6 +718,10 @@ def main() -> int:
     upkg = MIAO / "package.json"
     if upkg.exists():
         upstream_ver = json.loads(read(upkg)).get("version", "unknown")
+
+    # ---- 增量基准：必须在动手改 vendor 之前取 ----
+    # 改完就查不到了（那时的「最后一个改动提交」已经是旧的那次）。
+    base = vendor_head()
 
     # ---- 清空并复制 ----
     files = collect()
@@ -570,6 +758,14 @@ def main() -> int:
         changes.append(
             {"file": rel, "desc": desc, "kind": "生成", "before": "", "after": content}
         )
+
+    # ---- 增量：相对上一个动过 vendor/miao 的提交 ----
+    # VENDOR.md 每次重写，已在 git_delta 里排除。拿到 delta 后立刻补 VENDOR.md，
+    # 让它自己的内容里也能写上这一行。
+    delta = None
+    if base is not None:
+        delta = git_delta(base[0])
+        delta["base_date"] = base[1]
 
     # ---- 校验 1：相对 import 都能落地 ----
     missing: list[str] = []
@@ -627,6 +823,21 @@ def main() -> int:
                 )
 
     # ---- 产物：VENDOR.md ----
+    # 校验结果一并交给报告，让报告如实写上是否通过
+    guard = {
+        "missing": missing,
+        "alias": alias_missing,
+        "leftover": leftover,
+        "unknown": unknown_dep,
+    }
+    # 这一行要写进 VENDOR.md，所以得先算出来
+    if delta is None:
+        delta_line = "算不了（不在 git 仓库里）"
+    else:
+        delta_line = (
+            f"相对提交 {delta['base']}：新增 {len(delta['added'])}"
+            f" / 移除 {len(delta['removed'])} / 内容变化 {len(delta['changed'])}"
+        )
     write(
         VENDOR / "VENDOR.md",
         "\n".join(
@@ -640,6 +851,8 @@ def main() -> int:
                 f"- 同步时间: {datetime.now().isoformat(timespec='seconds')}",
                 f"- 文件数: {len(files)} 个（另生成 {len(GENERATED)} 个）",
                 f"- 体积: {total_bytes / 1024:.1f} KB",
+                f"- 处置方式: 原样搬运 {len(files) - patched} 个 / 定点改写 {patched} 个 / 本地生成 {len(GENERATED)} 个",
+                f"- 相对上一版: {delta_line}",
                 "",
                 "## 别名映射（package.json `imports` 字段，import 语句本身不改写）",
                 "",
@@ -649,20 +862,22 @@ def main() -> int:
                 "#miao.path    → ./vendor/miao/tools/path.js",
                 "```",
                 "",
-                "## 改动明细",
+                "## 同步了什么、改了什么",
                 "",
-                "见 `docs/sync-report.md`。",
+                "见 `docs/sync-report.md`（完整清单 + 增量 + 改动说明）。",
+                "逐字节核对用 `git log -p -- vendor/miao`。",
             ]
         ),
     )
 
     # ---- 产物：同步报告 ----
-    write(REPORT, build_report(files, total_bytes, upstream_ver, patched))
+    write(REPORT, build_report(files, total_bytes, upstream_ver, patched, delta, guard))
 
     # ---- 输出 ----
     print(f"来源: {MIAO.as_posix()} (v{upstream_ver})")
     print(f"搬运: {len(files)} 个文件，{total_bytes / 1024:.1f} KB")
     print(f"改动: {patched} 个文件，生成 {len(GENERATED)} 个文件")
+    print(f"增量: {delta_line}")
     print(f"报告: {REPORT.relative_to(ROOT).as_posix()}")
 
     ok = True
@@ -694,14 +909,70 @@ def main() -> int:
 
 
 def build_report(
-    files: list[str], total_bytes: int, upstream_ver: str, patched: int
+    files: list[str],
+    total_bytes: int,
+    upstream_ver: str,
+    patched: int,
+    delta: dict,
+    guard: dict,
 ) -> str:
+    """产出 docs/sync-report.md。
+
+    这份报告要说清四件事：
+      1. 同步了什么 —— 按类别列全，并点明哪些文件一个字没动
+      2. 相对上一版差在哪 —— 由 git 算，基准是最后一个动过 vendor/miao 的提交
+      3. 改了什么 —— 凝练描述，不贴 diff（要逐行核对用 git）
+      4. 什么没改 —— 有多少文件是逐字节原样搬过来的
+    """
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     rewritten = [c for c in changes if c["kind"] == "改写"]
-    kinds = {}
+    generated = list(GENERATED)
+
+    def group_of(rel: str) -> str:
+        for pref, label in GROUP_ORDER:
+            if rel.startswith(pref):
+                return label
+        return "其他"
+
+    grouped: dict[str, list[str]] = {}
     for f in files:
-        top = f.split("/")[0]
-        kinds[top] = kinds.get(top, 0) + 1
+        grouped.setdefault(group_of(f), []).append(f)
+    labels = [lb for _p, lb in GROUP_ORDER if lb in grouped]
+    labels += [lb for lb in grouped if lb not in labels]
+
+    top: dict[str, int] = {}
+    for f in files:
+        k = f.split("/")[0]
+        top[k] = top.get(k, 0) + 1
+
+    if delta is None:
+        added, removed, changed = [], [], []
+        unchanged = None
+    else:
+        added, removed, changed = delta["added"], delta["removed"], delta["changed"]
+        unchanged = delta.get("unchanged")
+    n_untouched = len(files) - patched
+
+    # ---- 资源明细：数出来，不写死 ----
+    def cnt(pattern: str) -> int:
+        return sum(1 for f in files if re.fullmatch(pattern, f))
+
+    n_char = cnt(r"resources/meta-gs/character/[^/]+/data\.json")
+    n_rule = cnt(r"resources/meta-gs/character/[^/]+/artis\.js")
+    n_wp_detail = cnt(r"resources/meta-gs/weapon/[^/]+/[^/]+/data\.json")
+    wp_label = {
+        "sword": "单手剑", "bow": "弓", "catalyst": "法器",
+        "claymore": "双手剑", "polearm": "长柄武器",
+    }
+    wp_by_type: dict[str, int] = {}
+    for f in files:
+        m = re.fullmatch(r"resources/meta-gs/weapon/([^/]+)/[^/]+/data\.json", f)
+        if m:
+            wp_by_type[m.group(1)] = wp_by_type.get(m.group(1), 0) + 1
+    wp_break = "、".join(
+        f"{wp_label.get(k, k)} {v}"
+        for k, v in sorted(wp_by_type.items(), key=lambda kv: (-kv[1], kv[0]))
+    )
 
     L: list[str] = [
         "# miao 内核同步报告",
@@ -709,83 +980,244 @@ def build_report(
         f"- 同步时间：{stamp}",
         f"- 上游来源：`{MIAO.as_posix()}`（miao-plugin v{upstream_ver}）",
         f"- 搬运文件：{len(files)} 个 / {total_bytes / 1024:.1f} KB",
-        f"- 原样搬运：{len(files) - patched} 个　|　定点改写：{patched} 个　|　本地生成：{len(GENERATED)} 个",
+        f"- 处置方式：**原样搬运 {n_untouched} 个**　|　定点改写 {patched} 个　|　本地生成 {len(generated)} 个",
+        "- 增量基准：最后一个动过 `vendor/miao` 的 git 提交",
+    ]
+    if delta is None:
+        L.append("- 相对上一版：算不了（不在 git 仓库里跑）")
+    else:
+        L.append(
+            f"- 相对上一版（提交 `{delta['base']}`）：新增 {len(added)} 个　|　移除 {len(removed)} 个　"
+            f"|　内容变化 {len(changed)} 个　|　未动 {unchanged} 个"
+        )
+    L += [
         "",
-        "搬运范围：" + "、".join(f"{k}（{v}）" for k, v in sorted(kinds.items())),
+        "搬运范围：" + "、".join(f"{k}（{v}）" for k, v in sorted(top.items())),
         "",
-        "## 一、import 变化汇总",
+        "---",
         "",
-        "本项目**不改写任何别名**：`#miao` / `#miao.models` / `#miao.path` 原样保留，",
-        "由 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。",
-        "所以 import 层面的变化只发生在被定点改写的入口文件上：",
+        "## 一、同步了哪些数据",
         "",
-        "| 文件 | import 变化 |",
+        f"**结论先行：{len(files)} 个文件里 {n_untouched} 个是逐字节原样搬运的，一行没改。**",
+        f"被改写的只有 {patched} 个「和云崽机器人运行时绑定」的代码文件（第三节），",
+        f"另有 {len(generated)} 个文件是本项目手写的（第四节）。",
+        "",
+        "### 1.1 清单（按类别）",
+        "",
+        "| 类别 | 数量 | 内容 |",
+        "|---|---|---|",
+    ]
+    for lb in labels:
+        L.append(f"| {lb} | {len(grouped[lb])} | {GROUP_PURPOSE.get(lb, '—')} |")
+
+    L += [
+        "",
+        "### 1.2 资源数据的构成",
+        "",
+        f"- **角色数据 {len(grouped.get('角色数据', []))} 个** = "
+        f"{n_char} 个角色的 `data.json`（等级 / 突破 / 天赋等基础数据）"
+        f"＋ {n_rule} 个角色的 `artis.js`（该角色专属的评分规则，并非每个角色都有）"
+        f"＋ 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",
+        f"- **武器数据 {len(grouped.get('武器数据', []))} 个** = "
+        f"{n_wp_detail} 把武器的详情 `data.json`（{wp_break}）"
+        f"＋ 5 类各 1 个 `calc.js`（武器特效数值换算）与 1 个类型级 `data.json`"
+        f" ＋ 4 个索引文件（`index` / `alias` / `desc` / `extra`）",
+        f"- **圣遗物数据 {len(grouped.get('圣遗物数据', []))} 个** = "
+        "部位与套装数据（`data.json`）、副词条基准（`calc.js`）、评分权重表（`artis-mark.js`）、别名、`extra`、`index`",
+        f"- **素材数据 {len(grouped.get('素材数据', []))} 个** = "
+        "突破素材（角色元数据引用了 `Material` 模型）、素材缩写（`abbr.js`）、每日材料（`daily.js`）、`index`",
+        "",
+        "只搬原神（`meta-gs`）。星穹铁道（`meta-sr`）不搬；图片资源（`icon` / `gacha` / `awaken.webp`，约 21 MB）也不搬 ——",
+        "评分是纯计算，用不到图。",
+        "",
+        "### 1.3 生成物",
+        "",
+        f"上游没有这 {len(generated)} 个文件，是同步脚本写的；另有一份来源记录 `VENDOR.md` 一并写出（不计入「生成文件」数）。",
+        "",
+        "| 文件 | 说明 |",
         "|---|---|",
     ]
+    for rel, _content, desc in generated:
+        L.append(f"| `{rel}` | {desc}（详见第四节） |")
+    L.append("| `VENDOR.md` | 来源记录：上游路径 / 版本 / 同步时间 / 文件数 / 别名映射 |")
 
+    # ---------------------------------------------------------------- 二、增量
+    L += ["", "---", "", "## 二、相对上一版差在哪", ""]
+    if delta is None:
+        L += [
+            "本次不在 git 仓库里跑，算不了相对上一版的差异。",
+            "",
+            "在仓库里执行下面这条就能看到（基准换成上一个动过 `vendor/miao` 的提交）：",
+            "",
+            "```bash",
+            "git diff --name-status <基准提交> -- vendor/miao",
+            "```",
+            "",
+        ]
+    else:
+        L += [
+            f"基准是提交 `{delta['base']}`"
+            f"（{delta.get('base_date', '')}）—— 也就是上一版同步的产物。",
+            "",
+            "差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件",
+            "（同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。",
+            "",
+            f"- 新增 **{len(added)}** 个　- 移除 **{len(removed)}** 个　"
+            f"- 内容变化 **{len(changed)}** 个　- 未动 **{unchanged}** 个",
+            "",
+        ]
+
+    def listing(title: str, items: list[str]) -> None:
+        L.append(f"### {title}（{len(items)} 个）")
+        L.append("")
+        if not items:
+            L.append("（无）")
+            L.append("")
+            return
+        g: dict[str, list[str]] = {}
+        for it in items:
+            g.setdefault(group_of(it), []).append(it)
+        ordered = [x for _p, x in GROUP_ORDER if x in g]
+        ordered += [x for x in g if x not in ordered]
+        for lb in ordered:
+            L.append(f"- **{lb}**（{len(g[lb])} 个）—— {GROUP_PURPOSE.get(lb, '')}")
+        L.append("")
+        L.append("<details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>")
+        L.append("")
+        for lb in ordered:
+            sub = g[lb]
+            if len(sub) > 8:
+                L.extend(f"- `{x}`" for x in sub[:4])
+                L.append(f"- …（本类共 {len(sub)} 个，余下省略）")
+            else:
+                L.extend(f"- `{x}`" for x in sub)
+        L.append("")
+        L.append("</details>")
+        L.append("")
+
+    listing("新增", added)
+    listing("移除", removed)
+    listing("内容变化", changed)
+
+    # ---------------------------------------------------------------- 三、改写
+    L += [
+        "---",
+        "",
+        f"## 三、定点改写：{patched} 个",
+        "",
+        "改写原则：**评分算法与资源数据一律不动**。被处理的只有和「云崽机器人运行时」绑定的部分 ——",
+        "云崽注入的全局变量（`redis` / `logger`）、渲染组件、云崽专属模型。",
+        "别名 `#miao` / `#miao.models` / `#miao.path` 一概不改写，由 `package.json` 的 `imports`",
+        "字段映射到 `vendor/miao` 下的真实文件；所以 import 层面的变化只出现在下面这些入口文件里。",
+        "",
+    ]
     for c in rewritten:
-        if not c["before"] or not c["after"]:
-            continue
-        old_imports = re.findall(r"^import .*$", c["before"], re.M)
-        new_imports = re.findall(r"^import .*$", c["after"], re.M)
-        if old_imports == new_imports:
-            continue
-        removed = [i for i in old_imports if i not in new_imports]
-        added = [i for i in new_imports if i not in old_imports]
-        bits = []
-        for i in removed:
-            bits.append(f"移除 `{i}`")
-        for i in added:
-            bits.append(f"改为 `{i}`")
-        L.append(f"| `{c['file']}` | " + "；<br>".join(bits) + " |")
-
-    if not rewritten:
-        L.append("| （无） | — |")
-
-    L += ["", "## 二、逐文件改动", ""]
-
-    for c in changes:
-        L.append(f"### `{c['file']}`　[{c['kind']}]")
+        L.append(f"### `{c['file']}`")
         L.append("")
         L.append(c["desc"])
         L.append("")
-        if c["kind"] == "生成":
-            L.append("本项目手写内容，非上游文件：")
+        old_imports = re.findall(r"^import .*$", c["before"], re.M)
+        new_imports = re.findall(r"^import .*$", c["after"], re.M)
+        if old_imports != new_imports:
+
+            def spec(line: str) -> str:
+                m = re.search(r"from\s+['\"]([^'\"]+)['\"]", line)
+                return m.group(1) if m else line
+
+            old_map = {spec(i): i.strip() for i in old_imports}
+            new_map = {spec(i): i.strip() for i in new_imports}
+            gone = [s for s in old_map if s not in new_map]
+            fresh = [s for s in new_map if s not in old_map]
+            # 同一个模块但导入的名字变了（如 #miao.path 多个 miaoPath）——
+            # 光列模块名会写成「移除 #miao.path；新增 #miao.path」，得把前后两句都摆出来
+            tweaked = [s for s in old_map if s in new_map and old_map[s] != new_map[s]]
+            bits = []
+            if gone:
+                bits.append("移除 " + "、".join(f"`{s}`" for s in gone))
+            if fresh:
+                bits.append("新增 " + "、".join(f"`{s}`" for s in fresh))
+            for s in tweaked:
+                bits.append(f"改写 `{old_map[s]}` → `{new_map[s]}`")
+            L.append("- import：" + "；".join(bits))
             L.append("")
-            L.append("```js")
-            L.append(c["after"].rstrip())
-            L.append("```")
-        else:
-            diff = difflib.unified_diff(
-                c["before"].splitlines(),
-                c["after"].splitlines(),
-                fromfile="上游",
-                tofile="本仓库",
-                lineterm="",
-                n=2,
-            )
-            lines = [d for d in diff]
-            if not lines:
-                L.append("（内容无变化）")
-            else:
-                L.append("```diff")
-                # 头部三行（--- / +++ / @@）保留，路径换成文件名，避免噪声
-                for d in lines:
-                    if d.startswith("---") or d.startswith("+++"):
-                        continue
-                    L.append(d)
-                L.append("```")
-        L.append("")
+
+    n_resource = sum(
+        len(grouped.get(x, []))
+        for x in ("角色数据", "武器数据", "圣遗物数据", "素材数据", "其他资源")
+    )
+    L += [
+        "> 这里只讲「改了什么」，不贴 diff。要逐行核对：`git log -p -- vendor/miao/<文件>`。",
+        f"> 资源数据（{n_resource} 个）在本节没有任何条目 —— 因为它们一个字都没改。",
+        "",
+    ]
+
+    # ---------------------------------------------------------------- 四、生成
+    L += [
+        "---",
+        "",
+        f"## 四、本地生成：{len(generated)} 个",
+        "",
+        "这两个文件不是上游内容，由同步脚本生成（内容写死在 `tools/sync_miao.py` 里，要改得改脚本）。",
+        "",
+    ]
+    for rel, _content, desc in generated:
+        L += [f"### `{rel}`", "", f"**{desc}**", "", GEN_NOTES.get(rel, ""), ""]
+
+    # ---------------------------------------------------------------- 五、没改
+    L += [
+        "---",
+        "",
+        f"## 五、没有改动的部分：{n_untouched} 个",
+        "",
+        "除上面「改写的 + 生成的」以外，其余文件全部逐字节复制，同步脚本对它们零编辑：",
+        "",
+        "| 目录 | 总数 | 未改动 | 改过的（见第三节） |",
+        "|---|---|---|---|",
+    ]
+    for d in sorted({f.split("/")[0] for f in files}):
+        tot = sum(1 for f in files if f.startswith(d + "/"))
+        pat = sorted(c["file"] for c in rewritten if c["file"].startswith(d + "/"))
+        cell = "、".join(f"`{p.split('/', 1)[1]}`" for p in pat) if pat else "—— 全部原样"
+        L.append(f"| `{d}/` | {tot} | {tot - len(pat)} | {cell} |")
 
     L += [
-        "## 三、校验",
         "",
-        "同步脚本每跑一次都做这四道检查，任何一道不过就整体报错退出：",
+        "资源数据是最能说明问题的一块：角色基础数据、角色评分规则、武器数据、圣遗物权重表、素材数据",
+        "全部属于「数据」而非「逻辑」，本项目一个字节都不碰。想确认有没有被悄悄改过，",
+        "`git log -p -- vendor/miao/resources` 一卷就到底了。",
         "",
-        "- 相对 import 全部指向已搬运文件",
-        "- `#miao*` 别名全部能在 `package.json` 的 `imports` 中解析",
-        "- 无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）",
-        "- 无未知外部依赖（只允许 `lodash` 与 Node 内置模块）",
+    ]
+
+    # ---------------------------------------------------------------- 六、校验
+    L += [
+        "---",
+        "",
+        "## 六、校验",
+        "",
+        "每次同步都跑这四道守卫，任何一道不过就整体报错退出（报告照样生成，下面如实记录本次结果）：",
+        "",
+    ]
+    checks = [
+        ("相对 import 全部指向已搬运的文件", guard.get("missing") or []),
+        ("`#miao*` 别名全部能在 `package.json` 的 `imports` 中解析", guard.get("alias") or []),
+        ("无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）", guard.get("leftover") or []),
+        ("无未知外部依赖（只允许 `lodash` 与 Node 内置模块）", guard.get("unknown") or []),
+    ]
+    for title, hits in checks:
+        mark = "✓ 通过" if not hits else f"✗ 不通过（{len(hits)} 处）"
+        L.append(f"- {mark} —— {title}")
+    L += [
+        "",
+        "## 附：怎么自己核对",
+        "",
+        "搬运落地的每个文件都在 `vendor/miao/` 下、由 git 跟踪，所以核对不需要额外的清单文件：",
+        "",
+        "```bash",
+        "git log -p -- vendor/miao                     # 逐行看改了什么",
+        "git diff --name-status <基准提交> -- vendor/miao   # 只看增删改的文件名",
+        "```",
+        "",
+        "哪个文件属于「原样搬运」还是「定点改写」，第五节的表已经列全。",
         "",
     ]
     return "\n".join(L)

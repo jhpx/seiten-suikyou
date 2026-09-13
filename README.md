@@ -49,7 +49,7 @@ npm test       # 全量测试：内核能加载、架构边界没烂、管线没
 
 | 搬什么 | 为什么必须要 |
 |---|---|
-| `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则里 **56 个要读 `profile.attr`**（如胡桃的核爆判定 `attr.cpct < 15`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
+| `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
 | `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21MB，评分用不到，全不搬。 |
 
 另外 `src/index.js` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
@@ -57,8 +57,26 @@ npm test       # 全量测试：内核能加载、架构边界没烂、管线没
 
 ### 同步产出
 
-- `vendor/miao/VENDOR.md` —— 来源、上游版本、文件数
-- `docs/sync-report.md` —— **逐文件 unified diff**：哪个文件改了什么、为什么改、import 怎么变的
+| 产物 | 内容 |
+|---|---|
+| `vendor/miao/VENDOR.md` | 来源、上游版本、文件数、处置方式、相对上一版的增量 |
+| `docs/sync-report.md` | **同步了哪些数据 / 相对上一版差在哪 / 改了什么 / 什么没动**。改动用凝练语言说清，不贴 diff —— 要逐行核对走 `git log -p` |
+
+增量不用自己维护一份「文件清单 + 哈希」——`vendor/miao` 本来就是 git 跟踪的，
+git 里逐字存着上一版的内容，「相对上一版多了什么、改了什么」直接问它就行。
+基准取「最后一个动过 `vendor/miao` 的提交」，也就是上一版同步的产物：
+
+```bash
+git diff --name-status <基准提交> -- vendor/miao   # 只看增删改的文件名
+git log -p -- vendor/miao                          # 逐行看改了什么
+```
+
+脚本内部同样走这条路，并且 `git diff`（已跟踪文件的变化）和 `git status`
+（未跟踪的新文件，新搬进来的目录在 `git diff` 里是看不见的）两个来源都取，缺一不可。
+
+```bash
+MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_miao.py
+```
 
 ### 相比早期方案
 
@@ -131,11 +149,12 @@ seiten-suikyou/
 │   ├── models/index.js       #   `#miao.models` 入口（已摘掉云崽模型）
 │   ├── tools/path.js         #   `#miao.path`   路径工具（零云崽依赖）
 │   └── components/_local/    #   本项目手写的最小实现：Cfg / Version
-├── tools/sync_miao.py        # 同步脚本（搬运 + 补丁 + 校验 + 报告）
+├── tools/
+│   └── sync_miao.py          # 同步脚本（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 ├── docs/
 │   ├── data-model.md         # 数据模型设计（三层结构、为什么不设计算中间层）
 │   ├── sample-output.txt     # 真实运行的完整输出存档（含面板对拍）
-│   └── sync-report.md        # 每次同步生成的对比文档
+│   └── sync-report.md        # 每次同步生成：同步了什么 / 改了什么 / 增量多少
 └── test/
     ├── fixtures.mjs          测试用的合成数据（手写）
     ├── data/enka-real.json   一份真实 enka 响应（换过 uid，数值没动）
@@ -169,7 +188,7 @@ MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_miao.py
 ```
 
 **为什么同步脚本用 Python**：它是开发期工具，不参与运行时。Python 标准库
-（`shutil` / `re` / `difflib`）写这类「复制 + 文本改写 + 出 diff 报告」的脚本更顺手，
+（`shutil` / `re` / `subprocess`）写这类「复制 + 文本改写 + 校验 + 出报告」的脚本更顺手，
 也不会让工具代码混进 Node 的模块图。
 
 ## 命令行评分
@@ -278,6 +297,8 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
 10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
     （理由见 `docs/data-model.md` §3）。离库打分时 `--offline --check` 会提示做不了。
+11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。
+    不提交的话，它只能告诉你「自上次提交以来没变」，看不出这一轮到底搬了什么。
 
 ## 下一步
 

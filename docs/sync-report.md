@@ -1,535 +1,181 @@
 # miao 内核同步报告
 
-- 同步时间：2026-09-13 14:54:15
+- 同步时间：2026-09-13 17:34:13
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
 - 搬运文件：505 个 / 3588.1 KB
-- 原样搬运：498 个　|　定点改写：7 个　|　本地生成：2 个
+- 处置方式：**原样搬运 498 个**　|　定点改写 7 个　|　本地生成 2 个
+- 增量基准：最后一个动过 `vendor/miao` 的 git 提交
+- 相对上一版（提交 `8e5465d`）：新增 0 个　|　移除 0 个　|　内容变化 0 个　|　未动 507 个
 
 搬运范围：components（6）、models（19）、resources（479）、tools（1）
 
-## 一、import 变化汇总
+---
 
-本项目**不改写任何别名**：`#miao` / `#miao.models` / `#miao.path` 原样保留，
-由 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。
-所以 import 层面的变化只发生在被定点改写的入口文件上：
+## 一、同步了哪些数据
 
-| 文件 | import 变化 |
+**结论先行：505 个文件里 498 个是逐字节原样搬运的，一行没改。**
+被改写的只有 7 个「和云崽机器人运行时绑定」的代码文件（第三节），
+另有 2 个文件是本项目手写的（第四节）。
+
+### 1.1 清单（按类别）
+
+| 类别 | 数量 | 内容 |
+|---|---|---|
+| miao 入口与组件 | 6 | `#miao` 入口、`Data`（路径与 JSON 读取）、`Meta`（元数据注册）、`Format`（数值格式化）、`MiaoError`、`common/Elem`（元素表） |
+| 评分算法 | 5 | `Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体 |
+| 面板属性计算 | 2 | `Attr`（面板计算）＋ `AttrData`（属性基准表）—— 角色评分规则要读 `profile.attr` |
+| 角色元数据 | 5 | `CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent` |
+| 领域模型 | 7 | `Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口 |
+| 路径工具 | 1 | `path.js` —— `#miao.path` 别名的目标 |
+| 角色数据 | 205 | 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`） |
+| 武器数据 | 264 | 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件 |
+| 圣遗物数据 | 6 | 部位与套装数据、副词条基准、评分权重表（`artis-mark.js`） |
+| 素材数据 | 4 | 突破素材（`CharMeta` 引用了 `Material` 模型）、素材缩写、每日材料 |
+
+### 1.2 资源数据的构成
+
+- **角色数据 205 个** = 125 个角色的 `data.json`（等级 / 突破 / 天赋等基础数据）＋ 76 个角色的 `artis.js`（该角色专属的评分规则，并非每个角色都有）＋ 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **武器数据 264 个** = 250 把武器的详情 `data.json`（单手剑 57、法器 54、弓 50、双手剑 46、长柄武器 43）＋ 5 类各 1 个 `calc.js`（武器特效数值换算）与 1 个类型级 `data.json` ＋ 4 个索引文件（`index` / `alias` / `desc` / `extra`）
+- **圣遗物数据 6 个** = 部位与套装数据（`data.json`）、副词条基准（`calc.js`）、评分权重表（`artis-mark.js`）、别名、`extra`、`index`
+- **素材数据 4 个** = 突破素材（角色元数据引用了 `Material` 模型）、素材缩写（`abbr.js`）、每日材料（`daily.js`）、`index`
+
+只搬原神（`meta-gs`）。星穹铁道（`meta-sr`）不搬；图片资源（`icon` / `gacha` / `awaken.webp`，约 21 MB）也不搬 ——
+评分是纯计算，用不到图。
+
+### 1.3 生成物
+
+上游没有这 2 个文件，是同步脚本写的；另有一份来源记录 `VENDOR.md` 一并写出（不计入「生成文件」数）。
+
+| 文件 | 说明 |
 |---|---|
-| `components/index.js` | 移除 `import Common from './Common.js'`；<br>移除 `import Cfg from './Cfg.js'`；<br>移除 `import Version from './Version.js'`；<br>移除 `import App from './App.js'`；<br>改为 `import Cfg from './_local/Cfg.js'`；<br>改为 `import Version from './_local/Version.js'` |
-| `components/Data.js` | 移除 `import { rootPath } from '#miao.path'`；<br>改为 `import { rootPath, miaoPath } from '#miao.path'` |
-| `models/index.js` | 移除 `import fs from 'node:fs'`；<br>移除 `import Abyss from './Abyss.js'`；<br>移除 `import RoleCombat from './RoleCombat.js'`；<br>移除 `import HardChallenge from './HardChallenge.js'`；<br>移除 `import Player from './Player.js'`；<br>移除 `import Avatar from './Avatar.js'`；<br>移除 `import ProfileDmg from './ProfileDmg.js'`；<br>移除 `import ProfileRank from './ProfileRank.js'`；<br>移除 `import User from './User.js'`；<br>移除 `import MysApi from './MysApi.js'`；<br>移除 `import Button from './Button.js'`；<br>移除 `import { miaoPath } from '#miao.path'` |
-| `models/character/CharImg.js` | 移除 `import fs from 'node:fs'`；<br>移除 `import lodash from 'lodash'`；<br>移除 `import sizeOf from 'image-size'`；<br>移除 `import { miaoPath } from '#miao.path'` |
+| `components/_local/Cfg.js` | 云崽用户配置的最小替代（详见第四节） |
+| `components/_local/Version.js` | 云崽版本检测的最小替代（详见第四节） |
+| `VENDOR.md` | 来源记录：上游路径 / 版本 / 同步时间 / 文件数 / 别名映射 |
 
-## 二、逐文件改动
+---
 
-### `components/index.js`　[改写]
+## 二、相对上一版差在哪
+
+基准是提交 `8e5465d`（2026-09-13 15:59:56 +0800）—— 也就是上一版同步的产物。
+
+差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件
+（同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。
+
+- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **0** 个　- 未动 **507** 个
+
+### 新增（0 个）
+
+（无）
+
+### 移除（0 个）
+
+（无）
+
+### 内容变化（0 个）
+
+（无）
+
+---
+
+## 三、定点改写：7 个
+
+改写原则：**评分算法与资源数据一律不动**。被处理的只有和「云崽机器人运行时」绑定的部分 ——
+云崽注入的全局变量（`redis` / `logger`）、渲染组件、云崽专属模型。
+别名 `#miao` / `#miao.models` / `#miao.path` 一概不改写，由 `package.json` 的 `imports`
+字段映射到 `vendor/miao` 下的真实文件；所以 import 层面的变化只出现在下面这些入口文件里。
+
+### `components/index.js`
 
 摘掉云崽专属组件（Common 渲染 / App 应用）；Cfg 与 Version 指向本地最小实现
 
-```diff
-@@ -1,10 +1,8 @@
- import Data from './Data.js'
- import Format from './Format.js'
--import Common from './Common.js'
--import Cfg from './Cfg.js'
--import Version from './Version.js'
--import App from './App.js'
-+import Cfg from './_local/Cfg.js'
-+import Version from './_local/Version.js'
- import MiaoError from './MiaoError.js'
- import Meta from './Meta.js'
- 
--export { Data, Cfg, Format, Common, Version, App, MiaoError, Meta }
-+export { Data, Cfg, Format, Version, MiaoError, Meta }
-```
+- import：移除 `./Common.js`、`./Cfg.js`、`./Version.js`、`./App.js`；新增 `./_local/Cfg.js`、`./_local/Version.js`
 
-### `components/Data.js`　[改写]
+### `components/Data.js`
 
 getRoot 的 miao 分支改为直接指 miao 根；4 个 redis 缓存方法退化为空实现；logger 改 console
 
-```diff
-@@ -2,5 +2,5 @@
- import fs from 'node:fs'
- import util from 'node:util'
--import { rootPath } from '#miao.path'
-+import { rootPath, miaoPath } from '#miao.path'
- 
- const _path = rootPath
-@@ -11,5 +11,6 @@
-     root = `${_path}/`
-   } else if (root === 'miao') {
--    root = `${_path}/plugins/miao-plugin/`
-+    // 本项目里 miao 根就是 vendor/miao，没有 yunzai/plugins 这一层
-+    root = `${miaoPath}/`
-   } else {
-     root = `${_path}/plugins/${root}/`
-@@ -91,40 +92,18 @@
-       return true
-     } catch (error) {
--      logger.error(`文件删除失败：${error}`)
-+      console.error(`文件删除失败：${error}`)
-     }
-     return false
-   },
- 
--  async getCacheJSON (key) {
--    try {
--      let txt = await redis.get(key)
--      if (txt) {
--        return JSON.parse(txt)
--      }
--    } catch (e) {
--      console.log(e)
--    }
--    return {}
--  },
--
--  async setCacheJSON (key, data, EX = 3600 * 24 * 365) {
--    await redis.set(key, JSON.stringify(data), { EX })
--  },
--
--  async redisGet (key, def = {}) {
--    try {
--      let txt = await redis.get(key)
--      if (txt) {
--        return JSON.parse(txt)
--      }
--    } catch (e) {
--      console.log(e)
--    }
--    return def
--  },
--
--  async redisSet (key, data, EX = 3600 * 24 * 90) {
--    await redis.set(key, JSON.stringify(data), { EX })
--  },
-+  /* 以下 4 个方法原版依赖云崽注入的全局 redis。本项目没有 redis，
-+     评分链路也不走缓存，统一退化为「取不到缓存 / 写入忽略」。*/
-+  async getCacheJSON (key) { return {} },
-+
-+  async setCacheJSON (key, data, EX = 3600 * 24 * 365) {},
-+
-+  async redisGet (key, def = {}) { return def },
-+
-+  async redisSet (key, data, EX = 3600 * 24 * 90) {},
- 
-   async importModule (file, root = '') {
-```
+- import：改写 `import { rootPath } from '#miao.path'` → `import { rootPath, miaoPath } from '#miao.path'`
 
-### `models/index.js`　[改写]
+### `models/index.js`
 
 摘掉云崽专属模型（User / MysApi / Player / Avatar / Abyss…）与其导致的顶层副作用
 
-```diff
-@@ -1,58 +1,14 @@
--import fs from 'node:fs'
- import Base from './Base.js'
- import Character from './Character.js'
- import Artifact from './Artifact.js'
- import ArtifactSet from './ArtifactSet.js'
--import Abyss from './Abyss.js'
--import RoleCombat from './RoleCombat.js'
--import HardChallenge from './HardChallenge.js'
--import Player from './Player.js'
--import Avatar from './Avatar.js'
--import ProfileDmg from './ProfileDmg.js'
--import ProfileRank from './ProfileRank.js'
- import Material from './Material.js'
- import Weapon from './Weapon.js'
--import User from './User.js'
--import MysApi from './MysApi.js'
--import Button from './Button.js'
--import { miaoPath } from '#miao.path'
--
--for (let game of ['gs', 'sr']) {
--  for (let type of ['artifact', 'character', 'material', 'weapon']) {
--    let file = `${miaoPath}/resources/meta-${game}/${type}/index.js`
--    if (fs.existsSync(file)) {
--      try {
--        await import(`file://${file}`)
--      } catch (e) {
--        console.log(e)
--      }
--    }
--  }
--}
--
--// 加载自定义角色别名（config/alias_gs.cfg、config/alias_sr.cfg）并启动热更新监听
--try {
--  let { default: CustomAlias } = await import('./alias/CustomAlias.js')
--  await CustomAlias.init()
--} catch (e) {
--  console.log('miao custom alias init failed', e)
--}
--
- export {
-   Base,
--  Abyss,
--  RoleCombat,
--  HardChallenge,
--  Button,
-   Character,
-   Artifact,
-   ArtifactSet,
--  Avatar,
--  ProfileDmg,
--  ProfileRank,
-   Material,
--  Weapon,
--  User,
--  MysApi,
--  Player
-+  Weapon
- }
-```
+- import：移除 `node:fs`、`./Abyss.js`、`./RoleCombat.js`、`./HardChallenge.js`、`./Player.js`、`./Avatar.js`、`./ProfileDmg.js`、`./ProfileRank.js`、`./User.js`、`./MysApi.js`、`./Button.js`、`#miao.path`
 
-### `tools/path.js`　[改写]
+### `tools/path.js`
 
 rootPath 由「miao 的上两级」改为 miao 根（本项目没有云崽宿主）
 
-```diff
-@@ -10,6 +10,7 @@
- // miao-plugin根路径
- const miaoPath = path.join(__dirname, '..')
--// yunzai根路径
--const rootPath = path.join(miaoPath, '..', '..')
-+// 云崽根路径 —— 本项目没有云崽宿主，root 即 miao 根
-+// （Data.getRoot 里 '' / 'root' / 'yunzai' 三个分支会用到）
-+const rootPath = miaoPath
- 
- export { miaoPath, rootPath }
-```
-
-### `models/character/CharCfg.js`　[改写]
+### `models/character/CharCfg.js`
 
 移除星穹铁道（sr）初始化与分支
 
-```diff
-@@ -40,7 +40,4 @@
- await cfgMap.init('gs')
- let cfgMapGs = { ...cfgMap }
--await cfgMap.init('sr')
--let cfgMapSr = { ...cfgMap }
--
- /**
-  * 角色相关配置
-@@ -64,11 +61,8 @@
-   },
-   getArtisCfg (char) {
--    if (char.game !== 'sr') {
--      // 评分规则在 旅行者 下而非 旅行者/elem 下
--      let charName = char.isTraveler ? `旅行者` : char.name
--      return cfgMapGs.char[charName]?.artis || false
--    } else {
--      return cfgMapSr.char[char.name]?.artis || false
--    }
-+    // 本项目只做原神，星穹铁道分支已移除
-+    // 评分规则在 旅行者 下而非 旅行者/elem 下
-+    let charName = char.isTraveler ? `旅行者` : char.name
-+    return cfgMapGs.char[charName]?.artis || false
-   }
- }
-```
-
-### `models/character/CharImg.js`　[改写]
+### `models/character/CharImg.js`
 
 整体替换为置空实现（渲染层，写死云崽路径且依赖 image-size）
 
-```diff
-@@ -1,160 +1,23 @@
--/**
-- * 角色照片及角色图像资源相关
-- * */
--import fs from 'node:fs'
--import lodash from 'lodash'
--import sizeOf from 'image-size'
--import { miaoPath } from '#miao.path'
-+/*
-+ * CharImg —— 本项目已置空（非上游内容，由 tools/sync_miao.py 生成）
-+ *
-+ * 原文件是渲染层代码：读角色立绘、算图片尺寸，里面写死了云崽的路径
-+ * `./plugins/miao-plugin/resources/`，还依赖第三方包 image-size。
-+ * 评分是纯计算，用不到图片，故整体替换为空实现。
-+ */
-+const noop = () => ''
- 
--const rPath = `${miaoPath}/resources`
--const CharImg = {
-+const CharImg = new Proxy({
-+  getCardImg: noop,
-+  getRandomImg: noop,
-+  getImgs: () => ({}),
-+  getImgsSr: () => ({})
-+}, {
-+  get (t, k) {
-+    if (k in t) return t[k]
-+    if (typeof k === 'symbol') return undefined
-+    return noop
-+  }
-+})
- 
--  // 获取角色的插画
--  getCardImg (names, se = false, def = true) {
--    let list = []
--    let addImg = function (charImgPath, disable = false) {
--      let dirPath = `./plugins/miao-plugin/resources/${charImgPath}`
--
--      if (!fs.existsSync(dirPath)) {
--        fs.mkdirSync(dirPath)
--      }
--      if (disable) {
--        return
--      }
--
--      let imgs = fs.readdirSync(dirPath)
--      imgs = imgs.filter((img) => /\.(png|jpg|webp|jpeg)/i.test(img))
--      lodash.forEach(imgs, (img) => {
--        list.push(`${charImgPath}/${img}`)
--      })
--    }
--    if (!lodash.isArray(names)) {
--      names = [names]
--    }
--    for (let name of names) {
--      addImg(`character-img/${name}`)
--      addImg(`character-img/${name}/upload`)
--      addImg(`character-img/${name}/se`, !se)
--      const plusPath = './plugins/miao-plugin/resources/miao-res-plus/'
--      if (fs.existsSync(plusPath)) {
--        addImg(`miao-res-plus/character-img/${name}`)
--        addImg(`miao-res-plus/character-img/${name}/se`, !se)
--      }
--    }
--    let img = lodash.sample(list)
--    if (!img) {
--      if (def) {
--        // img = '/character-img/default/01.jpg'
--        return false
--      } else {
--        return false
--      }
--    }
--    let ret = sizeOf(`./plugins/miao-plugin/resources/${img}`)
--    ret.img = img
--    ret.mode = ret.width > ret.height ? 'left' : 'bottom'
--    return ret
--  },
--
--  getRandomImg (imgPaths, defImgs = []) {
--    for (let imgPath of imgPaths) {
--      let ret = []
--      for (let type of ['webp', 'png']) {
--        if (fs.existsSync(`${rPath}/${imgPath}.${type}`)) {
--          ret.push(imgPath + `.${type}`)
--        }
--      }
--      if (fs.existsSync(`${rPath}/${imgPath}`)) {
--        let imgs = fs.readdirSync(`${rPath}/${imgPath}`).filter((file) => {
--          return /\.(png|webp)$/.test(file)
--        })
--        for (let img of imgs) {
--          ret.push(`${imgPath}/${encodeURIComponent(img)}`)
--        }
--      }
--      if (ret.length > 0) {
--        return lodash.sample(ret)
--      }
--    }
--    for (let defImg of defImgs) {
--      if (fs.existsSync(`${rPath}/${defImg}`)) {
--        return defImg
--      }
--    }
--  },
--
--  // 获取角色的图像资源数据
--  getImgs (name, costumeIdx = '', travelerElem = '', weaponType = 'sword', talentCons) {
--    let fileType = 'webp'
--    costumeIdx = costumeIdx === '2' ? '2' : ''
--    let imgs = {}
--    if (!['空', '荧', '旅行者'].includes(name)) {
--      travelerElem = ''
--    }
--    const nPath = `/meta-gs/character/${name}/`
--    const tPath = `/meta-gs/character/旅行者/${travelerElem}/`
--    let add = (key, path, path2) => {
--      if (path2 && fs.existsSync(`${rPath}/${nPath}/${path2}.${fileType}`)) {
--        imgs[key] = `${nPath}${path2}.${fileType}`
--      } else {
--        imgs[key] = `${nPath}${path}.${fileType}`
--      }
--    }
--    let tAdd = (key, path) => {
--      imgs[key] = `${travelerElem ? tPath : nPath}${path}.${fileType}`
--    }
--    add('face', 'imgs/face', `imgs/face${costumeIdx}`)
--    add('qFace', 'imgs/face', 'imgs/face-q')
--    add('side', 'imgs/side', `imgs/side${costumeIdx}`)
--    add('gacha', 'imgs/gacha')
--    add('splash', 'imgs/splash', `imgs/splash${costumeIdx}`)
--    tAdd('card', 'imgs/card')
--    tAdd('banner', 'imgs/banner')
--    for (let i = 1; i <= 6; i++) {
--      tAdd(`cons${i}`, `icons/cons-${i}`)
--    }
--    for (let i = 0; i <= 4; i++) {
--      tAdd(`passive${i}`, `icons/passive-${i}`)
--    }
--    imgs.a = `/common/item/atk-${weaponType}.webp`
--    for (let t of ['e', 'q']) {
--      imgs[t] = talentCons[t] > 0 ? imgs[`cons${talentCons[t]}`] : `${nPath}icons/talent-${t}.webp`
--    }
--    return imgs
--  },
--
--  // 获取星铁角色图像资源
--  getImgsSr (name, talentCons) {
--    let fileType = 'webp'
--    const nPath = `/meta-sr/character/${name}/`
--    let imgs = {}
--    let add = (key, path, path2) => {
--      if (path2 && fs.existsSync(`${rPath}/${nPath}/${path2}.${fileType}`)) {
--        imgs[key] = `${nPath}${path2}.${fileType}`
--      } else {
--        imgs[key] = `${nPath}${path}.${fileType}`
--      }
--    }
--    add('face', 'imgs/face')
--    add('qFace', 'imgs/face', 'imgs/face-q')
--    add('splash', 'imgs/splash')
--    add('preview', 'imgs/preview')
--    for (let i = 1; i <= 4; i++) {
--      add(`tree${i}`, `imgs/tree-${i}`)
--    }
--    for (let key of ['a', 'e', 'q', 't', 'z', 'a2', 'e2', 'q2', 'xe', 'me', 'mt']) {
--      add(key, `imgs/talent-${key}`)
--    }
--    for (let i = 1; i <= 6; i++) {
--      if (i !== 3 && i !== 5) {
--        add(`cons${i}`, `imgs/cons-${i}`)
--      }
--    }
--    imgs.banner = 'meta-sr/character/common/imgs/banner.webp'
--    imgs.card = 'meta-sr/character/common/imgs/card.webp'
--    imgs.cons3 = imgs[talentCons[3]]
--    imgs.cons5 = imgs[talentCons[5]]
--    return imgs
--  }
--}
- export default CharImg
-```
+- import：移除 `node:fs`、`lodash`、`image-size`、`#miao.path`
 
-### `models/Base.js`　[改写]
+### `models/Base.js`
 
 缓存定时器加 unref（原版 10 分钟 setTimeout 会把一次性脚本拖住）
 
-```diff
-@@ -82,4 +82,5 @@
-           self._delCache()
-         }, time * 1000)
-+        if (reFn[id] && reFn[id].unref) reFn[id].unref()
-       }
-       return cacheMap[id]
+> 这里只讲「改了什么」，不贴 diff。要逐行核对：`git log -p -- vendor/miao/<文件>`。
+> 资源数据（479 个）在本节没有任何条目 —— 因为它们一个字都没改。
+
+---
+
+## 四、本地生成：2 个
+
+这两个文件不是上游内容，由同步脚本生成（内容写死在 `tools/sync_miao.py` 里，要改得改脚本）。
+
+### `components/_local/Cfg.js`
+
+**云崽用户配置的最小替代**
+
+上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象），`get` 的逻辑逐字照抄上游，保证返回值与上游一致。
+
+### `components/_local/Version.js`
+
+**云崽版本检测的最小替代**
+
+上游 `Version` 读 `package.json` / `CHANGELOG.md`，并检测宿主是 Yunzai V2 / V3 还是 AlemonJS，这些概念在本项目里都不存在。评分链路只用到 `Version.isMiao`（上游在云崽下为 true，这里恒 false）。
+
+---
+
+## 五、没有改动的部分：498 个
+
+除上面「改写的 + 生成的」以外，其余文件全部逐字节复制，同步脚本对它们零编辑：
+
+| 目录 | 总数 | 未改动 | 改过的（见第三节） |
+|---|---|---|---|
+| `components/` | 6 | 4 | `Data.js`、`index.js` |
+| `models/` | 19 | 15 | `Base.js`、`character/CharCfg.js`、`character/CharImg.js`、`index.js` |
+| `resources/` | 479 | 479 | —— 全部原样 |
+| `tools/` | 1 | 0 | `path.js` |
+
+资源数据是最能说明问题的一块：角色基础数据、角色评分规则、武器数据、圣遗物权重表、素材数据
+全部属于「数据」而非「逻辑」，本项目一个字节都不碰。想确认有没有被悄悄改过，
+`git log -p -- vendor/miao/resources` 一卷就到底了。
+
+---
+
+## 六、校验
+
+每次同步都跑这四道守卫，任何一道不过就整体报错退出（报告照样生成，下面如实记录本次结果）：
+
+- ✓ 通过 —— 相对 import 全部指向已搬运的文件
+- ✓ 通过 —— `#miao*` 别名全部能在 `package.json` 的 `imports` 中解析
+- ✓ 通过 —— 无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）
+- ✓ 通过 —— 无未知外部依赖（只允许 `lodash` 与 Node 内置模块）
+
+## 附：怎么自己核对
+
+搬运落地的每个文件都在 `vendor/miao/` 下、由 git 跟踪，所以核对不需要额外的清单文件：
+
+```bash
+git log -p -- vendor/miao                     # 逐行看改了什么
+git diff --name-status <基准提交> -- vendor/miao   # 只看增删改的文件名
 ```
 
-### `components/_local/Cfg.js`　[生成]
-
-云崽用户配置的最小替代
-
-本项目手写内容，非上游文件：
-
-```js
-/*
- * Cfg —— 本项目的最小替代（非上游内容，由 tools/sync_miao.py 生成）
- *
- * 【为什么不用上游 components/Cfg.js】
- * 上游 Cfg 的依赖链是：
- *   components/Cfg.js → components/cfg/CfgData.js → config/system/cfg_system.js（217 行 schema）
- * 整条链是为「云崽用户在聊天里改插件配置」服务的，网页版没有这个交互层。
- * 而评分链路只用到 Cfg.get() 的两个布尔开关：
- *   models/Character.js:59   Cfg.get('notReleasedData')  未实装角色是否返回数据
- *   models/Character.js:313  Cfg.get('qFace')            卡片是否用 q 版头像（只影响渲染）
- * 所以这里复刻「上游读不到配置文件」的行为：cfg 恒为空对象。
- * get 的逻辑逐字照抄上游（含上游那个 lodash.isUndefined(cfg) 的判断），
- * 保证返回值与上游一致 —— 上游此处返回的是 undefined，不是 def。
- */
-import lodash from 'lodash'
-
-const cfg = {}
-const miaoCfg = {}
-const Version = { isMiao: false }
-
-const Cfg = {
-  get (rote, def = '') {
-    if (Version.isMiao && miaoCfg[rote]) {
-      return true
-    }
-    let ret = lodash.get(cfg, rote)
-    return lodash.isUndefined(cfg) ? def : ret
-  },
-  set (rote, val) {
-    cfg[rote] = val
-  },
-  del (rote) {
-    lodash.set(cfg, rote, undefined)
-  },
-  getCfg () {
-    return cfg
-  },
-  getCfgSchema () {
-    return {}
-  },
-  getCfgSchemaMap () {
-    return {}
-  },
-  /* 上游返回 `style=transform:scale(...)`，本项目不渲染，返回空串 */
-  scale () {
-    return ''
-  }
-}
-
-export default Cfg
-```
-
-### `components/_local/Version.js`　[生成]
-
-云崽版本检测的最小替代
-
-本项目手写内容，非上游文件：
-
-```js
-/*
- * Version —— 本项目的最小替代（非上游内容，由 tools/sync_miao.py 生成）
- *
- * 上游 components/Version.js 读 package.json / CHANGELOG.md、检测宿主机型
- * （Yunzai V2 / V3 / AlemonJS），这些概念在本项目里都不存在。
- * 评分链路只用到 Version.isMiao —— 上游在云崽下为 true，本项目恒 false。
- */
-const Version = {
-  version: 'local',
-  isMiao: false,
-  isV3: false,
-  name: 'seiten-suikyou',
-  get yunzai () {
-    return ''
-  },
-  get changelogs () {
-    return ''
-  },
-  runtime () {},
-  readLogFile () {
-    return {}
-  }
-}
-
-export default Version
-```
-
-## 三、校验
-
-同步脚本每跑一次都做这四道检查，任何一道不过就整体报错退出：
-
-- 相对 import 全部指向已搬运文件
-- `#miao*` 别名全部能在 `package.json` 的 `imports` 中解析
-- 无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）
-- 无未知外部依赖（只允许 `lodash` 与 Node 内置模块）
+哪个文件属于「原样搬运」还是「定点改写」，第五节的表已经列全。
