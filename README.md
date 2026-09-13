@@ -15,7 +15,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 
 ```bash
 npm run sync   # 从 miao-plugin 重新搬运 + 打补丁 + 校验 + 出对比报告
-npm test       # 确认评分结果没变
+npm test       # 全量测试：内核能加载、架构边界没烂、分数没变
 ```
 
 三条原则：
@@ -67,19 +67,26 @@ seiten-suikyou/
 ├── docs/sync-report.md       # 每次同步生成的对比文档
 └── test/
     ├── fixtures.mjs          测试用角色/圣遗物数据
-    ├── smoke.mjs             模块加载冒烟
-    ├── verify.mjs            真实评分验证（含动态分支）
-    └── regression.mjs        回归断言（上游更新后的安全网）
+    ├── smoke.mjs             冒烟：内核能否脱离云崽独立加载
+    ├── arch.mjs              架构契约：别名解析 / 依赖策略 / vendor 自包含
+    ├── regression.mjs        回归断言：算法常量（上游更新后的安全网）
+    └── verify.mjs            端到端评分验证（输出即基线，可 diff）
 ```
 
 ## 运行
 
 ```bash
-npm install    # 只需 lodash
-npm test       # 回归断言
-npm run verify # 真实评分验证
-npm run sync   # 从 miao-plugin 重新同步（需先设 MIAO_PLUGIN_PATH）
+npm install     # 只需 lodash
+npm test        # 全量：smoke → arch → regression → verify
+npm run smoke   # 只跑冒烟
+npm run arch    # 只跑架构契约
+npm run verify  # 只跑评分验证
+npm run sync    # 从 miao-plugin 重新同步（需先设 MIAO_PLUGIN_PATH）
 ```
+
+`verify` 的 stdout 就是「基线」——改完内核后可以
+`npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt`，
+逐字为空才算没跑偏。所以它的断言只在失败时打印，通过时保持静默。
 
 同步时 miao-plugin 默认在同级目录 `../miao-plugin`，可用环境变量覆盖：
 

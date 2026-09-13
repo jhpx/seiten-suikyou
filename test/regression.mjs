@@ -5,7 +5,9 @@
  *   - 硬断言：算法常量变了就是破坏性变更，必须 fail
  *   - 软校验：角色数/权重这类会随版本增长的，只 warn 不 fail，避免误报
  *
- * 用法：npm test（内部会走 --import core/register.mjs）
+ * 与 arch.mjs 的分工：本文件管「分数算得对不对」，arch.mjs 管「内核怎么拼起来的」。
+ *
+ * 用法：npm test
  */
 import { ArtisMark, ArtisMarkCfg, Meta } from '../src/index.js'
 import { buildProfile, ATTR } from './fixtures.mjs'

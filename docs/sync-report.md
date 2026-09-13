@@ -1,6 +1,6 @@
 # miao 内核同步报告
 
-- 同步时间：2026-09-13 10:34:54
+- 同步时间：2026-09-13 13:53:53
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
 - 搬运文件：239 个 / 3154.3 KB
 - 原样搬运：232 个　|　定点改写：7 个　|　本地生成：2 个
@@ -527,6 +527,9 @@ export default Version
 
 ## 三、校验
 
+同步脚本每跑一次都做这四道检查，任何一道不过就整体报错退出：
+
 - 相对 import 全部指向已搬运文件
 - `#miao*` 别名全部能在 `package.json` 的 `imports` 中解析
 - 无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）
+- 无未知外部依赖（只允许 `lodash` 与 Node 内置模块）

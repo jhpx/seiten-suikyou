@@ -424,6 +424,21 @@ GENERATED = [
 # 禁止残留的云崽注入全局 —— 同步后扫描，发现即报错
 FORBIDDEN_GLOBALS = ["redis", "logger", "Bot", "segment", "Renderer", "Yunzai"]
 
+# 允许出现的裸包名（非相对、非别名）—— 本项目唯一的运行时依赖就是 lodash
+ALLOWED_BARE = {"lodash"}
+
+# Node 内置模块（裸写法，如 tools/path.js 里的 'path' / 'url'）。
+# 不用 node: 前缀的那些也算数。写死是有意的：上游哪天引了新的外部包，
+# 这里不认就会报错，逼人来确认，而不是悄悄漏过去。
+NODE_BUILTINS = {
+    "assert", "async_hooks", "buffer", "child_process", "cluster", "console",
+    "constants", "crypto", "dgram", "diagnostics_channel", "dns", "domain",
+    "events", "fs", "http", "http2", "https", "inspector", "module", "net",
+    "os", "path", "perf_hooks", "process", "punycode", "querystring", "readline",
+    "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events",
+    "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib",
+}
+
 
 # --------------------------------------------------------------------------
 # 3. 流程
@@ -562,6 +577,25 @@ def main() -> int:
                     f"{path.relative_to(VENDOR).as_posix()}:{i}  →  {hit.group(1)}"
                 )
 
+    # ---- 校验 4：不许冒出未知的外部依赖（image-size 就是这么混进来过的） ----
+    unknown_dep: list[str] = []
+    for path in VENDOR.rglob("*.js"):
+        for i, line in enumerate(read(path).splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith(("//", "*", "/*")):
+                continue
+            for m in re.finditer(r"from\s+['\"]([^'\"]+)['\"]", stripped):
+                spec = m.group(1)
+                if spec.startswith((".", "#")):
+                    continue          # 相对路径 / 别名，另两道守卫盯着
+                head = spec[5:] if spec.startswith("node:") else spec
+                head = head.split("/")[0]
+                if head in ALLOWED_BARE or head in NODE_BUILTINS:
+                    continue
+                unknown_dep.append(
+                    f"{path.relative_to(VENDOR).as_posix()}:{i}  →  {spec}"
+                )
+
     # ---- 产物：VENDOR.md ----
     write(
         VENDOR / "VENDOR.md",
@@ -617,9 +651,15 @@ def main() -> int:
         print(f"\n[错误] 发现 {len(leftover)} 处云崽注入的全局变量残留：")
         for m in leftover[:30]:
             print("  " + m)
+    if unknown_dep:
+        ok = False
+        print(f"\n[错误] 发现 {len(unknown_dep)} 处未知外部依赖：")
+        for m in unknown_dep[:30]:
+            print("  " + m)
+        print("       若确需引入，请加进 ALLOWED_BARE 或 package.json，并在报告里说明理由")
     if not ok:
         return 1
-    print("校验: 相对 import / 别名 / 云崽全局残留 均通过 ✓")
+    print("校验: 相对 import / 别名 / 云崽全局残留 / 外部依赖 均通过 ✓")
     return 0
 
 
@@ -710,9 +750,12 @@ def build_report(
     L += [
         "## 三、校验",
         "",
+        "同步脚本每跑一次都做这四道检查，任何一道不过就整体报错退出：",
+        "",
         "- 相对 import 全部指向已搬运文件",
         "- `#miao*` 别名全部能在 `package.json` 的 `imports` 中解析",
         "- 无云崽注入的全局变量残留（redis / logger / Bot / segment / Renderer / Yunzai）",
+        "- 无未知外部依赖（只允许 `lodash` 与 Node 内置模块）",
         "",
     ]
     return "\n".join(L)
