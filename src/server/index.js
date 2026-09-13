@@ -37,6 +37,24 @@ const STATIC = {
   '/style.css': ['style.css', 'text/css; charset=utf-8']
 }
 
+const ASSETS_DIR = path.join(PUBLIC, 'assets')
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff'
+}
+
 const BODY_LIMIT = 64 * 1024
 
 /* ---------------- HTTP 小工具 ---------------- */
@@ -117,6 +135,35 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
 
   async function route (req, res, url) {
     const { pathname } = url
+
+    /* ---- 静态图片资源 ---- */
+    if (req.method === 'GET' && pathname.startsWith('/assets/')) {
+      /* 只认白名单里的扩展名，拒绝目录穿越 */
+      const ext = path.extname(pathname).toLowerCase()
+      if (!MIME_TYPES[ext]) {
+        sendError(res, 404, 'asset_type', `不支持的资源类型：${ext}`)
+        return
+      }
+      const rel = decodeURIComponent(pathname.slice('/assets/'.length))
+      const filePath = path.resolve(path.join(ASSETS_DIR, rel))
+      const root = path.resolve(ASSETS_DIR)
+      if (!filePath.startsWith(root + path.sep) && filePath !== root) {
+        sendError(res, 403, 'asset_escape', '路径不合法')
+        return
+      }
+      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        sendError(res, 404, 'asset_missing', '资源不存在')
+        return
+      }
+      const buf = fs.readFileSync(filePath)
+      res.writeHead(200, {
+        'Content-Type': MIME_TYPES[ext],
+        'Content-Length': buf.length,
+        'Cache-Control': 'public, max-age=86400'
+      })
+      res.end(buf)
+      return
+    }
 
     /* ---- 静态页 ---- */
     if (req.method === 'GET' && STATIC[pathname]) {

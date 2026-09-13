@@ -2,13 +2,13 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>星天水镜 · 圣遗物评分</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
-<header class="top">
+<header class="top" id="top">
   <div class="brand">
     <span class="mark">✦</span>
     <div>
@@ -33,61 +33,15 @@
 
 <div class="banner" id="banner" hidden></div>
 
-<main class="layout">
-
-  <aside class="rail">
-    <section class="acct" id="acct"></section>
-    <section class="uids" id="uids"></section>
-    <ol class="charlist" id="charlist"></ol>
-  </aside>
-
-  <section class="detail" id="detail">
-    <div class="placeholder" data-idle>
-      <p>还没有数据。</p>
-      <p class="dim">输入 UID 点「读取」（读本地库），或点「抓取」从 enka 现拉一份。</p>
-    </div>
-  </section>
-
+<main class="app" id="app">
+  <div id="view-roster" class="view active"></div>
+  <div id="view-detail" class="view"></div>
 </main>
 
 <footer class="foot">
   <span id="footnote">评分内核来自 miao-plugin，分数与上游逐字一致</span>
   <span class="dim" id="footmeta"></span>
 </footer>
-
-<template id="tpl-char">
-  <li class="char" tabindex="0">
-    <span class="rank"></span>
-    <div class="cinfo">
-      <b class="cname"></b>
-      <span class="csub"></span>
-    </div>
-    <div class="cscore"><b></b><span></span></div>
-  </li>
-</template>
-
-<template id="tpl-arti">
-  <article class="arti">
-    <div class="ahead">
-      <span class="pos"></span>
-      <div class="atitle">
-        <b class="aname"></b>
-        <span class="aset"></span>
-      </div>
-      <div class="ascore">
-        <span class="ring"></span>
-        <b class="amark"></b>
-        <span class="aclass"></span>
-      </div>
-    </div>
-    <div class="amain">
-      <span class="mlabel" id="mainStat">主词条</span>
-      <b class="mkey"></b>
-      <span class="mval"></span>
-    </div>
-    <ul class="subs"></ul>
-  </article>
-</template>
 
 <script src="/app.js"></script>
 </body>

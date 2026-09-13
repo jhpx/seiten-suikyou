@@ -18,6 +18,7 @@
   "scripts": {
     "sync": "python tools/sync_miao.py",
     "sync:i18n": "python tools/sync_i18n.py",
+    "sync:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.mjs && python tools/sync_assets.py",
     "score": "node --disable-warning=ExperimentalWarning src/cli/score.js",
     "server": "node --disable-warning=ExperimentalWarning src/server/index.js",
     "test": "node test/smoke.mjs && node test/arch.mjs && node test/pipeline.mjs && node test/i18n.mjs && node --disable-warning=ExperimentalWarning test/server.mjs && node test/regression.mjs && node test/verify.mjs",

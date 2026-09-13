@@ -101,8 +101,15 @@ export function toMiaoProfile (row) {
   }
 
   /* 面板属性：不是数据源给的，是 miao 自己按「基础值 + 武器 + 圣遗物」算出来的
-     （上游 models/Avatar.js:320 那句 attr.calc()）。角色规则读它。 */
-  profile.attr = Attr.create(profile).calc()
+     （上游 models/Avatar.js:320 那句 attr.calc()）。角色规则读它。
+
+     顺手把 base 也留下来：Attr 实例算完 final 之后，内部的 AttrData 还记着哪些是
+     基础值（isBase=true 的那些，见 Attr.calc 里 recharge/cpct/cdmg 与 setCharAttr）。
+     上游 Avatar 有个 base getter 走 getBase()，我们要用它渲染「基础值 +绿字」，
+     所以这里一并存 —— 不存的话想渲染就得再算一遍。 */
+  const attrCalc = Attr.create(profile)
+  profile.attr = attrCalc.calc()
+  profile.base = attrCalc.getBase() || {}
 
   return profile
 }
