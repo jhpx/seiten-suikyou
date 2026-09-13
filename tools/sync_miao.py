@@ -72,6 +72,9 @@ FILES = [
     "models/character/CharImg.js",
     "models/character/CharMeta.js",
     "models/character/CharTalent.js",
+    # --- 面板属性计算（角色规则读 profile.attr，见下方说明） ---
+    "models/attr/Attr.js",
+    "models/attr/AttrData.js",
     # --- 路径工具（`#miao.path`，零云崽依赖，原样搬） ---
     "tools/path.js",
     # --- 圣遗物元数据：权重表 / 词条基准 / 套装数据 ---
@@ -91,12 +94,31 @@ FILES = [
     "resources/meta-gs/material/abbr.js",
     "resources/meta-gs/material/daily.js",
     "resources/meta-gs/material/data.json",
+    # --- 武器元数据：Attr 算面板要用（Weapon.calcAttr + weaponBuffs） ---
+    # 图片（icon/gacha/awaken.webp，占 21MB）一概不搬，只搬数据
+    "resources/meta-gs/weapon/index.js",
+    "resources/meta-gs/weapon/alias.js",
+    "resources/meta-gs/weapon/desc.js",
+    "resources/meta-gs/weapon/extra.js",
+    "resources/meta-gs/weapon/sword/calc.js",
+    "resources/meta-gs/weapon/sword/data.json",
+    "resources/meta-gs/weapon/bow/calc.js",
+    "resources/meta-gs/weapon/bow/data.json",
+    "resources/meta-gs/weapon/catalyst/calc.js",
+    "resources/meta-gs/weapon/catalyst/data.json",
+    "resources/meta-gs/weapon/claymore/calc.js",
+    "resources/meta-gs/weapon/claymore/data.json",
+    "resources/meta-gs/weapon/polearm/calc.js",
+    "resources/meta-gs/weapon/polearm/data.json",
 ]
 
-# 目录级规则：角色目录下的 data.json 与 artis.js 全搬（运行时动态读，闭包抓不全）
+# 目录级规则：(基目录, 文件名, 层数)。层数 1 = 基目录/*/文件名，2 = 基目录/*/*/文件名。
+# 这些是运行时动态读取的资源（Data.readJSON），依赖闭包扫不出来，只能按目录规则搬。
 GLOBS = [
-    ("resources/meta-gs/character", "data.json"),
-    ("resources/meta-gs/character", "artis.js"),
+    ("resources/meta-gs/character", "data.json", 1),
+    ("resources/meta-gs/character", "artis.js", 1),
+    # 武器详情：weapon/<类型>/<武器名>/data.json，同目录下的 webp 不搬
+    ("resources/meta-gs/weapon", "data.json", 2),
 ]
 
 
@@ -462,13 +484,21 @@ def collect() -> list[str]:
             out.append(f)
         else:
             print(f"[warn] 清单里的文件不存在，已跳过: {f}")
-    for d, name in GLOBS:
-        sub = MIAO / d
+    for base, name, depth in GLOBS:
+        sub = MIAO / base
         if not sub.is_dir():
             continue
-        for entry in sorted(sub.iterdir()):
-            if entry.is_dir() and (entry / name).exists():
-                out.append(f"{d}/{entry.name}/{name}")
+        if depth == 1:
+            for entry in sorted(sub.iterdir()):
+                if entry.is_dir() and (entry / name).exists():
+                    out.append(f"{base}/{entry.name}/{name}")
+        else:  # depth == 2
+            for lv1 in sorted(sub.iterdir()):
+                if not lv1.is_dir():
+                    continue
+                for lv2 in sorted(lv1.iterdir()):
+                    if lv2.is_dir() and (lv2 / name).exists():
+                        out.append(f"{base}/{lv1.name}/{lv2.name}/{name}")
     return sorted(set(out))
 
 

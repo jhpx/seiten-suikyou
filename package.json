@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=20.6"
+    "node": ">=22.5"
   },
   "imports": {
     "#miao": "./vendor/miao/components/index.js",
@@ -17,9 +17,11 @@
   },
   "scripts": {
     "sync": "python tools/sync_miao.py",
-    "test": "node test/smoke.mjs && node test/arch.mjs && node test/regression.mjs && node test/verify.mjs",
+    "score": "node --disable-warning=ExperimentalWarning src/cli/score.js",
+    "test": "node test/smoke.mjs && node test/arch.mjs && node test/pipeline.mjs && node test/regression.mjs && node test/verify.mjs",
     "smoke": "node test/smoke.mjs",
     "arch": "node test/arch.mjs",
+    "pipeline": "node --disable-warning=ExperimentalWarning test/pipeline.mjs",
     "regression": "node test/regression.mjs",
     "verify": "node test/verify.mjs"
   }

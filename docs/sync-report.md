@@ -1,11 +1,11 @@
 # miao 内核同步报告
 
-- 同步时间：2026-09-13 13:53:53
+- 同步时间：2026-09-13 14:54:15
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
-- 搬运文件：239 个 / 3154.3 KB
-- 原样搬运：232 个　|　定点改写：7 个　|　本地生成：2 个
+- 搬运文件：505 个 / 3588.1 KB
+- 原样搬运：498 个　|　定点改写：7 个　|　本地生成：2 个
 
-搬运范围：components（6）、models（17）、resources（215）、tools（1）
+搬运范围：components（6）、models（19）、resources（479）、tools（1）
 
 ## 一、import 变化汇总
 

@@ -10,8 +10,14 @@
  * 不需要改写 import，也不需要 loader hook。
  * 本仓库自包含，不依赖外部 miao-plugin 目录。
  */
+/*
+ * 注册 miao 的元数据。没 import 就等于没注册 —— Meta 是「谁 import 谁登记」的，
+ * 漏一个就会出现「Weapon.get() 返回 false」这种莫名其妙的失败。
+ */
 import '../vendor/miao/resources/meta-gs/artifact/index.js'
 import '../vendor/miao/resources/meta-gs/character/index.js'
+import '../vendor/miao/resources/meta-gs/weapon/index.js'
+import '../vendor/miao/resources/meta-gs/material/index.js'
 
 export { default as ArtisMark } from '../vendor/miao/models/artis/ArtisMark.js'
 export { default as ArtisMarkCfg } from '../vendor/miao/models/artis/ArtisMarkCfg.js'
@@ -24,5 +30,9 @@ export { default as ArtifactSet } from '../vendor/miao/models/ArtifactSet.js'
 export { default as Character } from '../vendor/miao/models/Character.js'
 export { default as Weapon } from '../vendor/miao/models/Weapon.js'
 export { default as Material } from '../vendor/miao/models/Material.js'
+
+/* 面板属性计算 —— 角色评分规则要读 profile.attr（76 个规则里 56 个读它），
+   而 attr 不是数据源给的，是 miao 自己算的（models/Avatar.js:320 那句 attr.calc()）。 */
+export { default as Attr } from '../vendor/miao/models/attr/Attr.js'
 
 export { Meta, Format, Data } from '../vendor/miao/components/index.js'
