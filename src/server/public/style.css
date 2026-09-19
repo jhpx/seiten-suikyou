@@ -148,97 +148,149 @@ body {
 .acct-meta b { font-size: 15px; }
 .acct-meta span { font-size: 11px; color: var(--ink-3); }
 
-/* ───────────────────────── 首页：角色卡片网格 ───────────────────────── */
+/* ───────────────────────── 首页：角色卡片网格 ─────────────────────────
+ *
+ * 版式照原魔工具箱「角色展柜」中间那一块：一排五个、不显示角色名、按星级铺底色。
+ * 底色不是自己调的渐变，是 miao 的 common/item/bg{4,5}.png —— 也就是游戏里
+ * 五星橙 / 四星紫那张底（见 shape.js 的 rarityBg）。
+ *
+ * 所有尺寸用 cqw（= 卡片宽度的 1%）。同一套版式，桌面一张卡 90px、手机 63px，
+ * 字号和内边距都得跟着缩；写死 px 不是桌面太小就是手机溢出。
+ * cqw 认最近的容器祖先，所以 .char-card 自己声明 container-type。
+ */
 
 .char-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
-}
-@media (min-width: 480px) {
-  .char-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 .char-card {
-  --rank: var(--rank-d);
-  --elem: #888;
+  container-type: inline-size;
   position: relative;
-  aspect-ratio: 3 / 4;
-  border-radius: var(--radius);
+  display: block;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--line);
   cursor: pointer;
   background: var(--bg-3);
-  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+  transition: transform .12s ease, box-shadow .12s ease;
+  font-size: 12px;               /* 万一浏览器不认 cqw，还有个能看的兜底字号 */
 }
-.char-card::before {
-  content: "";
+.char-card:hover { box-shadow: 0 6px 20px rgba(0, 0, 0, .45); }
+.char-card:active { transform: scale(.96); }
+
+/*
+ * 画像区。比例照参考图量的：一张卡 156×192，其中画像区 156×162（近乎正方）、
+ * 底部白块 30。所以 aspect-ratio 取 156/162，白块高度交给内容自己撑。
+ */
+.cc-top {
+  position: relative;
+  aspect-ratio: 156 / 162;
+  overflow: hidden;
+}
+.cc-bg {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,.85) 100%);
-  z-index: 2;
-}
-.char-card::after {
-  content: "";
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: var(--rank);
-  box-shadow: 0 0 10px var(--rank);
-  z-index: 3;
+  background-size: cover;
+  background-position: center;
 }
 
-.char-splash {
-  position: absolute; inset: 0;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--elem) 35%, var(--bg-4)), var(--bg-2));
-}
-.char-splash img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  object-position: top center;
-}
-.char-overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.2) 50%, rgba(0,0,0,.88) 100%);
+/*
+ * 头像取景。数字是量出来的，不是拍的 —— 参考图里「头顶到下巴」大约占卡片宽度的
+ * 六成，按这个把 miao 的 face.webp 对上去。
+ *
+ * 两个坑，都踩过：
+ *   1. **不能 cover**。face.webp 是官方圆形头像切成 256 见方、脸占满整幅，
+ *      cover 铺满卡片时头会占到卡片宽度七成以上，比参考图大一圈，像大头贴。
+ *      contain 让整张源图进框，头自然落到五成多。
+ *   2. **框不能就是可见区**。contain 的缩放取宽高里小的那个，框小图就小。
+ *      画像区改成 156:162（≈1.038）后，框高度 92% ≈ 95.5cqw 正好是想要的那个尺寸；
+ *      框比卡片宽出来的部分由 .cc-top 裁掉，图也就顺势铺满整个画像区。
+ *
+ * 源图背景是透明的，所以两侧露出来的是星级底色，不会糊一块白。
+ */
+.cc-face {
+  position: absolute; top: 0; left: -10%;
+  width: 120%; height: 92%;
+  object-fit: contain;
+  object-position: center top;
 }
 
-.char-info {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 12px;
-  z-index: 4;
+.cc-elem {
+  position: absolute; top: 3cqw; left: 3cqw;
+  width: 23cqw; height: 23cqw;
+  object-fit: contain;
+  filter: drop-shadow(0 .5cqw .8cqw rgba(0, 0, 0, .7));
 }
-.char-top {
-  display: flex; gap: 6px; align-items: center; margin-bottom: 6px;
+
+/* 右上角角色等级。白字 + 半透明黑底，压在亮橙/亮紫底上都读得出来 */
+.cc-lv {
+  position: absolute; top: 3cqw; right: 3cqw;
+  padding: 1.2cqw 2.4cqw;
+  border-radius: 2cqw;
+  background: rgba(0, 0, 0, .5);
+  color: #fff; font-size: 11cqw; font-weight: 700; line-height: 1;
 }
-.char-elem {
-  background: color-mix(in srgb, var(--elem) 25%, transparent);
-  border: 1px solid color-mix(in srgb, var(--elem) 60%, transparent);
-  color: #fff;
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 11px;
+
+/*
+ * 左下角评分。米白大字压在画像上 —— 但**必须垫一层半透明黑**。
+ *
+ * 为什么不能省这层（2026-09-19 补）：星级的橙底和紫底都是亮色，奶白的 #f6ecd2
+ * 直接写上去，两个都糊成一团，光靠 text-shadow 救不回来（阴影只勾边，不降底噪）。
+ * 参考图里敢直接压，是因为它压的是角色原画的深色部位，我们压的是纯色底，不是一回事。
+ *
+ * 只做**贴着字的一块胶囊**，不做通栏黑带 —— 通栏会和白块上下叠成两层，
+ * 又回到「白块跟着黑块」那个老问题。左边距和左上角元素图标对齐（都用 3cqw），
+ * 下边距和右下角评级对齐（都用 2cqw），四角看着是一套。
+ */
+.cc-score {
+  position: absolute; left: 3cqw; bottom: 2cqw;
+  padding: 1.2cqw 2.4cqw;
+  border-radius: 2cqw;
+  background: rgba(0, 0, 0, .5);
+  font-size: 16cqw; font-weight: 800; line-height: 1;
+  color: #f6ecd2;
+  text-shadow: 0 .5cqw 1.2cqw rgba(0, 0, 0, .75);
 }
-.char-lv { font-size: 11px; color: var(--ink-2); }
-.char-name {
-  font-size: 17px; font-weight: 700; color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,.8);
-  margin-bottom: 4px;
+
+/* 右下角评级。color 由 JS 按档位给（跟明细页共用 rankColor），边框跟着 currentColor 走 */
+.cc-rank {
+  position: absolute; right: 3cqw; bottom: 2cqw;
+  font-size: 10cqw; font-weight: 800; line-height: 1;
+  padding: 1.2cqw 2.2cqw;
+  border: 1px solid currentColor;
+  border-radius: 2cqw;
+  background: rgba(0, 0, 0, .5);
+  letter-spacing: .02em;
 }
-.char-sub {
-  font-size: 11px; color: var(--ink-2);
-  display: flex; gap: 6px; flex-wrap: wrap;
+
+/* 武器块：图标 + 名字 + （等级 · 精炼），白底 —— 顶替原来那条「白色等级条」。
+   没武器也照样占位，整排高度才一致。
+   注意：这层是白底，不能用 --ink / --ink-3 那套（那是深色主题的浅色字，写上去看不见） */
+.cc-weapon {
+  display: flex; align-items: center; gap: 3cqw;
+  padding: 3cqw 4cqw;
+  background: #fff;
 }
-.char-score {
-  position: absolute; top: 10px; right: 10px;
-  display: flex; flex-direction: column; align-items: flex-end;
+.cc-wicon {
+  flex: 0 0 auto;
+  width: 20cqw; height: 20cqw;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
 }
-.char-score b {
-  font-size: 18px; font-weight: 800;
-  color: var(--rank);
-  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+.cc-wtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .8cqw; }
+.cc-wtext strong {
+  font-size: 12.5cqw; font-weight: 600; line-height: 1.15; color: #2f2f33;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.char-rank {
-  font-size: 11px; color: #fff;
-  background: rgba(0,0,0,.55);
-  border-radius: 4px; padding: 1px 5px;
+.cc-wmeta {
+  font-size: 11cqw; line-height: 1.15; color: #7a7a82;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.cc-wmeta b { font-weight: 600; color: #2f2f33; }
+/* 精炼度用金色。白底上 #d3bc8e 太浅，压深一档才看得清 */
+.cc-wmeta b.refine { color: #a9853c; }
 
 /* ───────────────────────── 明细页 ───────────────────────── */
 

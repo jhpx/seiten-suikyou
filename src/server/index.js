@@ -16,6 +16,7 @@
  */
 import http from 'node:http'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -302,7 +303,23 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const host = args.host || '127.0.0.1'
   const dbFile = args.db || path.join('data', 'gs.db')
   const app = await startServer({ port, host, dbFile })
-  console.log(`星天水镜 · 服务已启动  ${app.url}`)
+
+  /* 绑 0.0.0.0 时把各网卡地址列出来 —— 手机要访问得知道往哪打。
+     虚拟机网卡（VMware / WSL）也在里面，扫一眼就能认出哪个是 Wi-Fi 的。 */
+  const lanIps = host === '0.0.0.0'
+    ? [...new Set(Object.values(os.networkInterfaces()).flat()
+        .filter(i => i && i.family === 'IPv4' && !i.internal)
+        .map(i => i.address))]
+    : []
+
+  console.log(lanIps.length
+    ? `星天水镜 · 服务已启动  监听 ${host}:${app.port}（局域网可达）`
+    : `星天水镜 · 服务已启动  ${app.url}`)
+  if (lanIps.length) {
+    console.log('  局域网地址（手机连同一个 Wi-Fi 就能打开）')
+    for (const ip of lanIps) console.log(`    http://${ip}:${app.port}`)
+    console.log('  注意    绑 0.0.0.0 等于整个局域网都能连，本服务没有登录鉴权，测完记得停掉')
+  }
   console.log(`  库文件  ${dbFile}`)
   if (!i18n.available()) {
     console.log('  提示    多语言表还没同步（只有中文）。跑一次：I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py')

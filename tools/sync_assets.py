@@ -31,6 +31,17 @@ DEFAULT_OUT = ROOT / "src" / "server" / "public" / "assets"
 
 REPO_RAW = "https://raw.githubusercontent.com/yoimiya-kokomi/miao-plugin/master/resources"
 
+"""
+元素图标的来源。
+
+为什么不在 miao-plugin 里拿：它整个仓库没有元素符号这个素材 —— resources/common/
+下只有 bg-{元素}.webp（整张画布底图）和 talent-{元素}.webp（天赋圆环底盘），
+都不含符号本身。而首页角色卡左上角那个小图标就是元素符号，绕不开。
+paimon-moe 是原神社区一直在维护的公开素材库，里面 elements/ 正好是游戏里那七张符号图，
+文件名（anemo/cryo/...）和我们元数据里的 elem 字段完全同名，直接对得上。
+"""
+ELEM_ICON_RAW = "https://raw.githubusercontent.com/MadeBaruna/paimon-moe/main/static/images/elements"
+
 COMMON_ASSETS = [
     "common/cont/card-bg.png",
     # 属性表那一行的小图标是**一张横向精灵图**，靠 background-position 切
@@ -44,6 +55,10 @@ COMMON_ASSETS = [
     "character/imgs/main-02.png",
     # 武器卡的星级图（miao common.css 里 .artis .weapon .star 用的）
     "common/item/star.png",
+    # 首页角色卡的星级底色：五星是 bg5、四星是 bg4，就是游戏里那张橙/紫底
+    # （miao 拿它当 .item-icon.star5 的背景，avatar-list.css 也用同一张）
+    "common/item/bg5.png",
+    "common/item/bg4.png",
 ]
 
 # 角色页整张画布的背景按元素分图：common/bg/bg-{元素}.webp
@@ -209,9 +224,15 @@ def fetch(url: str, dest: Path):
         return False
 
 
-def sync_file(rel: str, out: Path, base_url: str):
-    """同步单个相对路径的资源。rel 是本地文件路径（保留中文目录名），URL 会按段编码。"""
-    dest = out / rel
+def sync_file(rel: str, out: Path, base_url: str, dest_rel: str | None = None):
+    """
+    同步单个资源。rel 是**远端**相对路径，dest_rel 是本地落地路径（不给就同 rel）。
+
+    为什么要分开：元素图标在 paimon-moe 那边叫 elements/pyro.png，而我们要把它
+    归到自己的目录结构下（common/elem/pyro.png），两边路径不一样。
+    中文目录名的 URL 会按段编码，本地路径保持原样。
+    """
+    dest = out / (dest_rel or rel)
     if dest.exists() and dest.stat().st_size > 0:
         return "skip"
     # URL 路径：段与段之间用 /，每段单独 encodeURIComponent
@@ -262,6 +283,14 @@ def main():
             stats[res] += 1
             if res in ("fail", "miss"):
                 log(f"  [{res}] {rel}")
+
+    # 1c. 元素符号图标（首页角色卡左上角那个），来源见 ELEM_ICON_RAW
+    log("[info] 同步元素图标 ...")
+    for el in ELEM_BGS:
+        res = sync_file(f"{el}.png", out, ELEM_ICON_RAW, f"common/elem/{el}.png")
+        stats[res] += 1
+        if res in ("fail", "miss"):
+            log(f"  [{res}] {el}.png")
 
     # 2. 角色 / 武器 / 圣遗物素材
     #

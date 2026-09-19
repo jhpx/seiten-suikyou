@@ -349,6 +349,14 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     /* 画布底图：按元素分的那张 bg-{元素}.webp，前端挂在 container 上（见上面的 ELEM_BG） */
     elemBg: `/assets/common/bg/bg-${ELEM_BG.has(elemKey) ? elemKey : 'hydro'}.webp`,
     /*
+     * 首页角色卡要用的两张图（明细页用不到）：
+     *   rarityBg 星级底色 —— miao 的 common/item/bg{4,5}.png，就是游戏里五星橙 / 四星紫那张底
+     *   elemIcon 左上角元素图标 —— miao 仓库里没有这个素材，另有来源（见 sync_assets.py 的 ELEM_ICON_RAW）
+     * 两个 URL 都由后端给，前端不自己拼路径 —— 和 elemBg 一个规矩。
+     */
+    rarityBg: `/assets/common/item/bg${char.star === 4 ? 4 : 5}.png`,
+    elemIcon: `/assets/common/elem/${ELEM_BG.has(elemKey) ? elemKey : 'hydro'}.png`,
+    /*
      * 立绘：miao 用的是官方 splash（meta-gs/character/{名}/imgs/splash.webp），
      * 不是 character-img/ 那套同人插画 —— 之前选错了，现在按上游 CharImg.getImgs 来。
      * 顺带把整张 imgs 表（命座 6 图 + 天赋 a/e/q 图）一起下发，前端直接照模板拼。

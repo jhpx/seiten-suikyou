@@ -99,11 +99,6 @@ function rankOf (cls) {
   return RANK_ORDER.includes(cls) ? cls : 'D'
 }
 
-const ELEM_COLOR = {
-  pyro: '#ff6a3d', hydro: '#3da6ff', electro: '#b46bff',
-  cryo: '#7fd4ff', anemo: '#5fd0a0', geo: '#f0c24a', dendro: '#8fd14f'
-}
-
 /* 图片加载失败时隐藏自己，让 CSS 占位露出来 */
 function imgError (img) { img.style.display = 'none' }
 
@@ -150,46 +145,77 @@ function renderAccountHeader (acct) {
   return box
 }
 
+/*
+ * 首页的一张角色卡 —— 照原魔工具箱「角色展柜」中间那块做的。
+ *
+ * 它跟明细页是两种东西：明细页是 miao 那张**出图**，要 1:1；首页是**列表**，
+ * 只借它的视觉语言（星级底色 / 半透明分数带 / 白色等级条 / 元素图标），
+ * 再按我们手上有的数据多挂一条武器信息。所以这里不照抄 miao 的任何 CSS。
+ *
+ * 一条铁律：**不显示角色名**（名字在 hover 的 title 里，以及明细页里）。
+ * 卡片自上而下两段：
+ *   ⓐ 画像区 —— 星级底图（五星橙 / 四星紫）打底，四角挂四样东西：
+ *      左上元素图标 · 右上角色等级 · 左下圣遗物评分 · 右下圣遗物评级
+ *   ⓑ 武器块 —— 白底，图标 + 名字 + 等级 + 精炼
+ *
+ * 分数为什么不再单独占一条「黑带」（2026-09-19 改版）：
+ *   参考图里分数是**直接压在画像左下角**的；黑带 + 白条上下叠两层，视觉上把卡片切成四段，太重。
+ *   现在只留底部一块白（装武器），上方全是画像。
+ *   注意「去掉黑带」只是说不要**通栏**那条，分数自己那块半透明黑底不能省 ——
+ *   星级的橙底/紫底都是亮色，奶白字不垫底看不清（见 style.css 的 .cc-score）。
+ */
 function renderCharCard (av) {
-  const card = el('div', 'char-card')
   const rank = rankOf(av.score.markClass)
-  const color = rankColor(rank)
+  const card = el('div', 'char-card')
+  /* 名字只挂在 tooltip 上，不进版面 */
+  card.title = [av.name, `Lv.${av.level ?? '?'}`, av.weapon?.name || T('noWeapon')].join(' · ')
 
-  card.style.setProperty('--rank', color)
-  card.style.setProperty('--elem', ELEM_COLOR[av.elem] || '#888')
+  /* ⓐ 星级底图 + 大头照 */
+  const bg = el('div', 'cc-bg')
+  if (av.rarityBg) bg.style.backgroundImage = `url("${av.rarityBg}")`
 
-  const splash = el('div', 'char-splash')
-  /* 首页网格用正面大头照（face，256x256），比整张立绘裁出来更像「选人」界面 */
-  const faceUrl = av.imgs?.face || av.splash
-  if (faceUrl) {
-    const img = el('img')
-    img.src = faceUrl
-    img.alt = ''
-    img.loading = 'lazy'
-    img.onerror = function () { img.style.display = 'none' }
-    splash.append(img)
+  const face = el('img', 'cc-face')
+  face.src = av.imgs?.face || av.splash
+  face.alt = ''
+  face.loading = 'lazy'
+  face.onerror = () => imgError(face)
+
+  /* ⓑ 左上角元素图标；右上角角色等级（原来这里挂的是评级，改版挪去右下） */
+  const elem = el('img', 'cc-elem')
+  elem.src = av.elemIcon
+  elem.alt = av.elemText || ''
+  elem.onerror = () => imgError(elem)
+
+  const lv = el('div', 'cc-lv', `Lv.${av.level ?? '?'}`)
+
+  /* ⓒ 左下角评分：压在画像上，垫一块半透明黑胶囊（亮橙/亮紫底上不垫读不出来） */
+  const score = el('div', 'cc-score', av.score.mark)
+
+  /* ⓓ 右下角评级（档位色跟明细页共用 rankColor） */
+  const badge = el('span', 'cc-rank', rank)
+  badge.style.color = rankColor(rank)
+
+  const top = el('div', 'cc-top')
+  top.append(bg, face, elem, lv, score, badge)
+
+  /* ⓔ 武器块：白底，顶替原来那条「白色等级条」的位置。
+     没武器（或 miao 不认识这把）也要出这一块，整排高度才整齐 */
+  const wp = el('div', 'cc-weapon')
+  const wIcon = el('div', 'cc-wicon')
+  if (av.weapon?.icon) wIcon.style.backgroundImage = `url("${av.weapon.icon}")`
+
+  const wText = el('div', 'cc-wtext')
+  wText.append(el('strong', '', av.weapon?.name || T('noWeapon')))
+  const meta = el('span', 'cc-wmeta')
+  if (av.weapon?.level) meta.append(el('b', '', `Lv.${av.weapon.level}`))
+  if (av.weapon?.affix) {
+    if (meta.childNodes.length) meta.append(document.createTextNode(' · '))
+    meta.append(el('b', 'refine', `${T('refine')}${av.weapon.affix}`))
   }
-  splash.append(el('div', 'char-overlay'))
+  wText.append(meta)
+  wp.append(wIcon, wText)
 
-  const info = el('div', 'char-info')
-  const top = el('div', 'char-top')
-  top.append(el('span', 'char-elem', av.elemText || av.elem || ''))
-  top.append(el('span', 'char-lv', `Lv.${av.level ?? '?'}`))
-  info.append(top)
-
-  info.append(el('div', 'char-name', av.name))
-
-  const sub = el('div', 'char-sub')
-  sub.append(el('span', '', `${T('cons')} ${av.cons}`))
-  if (av.weapon?.name) sub.append(el('span', '', av.weapon.name))
-  info.append(sub)
-
-  const score = el('div', 'char-score')
-  score.append(el('b', '', av.score.mark))
-  score.append(el('span', 'char-rank', av.score.markClass))
-  info.append(score)
-
-  card.append(splash, info)
+  card.append(top, wp)
   card.addEventListener('click', () => openDetail(av.avatarId))
   return card
 }
