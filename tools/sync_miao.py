@@ -165,12 +165,26 @@ LOCAL_CFG = """/*
  * 上游 Cfg 的依赖链是：
  *   components/Cfg.js → components/cfg/CfgData.js → config/system/cfg_system.js（217 行 schema）
  * 整条链是为「云崽用户在聊天里改插件配置」服务的，网页版没有这个交互层。
- * 而评分链路只用到 Cfg.get() 的两个布尔开关：
+ * 评分链路只用到它的两个布尔开关：
  *   models/Character.js:59   Cfg.get('notReleasedData')  未实装角色是否返回数据
  *   models/Character.js:313  Cfg.get('qFace')            卡片是否用 q 版头像（只影响渲染）
  * 所以这里复刻「上游读不到配置文件」的行为：cfg 恒为空对象。
- * get 的逻辑逐字照抄上游（含上游那个 lodash.isUndefined(cfg) 的判断），
- * 保证返回值与上游一致 —— 上游此处返回的是 undefined，不是 def。
+ *
+ * 【get 返回什么：必须给 def，不能给 undefined】
+ * 上游 get 里那句 `lodash.isUndefined(cfg) ? def : ret` 判断的是**整个 cfg 对象**，
+ * 而上游的 cfg 永远不是 undefined（它是「schema 默认值 + 用户存档」合并出来的），
+ * 所以那一支是死代码 —— 上游实际返回 `lodash.get(cfg, rote)`，也就是 **schema 里的默认值**。
+ * 我们这边 cfg 是空对象、手上也没有那份 schema，所以「上游会返回 schema 默认值」这件事
+ * 只能靠调用点自带的那份默认值还原：查不到就给 def。
+ *   components/Format.js:13  `Cfg.get('commaGroup', 3)` —— schema 里 commaGroup 的 def 也是 3
+ *   （miao-plugin `config/system/cfg_system.js:207`：逗号分组，千位组设为 3）
+ * 三者对得上：schema 默认 3 = 调用点默认 3 = 参考结果图里那个 `+4,778.6`。
+ * 之前这里返回 undefined → 那条正则变成 `\\\\d{(\\\\d{undefined})+$}`，一个都不匹配 →
+ * **全站数字都没有千分位**（面板 17395、词条 +4778.6），跟 miao 的结果图不一致，
+ * 而 test/smoke.mjs 当时把错的行为当期望值写进了断言，所以没人发现。
+ *
+ * 对另外两个调用点的影响：传 truthy 时行为完全一样，因为不给 def 时 def 默认是空串，
+ * 空串与 undefined 一样是 falsy（`if (Cfg.get('notReleasedData'))`、`Cfg.get('qFace') ? ...`）。
  */
 import lodash from 'lodash'
 
@@ -184,7 +198,7 @@ const Cfg = {
       return true
     }
     let ret = lodash.get(cfg, rote)
-    return lodash.isUndefined(cfg) ? def : ret
+    return lodash.isUndefined(ret) ? def : ret
   },
   set (rote, val) {
     cfg[rote] = val
@@ -452,8 +466,12 @@ GEN_NOTES = {
         "上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），"
         "整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。"
         "评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），"
-        "所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象），"
-        "`get` 的逻辑逐字照抄上游，保证返回值与上游一致。"
+        "所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象）。"
+        "⚠️ 但 `get` 查不到时必须返回调用点给的 `def`，不能返回 `undefined`："
+        "上游的 `cfg` 是 schema 合并出来的、永远不为 undefined，那句 `isUndefined(cfg) ? def : ret` 是死代码，"
+        "实际生效的就是 schema 默认值 —— 我们手上没有 schema，只能用调用点自带的默认值还原它。"
+        "最要紧的一处是 `components/Format.js` 的 `Cfg.get('commaGroup', 3)`："
+        "schema 里 commaGroup 的 def 也是 3，返回 undefined 会让全站数字丢掉千分位（`+4778.6` 而非 `+4,778.6`）。"
     ),
     "components/_local/Version.js": (
         "上游 `Version` 读 `package.json` / `CHANGELOG.md`，并检测宿主是 Yunzai V2 / V3 还是 AlemonJS，"

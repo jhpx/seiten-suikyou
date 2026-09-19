@@ -188,8 +188,8 @@ ok(viaDb?.artis['1']?.main?.key === 'hpPlus',
 ok(viaDb?.artis['1']?.attrs?.[0]?.upNum === 3,
   '副词条词条数 = 同 key 的 roll 次数（3）',
   `实际 ${viaDb?.artis['1']?.attrs?.[0]?.upNum}`)
-ok(viaDb?.artis['1']?.main?.value === '4778.6',
-  '满级小生命主词条 = 4778.6（顺带验证 level 21→20 归一化对了）',
+ok(viaDb?.artis['1']?.main?.value === '4,778.6',
+  '满级小生命主词条 = 4,778.6（顺带验证 level 21→20 归一化对了；千分位对齐 miao 的结果图）',
   `实际 ${viaDb?.artis['1']?.main?.value}`)
 
 /* ---------------- 7. 展柜子集：合并而不是替换 ---------------- */

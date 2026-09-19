@@ -83,9 +83,22 @@ console.log('\n=== 2. 本地替代的边界（Cfg / Version / Data.getRoot）===
 ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Cfg.js')), '_local/Cfg.js 存在（生成物）')
 ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Version.js')), '_local/Version.js 存在（生成物）')
 
-// 上游读不到配置文件时，Cfg.get 返回的是 ret（undefined）而不是 def —— 这里逐字复刻
-eq(comp.Cfg.get('notReleasedData'), undefined, "Cfg.get('notReleasedData') → undefined（与上游无配置一致）")
-eq(comp.Cfg.get('任意键', '默认值'), undefined, 'Cfg.get(缺省) → 不回落到 def（上游就是这么写的）')
+/* Cfg.get 查不到键时**必须回落到调用点给的 def** —— 这是「本地替代」唯一的对外行为约定。
+   上游那句 `lodash.isUndefined(cfg) ? def : ret` 判断的是**整个 cfg 对象**，而上游的 cfg
+   永远不是 undefined（它是「schema 默认值 + 用户存档」合并出来的），所以那是死代码。
+   上游实际给出的就是 **schema 默认值**；我们手上没有那份 schema，只能靠调用点自带的默认值还原。
+   ⚠️ 这条断言原来写反了（当时写的是「→ undefined，上游就是这么写的」），
+   于是把一个 bug 当成规矩钉死在这里，谁也没发现：
+   `components/Format.js` 的 `Cfg.get('commaGroup', 3)` 拿到 undefined 后，
+   千分位正则 `\d(?=(\d{undefined})+$)` 一个都匹配不上 → **全站数字丢掉千分位**
+   （面板写 17395、词条写 +4778.6），而 miao 自己的结果图是 `+4,778.6` / `18,926`。 */
+eq(comp.Cfg.get('commaGroup', 3), 3, "Cfg.get('commaGroup', 3) → 3（与上游 schema 里的 def 一致）")
+eq(comp.Cfg.get('任意键', '默认值'), '默认值', 'Cfg.get(缺省) → 回落到调用点给的 def')
+/* 端到端：这条才是千分位真正生效的证据（分组数由上面那个 3 决定） */
+eq(comp.Format.comma(1234.567), '1,235', 'Format.comma 按 Cfg.get 的分组数打千分位')
+/* 另两个调用点（notReleasedData / qFace）只看真假：不给 def 时 def 默认是空串，
+   空串与 undefined 一样是 falsy —— 所以这两处行为没变。断「falsy」而不是断 undefined。 */
+eq(Boolean(comp.Cfg.get('notReleasedData')), false, "Cfg.get('notReleasedData') → falsy（与上游无配置一致）")
 eq(comp.Version.isMiao, false, 'Version.isMiao → false（本项目不在云崽下）')
 
 // 位置敏感点：tools/path.js 靠自身位置推算 miao 根，挪动目录会在这里炸

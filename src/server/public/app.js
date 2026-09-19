@@ -402,13 +402,20 @@ function renderDetail () {
   fitDetailZoom()
 }
 
+/*
+ * 武器卡：图标（右上溢出）+ 名字 + 精N Lv.N + 属性条 + 描述。
+ *
+ * 「名字 / 精N Lv.N」两行是上限，别再往里加行：.head 高 90px，底部 26px 被属性条
+ * （Absolute bottom:0）占掉，剩下 64px 刚好装下这两行。曾加过一行武器星级，
+ * 结果等级行（精2 Lv.90）被顶到 64px 以下，整行压进属性条里、和「攻击 +608.10」叠在一起。
+ * 参考图里武器名下面直接就是「精1 Lv.90」，本来也没有星级行。
+ */
 function renderWeaponCard (w) {
   const item = el('div', 'item weapon')
   item.append(setBg(el('div', 'img'), w.icon))
 
   const head = el('div', 'head')
   head.append(el('strong', '', w.sName || w.name))
-  if (w.star) head.append(el('div', 'star star-' + w.star))
   const wInfo = el('span', 'info')
   wInfo.append(el('span', 'affix affix-' + (w.affix ?? 1), `${T('refine')}${w.affix ?? 1}`))
   wInfo.append(document.createTextNode(` Lv.${w.level ?? '?'}`))
@@ -445,7 +452,13 @@ function fitDetailZoom () {
 }
 window.addEventListener('resize', fitDetailZoom)
 
-/* 一件圣遗物：条目结构照抄 miao 的 .item.arti（右上图标 / 头 / 词条表） */
+/* 一件圣遗物：条目结构照抄 miao 的 .item.arti（右上图标 / 头 / 词条表）
+ *
+ * 词条名外面多包了一层 .label（miao 没有），为的是让过长的标签被省略号收在自己格里：
+ * 表格列宽是按「所有行里最宽的那个单元格」算的，英文标签最长 18 字
+ * （Physical DMG Bonus / Elemental Mastery / Electro DMG Bonus），
+ * 一行这么长就把整张表撑到 222px（卡只有 185），于是每一行的数值都右移到隔壁卡片上。
+ * 详见 miao.css 的 .label 规则（含「跟在 » 角标后的标签只能有 61px」那条）。 */
 function renderArtiCard (a, cw = {}) {
   if (a.empty) {
     const c = el('div', 'item arti empty')
@@ -478,7 +491,9 @@ function renderArtiCard (a, cw = {}) {
   const ul = el('ul', 'detail attr')
   if (a.main) {
     const li = el('li', 'arti-main')
-    li.append(el('span', 'title', a.main.label), el('span', 'val', '+' + a.main.value))
+    const mt = el('span', 'title')
+    mt.append(el('span', 'label', a.main.label))
+    li.append(mt, el('span', 'val', '+' + a.main.value))
     ul.append(li)
   }
   for (const s of a.subs) {
@@ -487,7 +502,7 @@ function renderArtiCard (a, cw = {}) {
     /* eff = 词条有效率，up-num = 这条滚了几次的小图标（按三档换色，见 CSS） */
     if (s.eff && s.eff !== '-') lab.append(el('i', 'eff', s.eff))
     if (s.upNum > 1) lab.append(el('i', 'up-num up-' + Math.min(5, s.upNum)))
-    lab.append(document.createTextNode(s.label))
+    lab.append(el('span', 'label', s.label))
     li.append(lab, el('span', 'val', '+' + s.value))
     ul.append(li)
   }

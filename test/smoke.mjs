@@ -20,7 +20,9 @@ console.log('Format.comma(1234.567):', Format.comma(1234.567))
 console.log('Format.isElem("pyro"):', Format.isElem('pyro'))
 
 eq(typeof ArtisMark.getMark, 'function', 'ArtisMark 可用')
-eq(Format.comma(1234.567), '1235', 'Format.comma 取整千分位')
+/* 千分位分组来自 Cfg.get('commaGroup', 3)（上游 schema 的 def 也是 3）——
+   断的是「带逗号」这一条：Cfg 替身一旦忘了给 def，数字就会静默丢掉千分位。 */
+eq(Format.comma(1234.567), '1,235', 'Format.comma 取整 + 千分位分组')
 eq(Format.isElem('pyro'), true, 'Format.isElem 认得出火元素')
 
 console.log('\n=== 2. 元数据注册 ===')

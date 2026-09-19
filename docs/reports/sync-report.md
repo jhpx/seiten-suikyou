@@ -1,11 +1,11 @@
 # miao 内核同步报告
 
-- 同步时间：2026-09-13 17:34:13
+- 同步时间：2026-09-19 23:40:21
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
 - 搬运文件：505 个 / 3588.1 KB
 - 处置方式：**原样搬运 498 个**　|　定点改写 7 个　|　本地生成 2 个
 - 增量基准：最后一个动过 `vendor/miao` 的 git 提交
-- 相对上一版（提交 `8e5465d`）：新增 0 个　|　移除 0 个　|　内容变化 0 个　|　未动 507 个
+- 相对上一版（提交 `2a1f2f9`）：新增 0 个　|　移除 0 个　|　内容变化 1 个　|　未动 506 个
 
 搬运范围：components（6）、models（19）、resources（479）、tools（1）
 
@@ -56,12 +56,12 @@
 
 ## 二、相对上一版差在哪
 
-基准是提交 `8e5465d`（2026-09-13 15:59:56 +0800）—— 也就是上一版同步的产物。
+基准是提交 `2a1f2f9`（2026-09-19 22:21:45 +0800）—— 也就是上一版同步的产物。
 
 差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件
 （同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。
 
-- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **0** 个　- 未动 **507** 个
+- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **1** 个　- 未动 **506** 个
 
 ### 新增（0 个）
 
@@ -71,9 +71,15 @@
 
 （无）
 
-### 内容变化（0 个）
+### 内容变化（1 个）
 
-（无）
+- **miao 入口与组件**（1 个）—— `#miao` 入口、`Data`（路径与 JSON 读取）、`Meta`（元数据注册）、`Format`（数值格式化）、`MiaoError`、`common/Elem`（元素表）
+
+<details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
+
+- `components/_local/Cfg.js`
+
+</details>
 
 ---
 
@@ -133,7 +139,7 @@ rootPath 由「miao 的上两级」改为 miao 根（本项目没有云崽宿主
 
 **云崽用户配置的最小替代**
 
-上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象），`get` 的逻辑逐字照抄上游，保证返回值与上游一致。
+上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象）。⚠️ 但 `get` 查不到时必须返回调用点给的 `def`，不能返回 `undefined`：上游的 `cfg` 是 schema 合并出来的、永远不为 undefined，那句 `isUndefined(cfg) ? def : ret` 是死代码，实际生效的就是 schema 默认值 —— 我们手上没有 schema，只能用调用点自带的默认值还原它。最要紧的一处是 `components/Format.js` 的 `Cfg.get('commaGroup', 3)`：schema 里 commaGroup 的 def 也是 3，返回 undefined 会让全站数字丢掉千分位（`+4778.6` 而非 `+4,778.6`）。
 
 ### `components/_local/Version.js`
 

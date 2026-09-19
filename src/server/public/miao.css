@@ -526,7 +526,12 @@
 .affix-4 { background: #ffddf0aa; box-shadow: 0 0 4px 0 #c539debf inset; }
 .affix-5 { background: #fff6dd; box-shadow: 0 0 4px 0 #deaf39 inset; }
 
-/* 武器星级：一张竖排 5 星的图，按星级切 */
+/* 武器星级：一张竖排 5 星的图，按星级切。
+   ⚠️ 我们的模板**不渲染**这个元素，两条理由：
+   ① 参考图里武器名下面直接就是「精1 Lv.90」，没有星级行 —— 拿金色像素扫过参考图那一带，是 0；
+   ② .head 只有 90px 预算（名字 21 + 等级行 20 + 属性条 26 + 上下内边距 25），塞不下这 20px，
+      硬塞就把等级行顶到 64px 以下，整行压进属性条里。
+   规则原样留着：本文件是上游 profile-detail.css 的照抄，删掉下次对照就看不出差异了。 */
 .artis .weapon .star {
   display: inline-block;
   width: 100px; height: 20px;
@@ -548,6 +553,13 @@
   width: 90px; height: 90px;
   z-index: 2;
 }
+/* 名字和分数要压在图标之上 —— 参考图就是「字盖图」：图标自带 45° 淡出遮罩，
+   白字连描边压上去照样清晰；反过来图标盖字，名字后半截就成了一道糊影子
+   （实测 6 字名重叠 10px、7 字名重叠 25px，命中测试在最上层拿到的都是图标）。
+   只抬这两个文字元素、不抬 .head：.head 自己带一条从黑到透明的渐变底，
+   整体抬到图标之上会把图标左半压暗，而参考图里图标是亮的。 */
+.artis .item.arti .head strong,
+.artis .item.arti .head span.mark { position: relative; z-index: 3; }
 /* 图标没同步到时的兜底：露一个淡部位字（花/羽/沙/杯/冠） */
 .artis .item.arti .arti-icon::before {
   content: attr(data-slot);
@@ -631,6 +643,42 @@
   padding-left: 30px;
   text-align: left;
   font-size: 14px;
+}
+/* 词条名（app.js 里多包的一层）—— 存在的唯一理由是「能裁」。
+   必须裁：display:table 的列宽由「所有行里最宽的那个单元格」决定，
+   英文标签最长 18 字（Physical DMG Bonus / Elemental Mastery / Electro DMG Bonus），
+   只要有一行这么长，整张表就被撑到 222px（卡只有 185），
+   于是**每一行**的数值都右移到 185 之外，压在隔壁卡的字上（实测溢出 21~37px）。
+   裁在这一层、不裁 .title：同一个 .title 里还有绝对定位的有效率角标 i.eff
+   （left:3）和强化次数小图标 i.up-num（left:91），
+   它们比标签列还宽，加在 .title 上的 overflow:hidden 会把它们整块裁掉。
+   80px 够中文最长的 4 字标签（充能效率/元素精通/暴击伤害/治疗加成/雷伤加成，
+   56px），英文放不下就省略号 —— 宁可自己短，也不许溢出去压别人。
+   必须是 display:block，不能用 inline-block：带 overflow 的 inline-block，
+   基线按 CSS 规定取「底边」而不是文字基线，会把整行从 26px 顶到 34px
+   （5 行下来卡片从 193px 涨到 233px）。块级子元素就老老实实占一行 26px。 */
+.artis ul.detail li span.title > span.label {
+  display: block;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* 必须显式继承：上面那条通用的 .artis ul.detail li span { color:#fff } 会直接命中
+     这一层（它是 span），直接声明胜过继承 —— 不写这句，.great 档的黄色标签
+     就全变白字了（像素对拍逮到的）。 */
+  color: inherit;
+}
+/* 紧跟在 » 强化次数角标后面的那条标签，要让出角标那条带子。
+   角标是绝对定位、left:91（上游原值），标签从 30（.title 的 padding-left）起，
+   所以这一行的标签只有 61px。中文最长 56px，本来就够、仍然留 5px 空档（和上游一致）；
+   「CRIT Rate」(64.7px) / 「Elemental Mastery」(124px) 这类超出的才被收成省略号，
+   省略号正好停在 91 —— 角标左边。
+   为什么不干脆全局收到 61：没有角标的行（upNum=1）本来就有 80px 可用，
+   把 CRIT Rate/CRIT DMG 一起砍掉纯属白砍；角标才是抢地方的那个，让它赢在它出现的行。
+   用相邻兄弟选择器而不是给 .title 加类：DOM 里 .label 就是 i.up-num 的下一个兄弟，
+   这条规则自己就能表达「跟在角标后面」，JS 不用承担版式知识。 */
+.artis ul.detail li span.title > i.up-num + span.label {
+  max-width: 61px;
 }
 .artis ul.detail li span.val {
   padding-right: 10px;
