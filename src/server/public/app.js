@@ -152,7 +152,12 @@ function renderAccountHeader (acct) {
  * 只借它的视觉语言（星级底色 / 半透明分数带 / 白色等级条 / 元素图标），
  * 再按我们手上有的数据多挂一条武器信息。所以这里不照抄 miao 的任何 CSS。
  *
- * 一条铁律：**不显示角色名**（名字在 hover 的 title 里，以及明细页里）。
+ * 一条铁律：**不显示角色名**（名字只出现在 hover 提示和明细页里）。
+ * 既然版面上一个名字都没有，hover 提示就是唯一的「认人」入口，得挂全 —— 而且**分两块挂**：
+ *   ⓐ 画像区 → 角色名 · 等级 · 评分 · 评分等级
+ *   ⓑ 武器块 → 武器名 · 等级 · 精炼等级
+ * 整卡挂一个提示是错的：鼠标停在武器上却报角色等级，答非所问（2026-09-19 用户指出）。
+ *
  * 卡片自上而下两段：
  *   ⓐ 画像区 —— 星级底图（五星橙 / 四星紫）打底，四角挂四样东西：
  *      左上元素图标 · 右上角色等级 · 左下圣遗物评分 · 右下圣遗物评级
@@ -167,8 +172,6 @@ function renderAccountHeader (acct) {
 function renderCharCard (av) {
   const rank = rankOf(av.score.markClass)
   const card = el('div', 'char-card')
-  /* 名字只挂在 tooltip 上，不进版面 */
-  card.title = [av.name, `Lv.${av.level ?? '?'}`, av.weapon?.name || T('noWeapon')].join(' · ')
 
   /* ⓐ 星级底图 + 大头照 */
   const bg = el('div', 'cc-bg')
@@ -197,6 +200,13 @@ function renderCharCard (av) {
 
   const top = el('div', 'cc-top')
   top.append(bg, face, elem, lv, score, badge)
+  /* 画像区提示：只报这个人自己的四项，不掺武器 */
+  top.title = [
+    av.name,
+    `${T('tipLevel')} ${av.level ?? '?'}`,
+    `${T('tipScore')} ${av.score.mark}`,
+    `${T('tipScoreTier')} ${rank}`
+  ].join(' · ')
 
   /* ⓔ 武器块：白底，顶替原来那条「白色等级条」的位置。
      没武器（或 miao 不认识这把）也要出这一块，整排高度才整齐 */
@@ -204,16 +214,27 @@ function renderCharCard (av) {
   const wIcon = el('div', 'cc-wicon')
   if (av.weapon?.icon) wIcon.style.backgroundImage = `url("${av.weapon.icon}")`
 
+  /* 名字和下面那行「等级 · 精炼」装在同一栏里（.cc-wtext），
+     左边留给图标一整栏 —— 图标竖向撑满整块，右边两行居中，
+     短名字也不会在底部空出一块（用户 2026-09-19 指出） */
+  const wName = av.weapon?.name || T('noWeapon')
   const wText = el('div', 'cc-wtext')
-  wText.append(el('strong', '', av.weapon?.name || T('noWeapon')))
-  const meta = el('span', 'cc-wmeta')
+  wText.append(el('strong', '', wName))
+
+  /* 等级 · 精炼跟在名字下面，不再自己占一整行横跨白块。
+     中间那个「·」由 CSS 补，这里只塞数据 */
+  const meta = el('div', 'cc-wmeta')
   if (av.weapon?.level) meta.append(el('b', '', `Lv.${av.weapon.level}`))
-  if (av.weapon?.affix) {
-    if (meta.childNodes.length) meta.append(document.createTextNode(' · '))
-    meta.append(el('b', 'refine', `${T('refine')}${av.weapon.affix}`))
-  }
+  if (av.weapon?.affix) meta.append(el('b', 'refine', `${T('refine')}${av.weapon.affix}`))
   wText.append(meta)
+
   wp.append(wIcon, wText)
+
+  /* 武器区提示：只报这把武器。没武器时只剩「无武器」一个词，不再补空字段 */
+  const wTip = [wName]
+  if (av.weapon?.level) wTip.push(`${T('tipLevel')} ${av.weapon.level}`)
+  if (av.weapon?.affix) wTip.push(`${T('tipRefineTier')} ${av.weapon.affix}`)
+  wp.title = wTip.join(' · ')
 
   card.append(top, wp)
   card.addEventListener('click', () => openDetail(av.avatarId))
@@ -228,6 +249,11 @@ function renderRoster () {
   box.append(el('h2', 'page-title', T('rosterTitle')))
   box.append(renderAccountHeader(view?.account))
 
+  /* 页脚第二行只报「数据时间」——角色数、语言这些前端自己就有，不在这儿重复。
+     写在下面那个 early return 之前：没角色可评时卡片不画，但时间也得跟着当前
+     这份数据走，不能停在上一个 UID 的时刻上。 */
+  $('footmeta').textContent = `${T('scoredAt')} ${view?.fetchedAt || '—'}`
+
   if (!view || !view.avatars.length) {
     const ph = el('div', 'placeholder')
     ph.append(el('p', '', T('noScorable')), el('p', 'dim', T('noScorableHint')))
@@ -239,9 +265,6 @@ function renderRoster () {
   const grid = el('div', 'char-grid')
   for (const av of sorted) grid.append(renderCharCard(av))
   box.append(grid)
-
-  const foot = $('footmeta')
-  foot.textContent = T('footMeta', { n: view.count, loc: view.locale, t: view.fetchedAt || '—' })
 }
 
 /* ─────────────────────────
@@ -651,7 +674,6 @@ function applyStaticUi () {
   $('fetch').title = T('fetchTip')
   $('localeLabel').textContent = T('localeLabel')
   $('uid').placeholder = T('uidLabel')
-  $('footnote').textContent = T('footerNote')
 }
 
 /* ───────────────────────── 启动 ───────────────────────── */

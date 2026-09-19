@@ -21,7 +21,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, Format, i18n } from '../index.js'
-import { slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
+import { fmtTime, slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
 import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { ingestPayload } from '../adapter/ingest.js'
@@ -168,7 +168,7 @@ async function main () {
       const acc = repo.getAccount(db, uid)
       const last = repo.lastFetch(db, uid)
       const n = repo.listAvatarIds(db, uid).length
-      console.log(`  ${uid}  ${acc?.nickname || '?'}  Lv.${acc?.level ?? '?'}  角色 ${n} 个  最后抓取 ${last?.fetched_at || '?'}`)
+      console.log(`  ${uid}  ${acc?.nickname || '?'}  Lv.${acc?.level ?? '?'}  角色 ${n} 个  最后抓取 ${fmtTime(last?.fetched_at) || '?'}`)
     }
     return 0
   }
@@ -235,7 +235,7 @@ async function main () {
   const src = ingestSummary
     ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.avatarCount} ${uiText('chars', locale)}`
     : uiText('offline', locale)
-  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${last?.fetched_at || '?'}　|　${avatars.length} ${uiText('chars', locale)}`)
+  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${fmtTime(last?.fetched_at) || '?'}　|　${avatars.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
   const filter = args.char ? String(args.char) : null

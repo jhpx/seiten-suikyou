@@ -75,6 +75,18 @@ console.log('\n=== 2. uid 列表 ===')
   eq(r.data.length, 1, '/api/uids 有 1 条')
   eq(r.data[0].uid, UID, 'uid 对得上')
   eq(r.data[0].avatarCount, summary.avatarCount, '角色数与 ingest 一致')
+
+  /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 shape.js 的 fmtTime）。
+     断言刻意写成与时区无关 —— 换台机器跑也得过，所以拆成两条：
+       ① 格式：没有 T/Z，就是「YYYY-MM-DD HH:mm:ss」
+       ② 换算：把结果按本地时间解析回去，应当与库里那个 UTC 时刻**同一毫秒**
+          （② 才是真验证时区换算，而且不用把 +8 写死） */
+  const ft = r.data[0].fetchedAt
+  ok(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ft),
+    'fetchedAt 是本地时间文本、不含 T/Z', `实际 ${JSON.stringify(ft)}`)
+  eq(new Date(String(ft).replace(' ', 'T')).getTime(),
+    new Date('2026-09-13T00:00:00.000Z').getTime(),
+    'fetchedAt 换算回去与库里时刻是同一时刻')
 }
 
 /* ---------------- 3. 视图：中文 ---------------- */

@@ -168,7 +168,11 @@ body {
 .char-card {
   container-type: inline-size;
   position: relative;
-  display: block;
+  /* 竖着排两段（画像 + 武器块）。用 flex 而不是 block 是为了让武器块吃掉行内多出来的高度：
+     格子里 align-items 默认 stretch，同一行的卡会被拉到「最高的那张」那么高，
+     要是卡片是 block，矮的那几张底下就会露一条深色底；flex 让白块自己长上去填满。 */
+  display: flex;
+  flex-direction: column;
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
@@ -186,6 +190,7 @@ body {
  */
 .cc-top {
   position: relative;
+  flex: none;                    /* 高度只由 aspect-ratio 定，不参与上下分配 */
   aspect-ratio: 156 / 162;
   overflow: hidden;
 }
@@ -223,9 +228,21 @@ body {
   filter: drop-shadow(0 .5cqw .8cqw rgba(0, 0, 0, .7));
 }
 
-/* 右上角角色等级。白字 + 半透明黑底，压在亮橙/亮紫底上都读得出来 */
+/* 右上角角色等级。白字 + 半透明黑底，压在亮橙/亮紫底上都读得出来。
+ *
+ * top 从 3cqw 挪到 7.8cqw（用户 2026-09-19「等级和左上角属性图标在纵向上对齐一些」）：
+ * 这俩都在画像区顶部，但块头差一倍 ——
+ *   属性图标 宽高 23cqw，中心在 3 + 23/2 = 14.5cqw
+ *   等级胶囊 高 = 字号 11 + 上下内边距 1.2×2 = 13.4cqw，原先 top:3 时中心只有 9.7cqw
+ * 顶边对齐了、中心线却差 4.8cqw（4.3px @90px 卡），看着就是「胶囊飘在上面」。
+ * 7.8 = 14.5 − 13.4/2，让胶囊中心落在图标中心上。图标图案在框内是居中的，
+ * 所以对齐框中心 = 对齐图案中心。
+ *
+ * 先试过另一条路：把胶囊也撑到 23cqw 高（字号提到 13cqw、内边距 5cqw），
+ * 顶底确实都齐了，但胶囊变成一大块半透明黑压在立绘上，Lv.79 也抢眼到跟左下评分同档 ——
+ * 等级是配角，不该这么大。所以走「下移对齐」而不是「撑高对齐」。 */
 .cc-lv {
-  position: absolute; top: 3cqw; right: 3cqw;
+  position: absolute; top: 7.8cqw; right: 3cqw;
   padding: 1.2cqw 2.4cqw;
   border-radius: 2cqw;
   background: rgba(0, 0, 0, .5);
@@ -253,10 +270,18 @@ body {
   text-shadow: 0 .5cqw 1.2cqw rgba(0, 0, 0, .75);
 }
 
-/* 右下角评级。color 由 JS 按档位给（跟明细页共用 rankColor），边框跟着 currentColor 走 */
+/* 右下角评级。color 由 JS 按档位给（跟明细页共用 rankColor），边框跟着 currentColor 走。
+   字号 13cqw（2026-09-19 用户「评分和评级字体相差太多，评级太小了」）：
+   评分 16 / 评级 10 是 1.6 倍的落差，两个胶囊高 18.4 vs 14.6，摆在一起像「大字 + 小标签」。
+   13 是**胶囊高度追平评分**的那个点：13 + 2×1.2 纵内边距 + 2×1.11 边框 = 17.6，对 18.4。
+   为什么不敢再大：最宽的档位是 `MAX`（M 很宽，量出 2.481em），
+     可用宽 94cqw（100 − 左右各 3）；评分占 2.752em × 16 = 44.0 + 左右内边距 4.8 = 48.8
+     评级占 2.481 × F + 2×(2.2 + 1.11)
+     F=13 → 中间只剩 6.3cqw（5.7px）；F=14 → 3.8cqw；F=15 就只剩 1.3cqw 了。
+   MAX 这个档位现存数据里没有，但 `rankColor` 认它，所以预算必须按它算。 */
 .cc-rank {
   position: absolute; right: 3cqw; bottom: 2cqw;
-  font-size: 10cqw; font-weight: 800; line-height: 1;
+  font-size: 13cqw; font-weight: 800; line-height: 1;
   padding: 1.2cqw 2.2cqw;
   border: 1px solid currentColor;
   border-radius: 2cqw;
@@ -264,30 +289,97 @@ body {
   letter-spacing: .02em;
 }
 
-/* 武器块：图标 + 名字 + （等级 · 精炼），白底 —— 顶替原来那条「白色等级条」。
-   没武器也照样占位，整排高度才一致。
+/* 武器块：白底，左右两栏 —— 左边一个图标竖向撑满整块，右边「名字 / 等级·精炼」两行。
+   没武器也照样占位，整排高度才整齐。
    注意：这层是白底，不能用 --ink / --ink-3 那套（那是深色主题的浅色字，写上去看不见） */
 .cc-weapon {
-  display: flex; align-items: center; gap: 3cqw;
-  padding: 3cqw 4cqw;
+  display: flex; align-items: stretch; gap: 3cqw;
+  padding: 3cqw;
   background: #fff;
+  flex: 1;                   /* 同一行里最高那张卡撑出来的余量，由白块吃掉（见 .char-card） */
 }
+/* 图标那一栏：宽度固定，高度由 align-items:stretch 撑满整块内容区。
+   上一版图标被压在「名字那一行」里，只有 20cqw（实测白块 36.6px 时图标才 18.1px，
+   底下空 15.8px）。改成一整栏之后图标跟着白块高度走。
+   min-height 是「反过来给白块定个下限」用的：中文名字只有一行时，右边两行信息
+   合计才 25cqw 高，图标要是没下限就会被压扁。取 34cqw —— 白块正好回到改前的
+   40cqw（36.6px），但这 36.6px 全被图标和两行字占满，没有一处空白。
+   再往上加白块就要比改前更高了，不划算。
+   武器图标素材本身是竖长的（长柄 187×248，单手剑 0.77、大剑 0.93、弓 0.97 的宽高比），
+   contain 进这个竖框：长柄/单手剑是高度顶格（它们本来就比框「瘦」），
+   大剑/弓则被框宽限制、左右顶格 —— 素材比例如此，不是框小了。 */
 .cc-wicon {
   flex: 0 0 auto;
-  width: 20cqw; height: 20cqw;
+  width: 25cqw;
+  min-height: 34cqw;
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
 }
-.cc-wtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .8cqw; }
+/* 右边信息栏：名字一行 +「等级 · 精炼」一行。
+   **名字在剩余空间里垂直居中，等级那行锚死在白块底边**（grid 的 1fr auto 两行）——
+   这是「扫视对齐」的关键。同排的白块会被最高的那张卡拉平（flex:1），
+   要是等级行跟着名字走（整栏居中），名字一行和两行的卡，等级行会错开：
+     实测 en 第一排 4 张两行名的卡在 y=417，一行名的「寒息」在 y=411，差 6px；
+     第二排同理（566 vs 572）。
+   贴底之后同排一律落在同一条线上，而且跟图标的底边齐平。
+   **字号和行高必须落在这一层**，不能只写在里面的 strong 上 ——
+   浏览器会给每个块的第一行插一个「隐形字符」(strut)，行盒的最小高度由**这个块**的
+   行高决定，跟里面 strong 自己的行高无关。只写 strong 的话这里还继承着卡片
+   正文那 16px 的字号，1.15 倍 = 每个行盒 18px：
+     实测 2 行名字白块 54.5px、3 行 72.5px（而按字号算应该是 42 和 54）。
+   把字号+行高提到这一层，行盒才真是 11cqw × 1.15。 */
+.cc-wtext {
+  flex: 1; min-width: 0;
+  display: grid; grid-template-rows: 1fr auto; gap: 1.4cqw;
+  font-size: 11cqw;
+  line-height: 1.15;
+}
+/* 名字在「去掉等级行之后」剩下的空间里居中 —— 不贴顶，留一点呼吸；
+   等级行归 grid 的第二行（auto），自动贴底 */
+.cc-wtext strong { align-self: center; }
+/* 武器名：非中文一行放不下，原来 nowrap + 省略号会把名字切掉（用户 2026-09-19 指出）。
+   这段能用多宽，是量出来的，不是拍的：
+     列宽 = 100 - 左右内边距(3×2) - 图标(25) - 间距(3) = 66cqw
+     每行能放几个字符 = 66 ÷ 11 = 6em
+   而实测最长的**单词**是英文的 Gravestone 5.71em、Fragments 5.34em
+   （整名最长的 Rainbow Serpent's Rain Bow 是 14.4em，会折行，不是单词超宽）。
+   6 > 5.71 还留了约 5% 余量，换行只会发生在空格处，不会把单词从中间劈开 ——
+   早先 12.5cqw 字号下这列只有 5.52em，Gravestone 就被断成了「Graveston / e」。
+   overflow-wrap: anywhere 是兜底（万一以后来一把单词比整列还宽的武器名，硬断，不让它溢出白块）。
+
+   **这里故意不设折行上限**（用户 2026-09-19：「我不要省略号，要省略号不如不要武器名」）。
+   代价要认：英文最长的 Rainbow Serpent's Rain Bow 要 3 行，同排 4 张卡的白块会被一起
+   抬到 3 行高（flex:1 拉平，见 .cc-weapon），也就是那一排的短名字卡会多出一点上下留白。
+   这个代价只在**含有超长英文名的那一行**出现 —— 中文名实测最长 5 个字，中文页整页不受影响。
+   用字号自适应去压到 2 行不可行：canvas 实测那把武器缩到 8cqw 仍需 3 行（要 7.5cqw 才可能），
+   比下面那行小字还小，得不偿失。 */
 .cc-wtext strong {
-  font-size: 12.5cqw; font-weight: 600; line-height: 1.15; color: #2f2f33;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 600; color: #2f2f33;   /* 字号/行高继承 .cc-wtext，见上 */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
+/* 等级 · 精炼：跟在名字下面。两端对齐（space-between）把这一栏铺开 ——
+   上一版它是横跨整块的一整行、内容却只有左边一小截，看着「聚在左下角」（用户 2026-09-19 指出）。
+   现在归到右边这一栏里，两个字段分居左右，栏宽被用满。
+   字号 10.5cqw：栏宽 66cqw，「Lv.90」约 26cqw、「精1」约 16cqw，中间还空一截。
+   内容少的时候 space-between 会自动退化成左对齐，不用额外处理。 */
 .cc-wmeta {
-  font-size: 11cqw; line-height: 1.15; color: #7a7a82;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10.5cqw; line-height: 1.1; color: #7a7a82;
+  white-space: nowrap;
+  /* 右边单独再缩 5cqw，加起来 8cqw（用户 2026-09-19：先「太靠边了，再留一点点白」→ 再「还要再留白一些」）。
+     为什么右边要单独缩：这一项是**右对齐的粗体金色小字**，紧贴容器边时没有任何视觉缓冲。
+     左边那 2.7px 之所以不显挤，是因为它有「图标 + 间距」31cqw 顶着，不是同一回事。
+     三档截图实测定下来的（文字实际右边缘距卡片右；padding 越大，精炼越往左，右留白越多）：
+       3cqw → 5.41px（跟评级徽章的 5.69px 齐平，但金色粗体比徽章里垫了内边距的 SS 重，看着压边）
+       5cqw → 7.22px ✔（比那条线多 1.5px，呼吸感出来了，两字段间距仍有 15.8px）
+       7cqw → 9.02px（过头：脱离右边那条 5.7px 对齐线太多，「精1」开始跟整卡的右边缘脱钩）
+     左边**不能**跟着缩：Lv.90 的左边缘要和上面名字左对齐，缩了就断线。
+     底部也不缩：等级行底边跟图标底边齐平，是故意对齐的。 */
+  padding-right: 5cqw;
 }
+.cc-wmeta:empty { display: none; }   /* 没武器时这一块整个不占位（连带 gap 也消掉） */
 .cc-wmeta b { font-weight: 600; color: #2f2f33; }
 /* 精炼度用金色。白底上 #d3bc8e 太浅，压深一档才看得清 */
 .cc-wmeta b.refine { color: #a9853c; }
@@ -344,8 +436,16 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ───────────────────────── 页脚 ───────────────────────── */
-
+/* ───────────────────────── 页脚 ─────────────────────────
+ *
+ * 就一行：这份数据的抓取时间。内核出处、角色数、语言一概不放这儿。
+ * body 是 flex column、.app 撑掉剩下的高度，所以它自然贴在页面底部。
+ */
 .foot {
   width: 100%;
   max-width: var(--app-width);
+  margin: 0 auto;
+  padding: 4px 14px 32px;
+}
+.foot > span { font-size: 12px; line-height: 1.6; }
+.foot > .dim { color: var(--ink-3); }

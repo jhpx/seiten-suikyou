@@ -402,6 +402,28 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
 }
 
 /**
+ * 抓取时间「ISO UTC → 本地时区的可读文本」。
+ *
+ * 库里存的是 `new Date().toISOString()`（如 `2026-09-13T07:09:14.296Z`），
+ * 那是**存储**要的无歧义格式，不是给人看的 —— 直接端到页面上就是「T 和 Z 的乱码感」，
+ * 而且 UTC 会让本地白天显示成凌晨（用户 2026-09-19：「数据时间按时区处理一下，不要 TZ」）。
+ *
+ * 所以只在出口格式化，存储层一个字都不动。换算时区靠 `getHours()` 这类**本地**取值器 ——
+ * 浏览器/Node 各自用本机时区，不写死 +8，换台机器看也对。
+ *
+ * 空值/脏值一律回 `null`（不返回 '—'）：调用方本来就拿 `|| '—'` / `|| '?'` 兜底，
+ * 这里再塞一个占位符会把它变成「永远有值」。
+ */
+export function fmtTime (iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/**
  * 一整包 → 视图对象（页面/接口的最终形状）。
  * 内部把 materialize + 打分 + 本地化串起来，调用方只要给库里的行就行。
  *
@@ -412,7 +434,8 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
  * @param {object}  opts.account   repo.getAccount 出来的一行（可空）
  * @param {Array}   opts.rows      repo.loadUid 出来的角色行
  * @param {string}  opts.locale
- * @param {string}  opts.fetchedAt 最后一次抓取时间（可空）
+ * @param {string}  opts.fetchedAt 最后一次抓取时间，**原始 ISO UTC**（可空）；
+ *                                 出口转成本地时区文本，见 fmtTime
  */
 export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }) {
   const loc = i18n.resolveLocale(locale)
@@ -427,7 +450,7 @@ export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE,
   }
   return {
     locale: loc,
-    fetchedAt,
+    fetchedAt: fmtTime(fetchedAt),
     account: account
       ? {
           uid: account.uid,

@@ -25,7 +25,7 @@ import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { fetchEnka } from '../adapter/enka.js'
 import { ingestPayload } from '../adapter/ingest.js'
-import { buildAccountView } from '../view/shape.js'
+import { buildAccountView, fmtTime } from '../view/shape.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC = path.join(HERE, 'public')
@@ -210,7 +210,7 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
           level: acc?.level ?? null,
           worldLevel: acc?.world_level ?? null,
           avatarCount: repo.listAvatarIds(db, uid).length,
-          fetchedAt: last?.fetched_at ?? null
+          fetchedAt: fmtTime(last?.fetched_at)     /* ISO UTC → 本地时区文本，见 shape.js 的 fmtTime */
         }
       })
       sendJson(res, 200, { ok: true, data: list })
