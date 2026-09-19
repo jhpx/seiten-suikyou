@@ -1,23 +1,15 @@
 /*
  * shape —— 「库里的一行 + miao 评分结果」→ 给页面/接口用的视图对象
  *
- * 位置在整条链路的最后一公里：前面几步全程只碰数字 id，输出中文名是 miao 内核的硬要求
- * （见 adapter/materialize.js 的注释），而**给人看的这一份**要按用户选的语言渲染。
- * 所以这里是「id → 文本」的第二条出口，语言由 locale 决定。
+ * 整条链路前面几步只碰数字 id，到了这儿才出中文名（内核的硬要求），而**给人看的这一份**
+ * 要按用户选的语言渲染。所以这里是「id → 文本」的第二条出口，语言由 locale 决定。
  *
- * 三个刻意的决定：
- *
- *   1. 名字优先查 i18n 表，查不到才退回 miao 的中文名（`nameZh`）。
- *      退回不是「凑合」—— 表里没有的 id 只能这么办，而且中文至少是对的、不是乱码。
- *
- *   2. 圣遗物的名字用**库里存的 hash** 查，不用 miao 给的中文名反查。
- *      name_hash / set_hash 是 enka 白给的官方文案主键（见 docs/DESIGN-DATA-MODEL.md），
- *      直接查比拿中文名对字符串稳得多，也不受 miao 改名影响。
- *
- *   3. 词条数值一律用 miao 已格式化好的字符串（`main.value` / `attrs[].value`）。
- *      那是 ArtisMark.formatArti 按 `attrMap[key].format`（comma / pct）算出来的，
- *      我们重算一遍就有可能和内核不一致 —— 那条「逐字一致」的底线不能破。
- *      只有面板（attr）是裸数字，这里按 kind 自己格式化。
+ * 三条底线：
+ *   1. 名字优先查 i18n 表，查不到才退回 miao 的中文名 —— 中文至少是对的，不是乱码。
+ *   2. 圣遗物名字用库里存的 hash 查（enka 白给的官方文案主键，见 docs/DESIGN-DATA-MODEL.md），
+ *      比拿中文名对字符串稳，也不受 miao 改名影响。
+ *   3. 词条数值一律用 miao 格式化好的字符串（`main.value` / `attrs[].value`）——
+ *      自己重算就可能和内核不一致，那条「逐字一致」的底线不能破。只有面板（attr）是裸数字。
  */
 import { ArtisMark, Artifact, Format, i18n, Weapon } from '../index.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
@@ -31,10 +23,9 @@ function statPoint (_mark) {
 const KEY_TITLE = ArtisMark.getKeyTitleMap('gs')
 
 /*
- * 圣遗物卡片上用的**另一套**标题：miao 模板渲染主/副词条时取的是
- * Artifact.getArtisKeyTitle()，它区分大小词条（atk→大攻击、hpPlus→小生命），
- * 而 i18n 表里 hpPlus 只有「生命值」，直接沿用就丢了「大/小」这个信息。
- * 卡片要跟 miao 长得一样，所以圣遗物部分优先用这张表。
+ * 圣遗物卡片上用的**另一套**标题：miao 模板取的是 Artifact.getArtisKeyTitle()，
+ * 它区分大小词条（atk→大攻击、hpPlus→小生命），而 i18n 表里 hpPlus 只有「生命值」，
+ * 直接沿用就丢了「大/小」。卡片要跟 miao 长得一样，所以中文下优先用这张表。
  */
 let ARTI_TITLE = {}
 try { ARTI_TITLE = Artifact.getArtisKeyTitle('gs') || {} } catch { ARTI_TITLE = {} }
@@ -47,29 +38,18 @@ const SHORT_TITLE = {
   小生命: '生命', 小攻击: '攻击', 小防御: '防御'
 }
 
-/*
- * 圣遗物词条标题。
- * 中文下按 miao 的卡片来（区分大/小词条）；其它语言走 i18n 表 ——
- * miao 那张表只有中文，硬套会把英文界面打回中文。
- */
+/* 中文按 miao 的卡片来（区分大/小词条）；其它语言走 i18n 表 ——
+   miao 那张表只有中文，硬套会把英文界面打回中文。 */
 function artiLabel (key, locale) {
   if (locale !== 'chs' && locale !== 'cht') return statLabel(key, locale)
   return ARTI_TITLE[key] || KEY_TITLE[key] || statLabel(key, locale)
 }
 
-/* 汇总区的短标题：先取词条标题，再按 SHORT_TITLE 缩一档（非中文时自然缩不动，原样返回） */
+/* 汇总区的短标题：先取词条标题，再按 SHORT_TITLE 缩一档（非中文时缩不动，原样返回） */
 function shortLabel (key, locale) {
   const t = artiLabel(key, locale)
   return SHORT_TITLE[t] || t
 }
-
-/* 面板要显示哪几项、怎么格式化。顺序就是展示顺序。 */
-const PANEL_ROWS = [
-  ['hp', 'int'], ['atk', 'int'], ['def', 'int'],
-  ['cpct', 'pct'], ['cdmg', 'pct'],
-  ['mastery', 'int'], ['recharge', 'pct'],
-  ['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']
-]
 
 /* 词条 key → 本地化标题。查不到退回 miao 中文标题，再退回 key 本身。 */
 export function statLabel (key, locale) {
@@ -80,6 +60,14 @@ export function statLabel (key, locale) {
 export function slotLabel (pos, locale) {
   return i18n.slotName(pos, locale) || ['', '生之花', '死之羽', '时之沙', '空之杯', '理之冠'][pos] || `#${pos}`
 }
+
+/* 面板要显示哪几项、怎么格式化。顺序就是展示顺序。 */
+const PANEL_ROWS = [
+  ['hp', 'int'], ['atk', 'int'], ['def', 'int'],
+  ['cpct', 'pct'], ['cdmg', 'pct'],
+  ['mastery', 'int'], ['recharge', 'pct'],
+  ['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']
+]
 
 /* 面板：attr 是裸数字，按 kind 格式化（生命/攻击/防御是整数，其余是百分比） */
 function panelOf (attr, locale) {
@@ -98,29 +86,35 @@ function panelOf (attr, locale) {
   return out
 }
 
+/* 同一份面板的一行文本（命令行用；页面要的是结构化数据，走 panelOf） */
+export function panelText (attr, locale) {
+  return panelOf(attr, locale).map(p => `${p.label} ${p.text}`).join('  ')
+}
+
+/* 词条按权重分三档，页面靠这个类名上色（miao 卡片的「有效/无效词条」规则） */
+function weightClass (w) {
+  return w > 79.9 ? 'great' : (w > 0 ? 'useful' : 'nouse')
+}
+
 /* 安全的 URL 路径段：中文/空格都 encode，但保留斜杠给目录层级。 */
 function assetSeg (s) {
   return s ? encodeURIComponent(s) : ''
 }
 
 /*
- * 角色图像资源 —— 原样照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）
+ * 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。
+ * vendor 里那个 CharImg 被 sync 脚本整体置空了（它要读磁盘、依赖 image-size），
+ * 而这里要的只是拼路径，上游本来就是纯字符串拼接，抄下来十几行、不引新依赖。
  *
- * 为什么自己抄一份而不是调 vendor 里那个：vendor 的 CharImg 被 sync 脚本整体置空了
- * （它原本要读磁盘、依赖 image-size，评分用不到）。而这里要的只是**拼路径**，
- * 上游公式是纯字符串拼接，抄下来十几行，不引入任何新依赖。
- *
- * 三条上游规则，抄的时候一个字都不能改：
- *   1. 天赋 A 的图标是**按武器类型**取的公共图（common/item/atk-{sword|bow|...}.webp），
+ * 三条规则一个字都不能改：
+ *   1. 天赋 A 的图标按**武器类型**取公共图（common/item/atk-{sword|bow|…}.webp），
  *      不是角色专属 —— 普攻图标本来就是武器图标。
- *   2. 天赋 E/Q 的图标**就是提升它的那个命座图标**（talentCons 里写的 3 / 5）。
- *      角色目录里根本没有 talent-e.webp，上游 icons/ 下只有 cons-1~6 和 passive-0~2。
- *   3. 立绘用 imgs/splash.webp，不是 character-img/ 那套（后者是别的功能用的同人插画）。
+ *   2. 天赋 E/Q 的图标**就是提升它的那个命座图标**（talentCons 里写的 3 / 5），
+ *      角色目录里根本没有 talent-e.webp。
+ *   3. 立绘用 imgs/splash.webp，不是 character-img/ 那套（后者是别的功能的同人插画）。
  */
 function charImgs (char) {
-  const name = assetSeg(char.name)
-  const nPath = `/assets/meta-gs/character/${name}/`
-  const wt = char.weaponType || 'sword'
+  const nPath = `/assets/meta-gs/character/${assetSeg(char.name)}/`
   const tc = char.talentCons || {}
   const imgs = {
     splash: `${nPath}imgs/splash.webp`,
@@ -129,39 +123,28 @@ function charImgs (char) {
     banner: `${nPath}imgs/banner.webp`
   }
   for (let i = 1; i <= 6; i++) imgs[`cons${i}`] = `${nPath}icons/cons-${i}.webp`
-  imgs.a = `/assets/common/item/atk-${wt}.webp`
+  imgs.a = `/assets/common/item/atk-${char.weaponType || 'sword'}.webp`
   for (const t of ['e', 'q']) {
     imgs[t] = tc[t] > 0 ? imgs[`cons${tc[t]}`] : `${nPath}icons/talent-${t}.webp`
   }
   return imgs
 }
 
-/*
- * 整张角色页画布的背景按元素分图：common/bg/bg-{元素}.webp
- *
- * miao 的做法（resources/common/layout/elem.html:15）是把 element 映射成英文类名挂在
- * container 上，再由 common.css 的 `.elem-{x} .elem-bg` 选背景图。原神这边角色元数据里
- * 的 elem 本来就叫 pyro/cryo/...，所以直接当类名用，不用翻译。
- * 只有旅行者是 multi，没有对应图，按上游的兜底取 hydro。
- */
+/* 画布底图 / 元素图标按元素分文件：common/bg/bg-{元素}.webp、common/elem/{元素}.png。
+   角色元数据里的 elem 本来就叫 pyro/cryo/…，直接当文件名用。只有旅行者是 multi，
+   没有对应图，按上游兜底取 hydro。 */
 const ELEM_BG = new Set(['pyro', 'hydro', 'anemo', 'electro', 'dendro', 'cryo', 'geo'])
+const elemOf = (elem) => (ELEM_BG.has(elem) ? elem : 'hydro')
 
-/*
- * 面板属性表 —— 顺序和键都照抄 miao 模板里的 attrMap（profile-detail.html:46）
- *
- * 每一项要三列：总值 / 基础值 / 绿字（基础值之外的加成），权重另起一列高亮。
- * 这正是上游 ProfileDetail.js:153-172 干的事：base 来自 Attr 的 isBase 累计值。
- */
+/* 面板属性表 —— 顺序和键照抄 miao 模板的 attrMap（profile-detail.html:46）：
+   每一项三列（总值 / 基础值 / 绿字），权重另起一列高亮，base 来自 Attr 的 isBase 累计值。 */
 const ATTR_TABLE = [
   ['hp', 'int'], ['atk', 'int'], ['def', 'int'], ['mastery', 'int'],
   ['cpct', 'pct'], ['cdmg', 'pct'], ['recharge', 'pct'], ['dmg', 'pct']
 ]
 
-/*
- * miao 模板里写死的属性名（profile-detail.html:46）。
- * 跟 i18n 表的用字不完全一样（「元素充能」vs「元素充能效率」、「伤害加成」vs「伤害增加」），
- * 中文下按 miao 来，才谈得上 1:1；其它语言仍走 i18n。
- */
+/* miao 模板里写死的属性名，跟 i18n 表的用字不完全一样（「元素充能」vs「元素充能效率」），
+   中文下按 miao 来才谈得上 1:1；其它语言仍走 i18n。 */
 const ATTR_TITLE_ZH = {
   hp: '生命值', atk: '攻击力', def: '防御力', mastery: '元素精通',
   cpct: '暴击率', cdmg: '暴击伤害', recharge: '元素充能', dmg: '伤害加成'
@@ -171,46 +154,32 @@ function attrTableOf (profile, locale, charWeight = {}) {
   const a = profile.attr || {}
   const b = profile.base || {}
   const zh = locale === 'chs' || locale === 'cht'
-  const out = []
-  for (const [key, kind] of ATTR_TABLE) {
-    /* miao 的模板是死循环那张 8 项表，缺项的属性（比如没有伤害加成的角色）
-       也照样出一行 0.0% —— 整张表恒为 8 行，行高和对齐才稳定。别在这里 continue。 */
+  /* 恒为 8 行：miao 的模板是死循环那张表，缺项的属性（比如没有伤害加成的角色）
+     也照样出一行 0.0%，行高和对齐才稳定。别在这里 continue。 */
+  return ATTR_TABLE.map(([key, kind]) => {
     const total = a[key] ?? 0
     const base = b[key] ?? 0
-    out.push({
+    const fmt = (v) => (kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1))
+    return {
       key,
       label: (zh && ATTR_TITLE_ZH[key]) || statLabel(key, locale),
-      value: kind === 'int' ? Format.comma(total, 0) : Format.pct(total, 1),
+      value: fmt(total),
       /* 基础值那一列为 0 时 miao 会把它置灰（CSS .base.zero） */
-      base: kind === 'int' ? Format.comma(base, 0) : Format.pct(base, 1),
+      base: fmt(base),
       baseZero: !base,
-      plus: kind === 'int' ? Format.comma(total - base, 0) : Format.pct(total - base, 1),
+      plus: fmt(total - base),
       weight: charWeight[key] || 0
-    })
-  }
-  return out
+    }
+  })
 }
 
 /* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字） */
 function artifactOf (pos, marked, dbRow, locale) {
   const posName = slotLabel(pos, locale)
-  if (!marked || !marked.name) {
-    return { pos, posName, empty: true }
-  }
-  const hashed = dbRow?.name_hash ? i18n.name(dbRow.name_hash, locale) : null
-  const setHashed = dbRow?.set_hash ? i18n.setNameByHash(dbRow.set_hash, locale) : null
-  const e = marked // 简写
-  const setNameZh = e.set || ''
-  const main = e.main?.key
-    ? {
-        key: e.main.key,
-        label: artiLabel(e.main.key, locale),
-        value: e.main.value,
-        _mark: e.main._mark ?? null,
-        point: statPoint(e.main._mark)
-      }
-    : null
-  const subs = (e.attrs || [])
+  if (!marked || !marked.name) return { pos, posName, empty: true }
+
+  const setNameZh = marked.set || ''
+  const subs = (marked.attrs || [])
     .filter(x => x.key)
     .map(x => ({
       key: x.key,
@@ -219,8 +188,7 @@ function artifactOf (pos, marked, dbRow, locale) {
       upNum: x.upNum || 0,
       /* 词条有效率：miao 算好的百分比串，'-' 表示没算（非有效词条） */
       eff: x.eff ?? '-',
-      /* 单条词条的原始 miao 分（未缩放）。前端按 miao 的公式 (46.6/600*_mark) 显示成「分」，
-         和 miao 评分卡右栏那个数字逐字一致 */
+      /* 单条词条的原始 miao 分（未缩放），前端按 46.6/600*_mark 显示成「分」 */
       _mark: x._mark ?? null,
       point: statPoint(x._mark)
     }))
@@ -229,19 +197,27 @@ function artifactOf (pos, marked, dbRow, locale) {
     pos,
     posName,
     empty: false,
-    name: hashed || e.name,
-    nameZh: e.name,
-    setName: setHashed || setNameZh,
+    name: (dbRow?.name_hash && i18n.name(dbRow.name_hash, locale)) || marked.name,
+    nameZh: marked.name,
+    setName: (dbRow?.set_hash && i18n.setNameByHash(dbRow.set_hash, locale)) || setNameZh,
     setNameZh,
-    level: e.level,
+    level: marked.level,
     star: dbRow?.star ?? 5,
     /* mark 是给眼睛看的串（1 位小数），markValue 给进度环用（0..70 的原始分） */
-    mark: e.mark,
-    markValue: e._mark || 0,
-    markClass: e.markClass,
+    mark: marked.mark,
+    markValue: marked._mark || 0,
+    markClass: marked.markClass,
     /* 图标从 miao-plugin 仓库按中文套装名拉取，404 时前端用占位图 */
     icon: setNameZh ? `/assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null,
-    main,
+    main: marked.main?.key
+      ? {
+          key: marked.main.key,
+          label: artiLabel(marked.main.key, locale),
+          value: marked.main.value,
+          _mark: marked.main._mark ?? null,
+          point: statPoint(marked.main._mark)
+        }
+      : null,
     subs
   }
 }
@@ -258,66 +234,50 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   const char = profile.char
   const dbArtis = new Map((row.artifacts || []).map(a => [a.pos, a]))
   const talent = deriveTalent(char, row.skill_level_map || {})
+  const cw = result.charWeight || {}
 
-  /* 套装：miao 的 sets 键是**官方中文全名**（不是 hash），所以只能拿中文名反查 */
+  /* 套装：miao 的 sets 键是**官方中文全名**（不是 hash），只能拿中文名反查 */
   const sets = Object.entries(result.sets || {}).map(([name, count]) => ({
     name: i18n.fromZh(name, loc) || name,
     nameZh: name,
     count
   }))
 
-  /* 面板属性：label + 数值，外加该属性的评分权重（charWeight，>=80 高亮成金色，和 miao 一致） */
-  const panel = panelOf(profile.attr, loc).map(p => ({
-    ...p,
-    weight: result.charWeight?.[p.key] || 0
-  }))
+  /* 面板属性 + 该属性的评分权重（>=80 前端高亮成金色，和 miao 一致） */
+  const panel = panelOf(profile.attr, loc).map(p => ({ ...p, weight: cw[p.key] || 0 }))
 
-  /* 有效词条汇总：miao 的 allAttr（全队圣遗物里所有有效副词条），补到 9 格，逐条按权重分 great/useful/nouse */
-  const allAttrRaw = (profile.artis && typeof profile.artis.getAllAttr === 'function')
-    ? (profile.artis.getAllAttr() || [])
-    : []
-  const allAttr = []
-  for (let i = 0; i < 9; i++) {
+  /* 有效词条汇总：miao 的 allAttr（全队圣遗物里所有有效副词条），补到 9 格 */
+  const allAttrRaw = profile.artis?.getAllAttr?.() || []
+  const allAttr = Array.from({ length: 9 }, (_, i) => {
     const a = allAttrRaw[i]
-    if (a && a.key) {
-      const w = result.charWeight?.[a.key] || 0
-      allAttr.push({
-        key: a.key,
-        label: shortLabel(a.key, loc),
-        value: a.value,
-        upNum: a.upNum || 0,
-        eff: a.eff ?? '-',
-        cls: w > 79.9 ? 'great' : (w > 0 ? 'useful' : 'nouse')
-      })
-    } else {
-      allAttr.push({})
+    if (!a || !a.key) return {}
+    return {
+      key: a.key,
+      label: shortLabel(a.key, loc),
+      value: a.value,
+      upNum: a.upNum || 0,
+      eff: a.eff ?? '-',
+      cls: weightClass(cw[a.key] || 0)
     }
-  }
+  })
 
   /* 命座：6 格，已点亮到 cons 为止 */
   const consList = [1, 2, 3, 4, 5, 6].map(i => i <= (profile.cons ?? 0))
 
-  /*
-   * 天赋：交给 miao 自己的 CharTalent 算，别自己加命座加成。
-   * 它返回 { level, original }：level 是**含命座加成后**的等级，original 是原始等级。
-   * 前端靠这两个数判断「是否被命座提升」和「是否满级戴皇冠」，和上游模板一致。
-   */
+  /* 天赋交给 miao 自己的 CharTalent 算（别自己加命座加成）：它给 level（含命座加成）
+     和 original（原始等级），前端靠这两个数判断「被命座提升过」和「满级戴皇冠」。 */
   const talentRaw = char.getAvatarTalent(talent, profile.cons ?? 0, 'original') || {}
-  const talentView = {}
-  for (const k of ['a', 'e', 'q']) {
+  const talentView = Object.fromEntries(['a', 'e', 'q'].map(k => {
     const t = talentRaw[k]
     const level = t?.level ?? talent[k] ?? 0
     const original = t?.original ?? level
-    talentView[k] = { level, original, plus: level > original, crown: original >= 10 }
-  }
+    return [k, { level, original, plus: level > original, crown: original >= 10 }]
+  }))
 
-  /*
-   * 武器：图标 + 主/副属性 + 精炼描述，全部来自 miao 的 Weapon 元数据。
-   * 上游是 Avatar.getWeaponDetail()（models/Avatar.js:225），我们 vendor 里没搬 Avatar，
-   * 所以在这里照它的逻辑重算一遍 —— 用到的 calcAttr / getAffixDesc 都是 vendor 真货。
-   */
+  /* 武器：图标 + 主/副属性 + 精炼描述，全来自 miao 的 Weapon 元数据。
+     上游是 Avatar.getWeaponDetail()（models/Avatar.js:225），我们没搬 Avatar，照它的逻辑重算。 */
   const wObj = row.weapon_item_id ? Weapon.get(row.weapon_item_id) : null
-  let weaponAttrs = {}
+  const weaponAttrs = {}
   let weaponDesc = ''
   if (wObj) {
     const wCalc = wObj.calcAttr?.(profile.weapon.level, profile.weapon.promote) || {}
@@ -332,7 +292,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   }
 
   const imgs = charImgs(char)
-  const elemKey = profile.elem || char.elem || ''
+  const elem = profile.elem || char.elem || ''
 
   return {
     uid: profile.uid,
@@ -343,25 +303,16 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     level: profile.level,
     cons: profile.cons ?? 0,
     fetter: profile.fetter ?? null,
-    elem: elemKey,
-    /* 元素名暂时只有 miao 的中文单字（i18n 表里没收录元素，是不想为它多同步一轮） */
-    elemText: Format.elemName(elemKey),
-    /* 画布底图：按元素分的那张 bg-{元素}.webp，前端挂在 container 上（见上面的 ELEM_BG） */
-    elemBg: `/assets/common/bg/bg-${ELEM_BG.has(elemKey) ? elemKey : 'hydro'}.webp`,
-    /*
-     * 首页角色卡要用的两张图（明细页用不到）：
-     *   rarityBg 星级底色 —— miao 的 common/item/bg{4,5}.png，就是游戏里五星橙 / 四星紫那张底
-     *   elemIcon 左上角元素图标 —— miao 仓库里没有这个素材，另有来源（见 sync_assets.py 的 ELEM_ICON_RAW）
-     * 两个 URL 都由后端给，前端不自己拼路径 —— 和 elemBg 一个规矩。
-     */
+    elem,
+    /* 元素名暂时只有 miao 的中文单字（i18n 表里没收录元素，不想为它多同步一轮） */
+    elemText: Format.elemName(elem),
+    elemBg: `/assets/common/bg/bg-${elemOf(elem)}.webp`,
+    /* 首页角色卡的两张图（明细页用不到）：星级底色、左上角元素图标。
+       两个 URL 都由后端给，前端不自己拼路径 —— 和 elemBg 一个规矩。 */
     rarityBg: `/assets/common/item/bg${char.star === 4 ? 4 : 5}.png`,
-    elemIcon: `/assets/common/elem/${ELEM_BG.has(elemKey) ? elemKey : 'hydro'}.png`,
-    /*
-     * 立绘：miao 用的是官方 splash（meta-gs/character/{名}/imgs/splash.webp），
-     * 不是 character-img/ 那套同人插画 —— 之前选错了，现在按上游 CharImg.getImgs 来。
-     * 顺带把整张 imgs 表（命座 6 图 + 天赋 a/e/q 图）一起下发，前端直接照模板拼。
-     */
+    elemIcon: `/assets/common/elem/${elemOf(elem)}.png`,
     splash: imgs.splash,
+    /* 整张 imgs 表（立绘 + 命座 6 图 + 天赋 a/e/q 图）一起下发，前端直接照模板拼 */
     imgs,
     talent: talentView,
     weapon: {
@@ -373,11 +324,9 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       affix: profile.weapon.affix,
       promote: profile.weapon.promote,
       star: wObj?.star ?? 0,
-      /* 武器图标：meta-gs/weapon/{类型}/{名}/icon.webp，类型是 miao 元数据给的。
-         注意中文名要逐段 encode，直接拼 wObj.img 会拿到未编码的中文。 */
-      icon: wObj
-        ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
-        : null,
+      /* 图标：meta-gs/weapon/{类型}/{名}/icon.webp。中文名要逐段 encode ——
+         直接拼 wObj.img 会拿到未编码的中文。 */
+      icon: wObj ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp` : null,
       attrs: weaponAttrs,
       desc: weaponDesc
     },
@@ -387,32 +336,24 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       markClass: result.markClass || 'D',
       classTitle: result.classTitle
     },
-    /* 角色的词条权重表（miao charCfg.attrs 的 weight）。前端用它给副词条分 great/useful/nouse 三档，
-       和 miao 卡片里「有效/无效词条」的高亮规则完全一致 */
-    charWeight: result.charWeight || {},
+    charWeight: cw,
     sets,
     panel,
-    /* 面板属性表（总值 / 基础值 / 绿字 / 权重），照 miao 模板 attrMap 那 8 项 */
-    attrTable: attrTableOf(profile, loc, result.charWeight || {}),
+    attrTable: attrTableOf(profile, loc, cw),
     allAttr,
     consList,
-    artifacts: [1, 2, 3, 4, 5].map(pos =>
-      artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc))
+    artifacts: [1, 2, 3, 4, 5].map(pos => artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc))
   }
 }
 
 /**
  * 抓取时间「ISO UTC → 本地时区的可读文本」。
  *
- * 库里存的是 `new Date().toISOString()`（如 `2026-09-13T07:09:14.296Z`），
- * 那是**存储**要的无歧义格式，不是给人看的 —— 直接端到页面上就是「T 和 Z 的乱码感」，
- * 而且 UTC 会让本地白天显示成凌晨（用户 2026-09-19：「数据时间按时区处理一下，不要 TZ」）。
+ * 库里存的是 `toISOString()`（如 `2026-09-13T07:09:14.296Z`）—— 那是存储要的无歧义格式，
+ * 直接端上页面就又丑又不符合本地时间。所以只在出口格式化，存储层一个字都不动。
+ * 换算靠 `getHours()` 这类**本地**取值器：换台机器看也对，不写死 +8。
  *
- * 所以只在出口格式化，存储层一个字都不动。换算时区靠 `getHours()` 这类**本地**取值器 ——
- * 浏览器/Node 各自用本机时区，不写死 +8，换台机器看也对。
- *
- * 空值/脏值一律回 `null`（不返回 '—'）：调用方本来就拿 `|| '—'` / `|| '?'` 兜底，
- * 这里再塞一个占位符会把它变成「永远有值」。
+ * 空值 / 脏值一律回 null（不返回 '—'）：调用方本来就拿 `|| '—'` 兜底。
  */
 export function fmtTime (iso) {
   if (!iso) return null
@@ -424,18 +365,12 @@ export function fmtTime (iso) {
 }
 
 /**
- * 一整包 → 视图对象（页面/接口的最终形状）。
- * 内部把 materialize + 打分 + 本地化串起来，调用方只要给库里的行就行。
+ * 一整包 → 视图对象（页面/接口的最终形状）。内部把 materialize + 打分 + 本地化串起来。
  *
- * 不认识的角色（miao 元数据里没有该 avatarId）会被收集到 `skipped`，
- * 而不是让整包失败 —— 新角色先于 miao 更新是常态。
+ * 不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 ——
+ * 新角色先于 miao 更新是常态。
  *
- * @param {object}  opts
- * @param {object}  opts.account   repo.getAccount 出来的一行（可空）
- * @param {Array}   opts.rows      repo.loadUid 出来的角色行
- * @param {string}  opts.locale
- * @param {string}  opts.fetchedAt 最后一次抓取时间，**原始 ISO UTC**（可空）；
- *                                 出口转成本地时区文本，见 fmtTime
+ * @param {object} opts.fetchedAt  最后一次抓取的原始 ISO UTC，出口转成本地时区文本
  */
 export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }) {
   const loc = i18n.resolveLocale(locale)
@@ -445,8 +380,7 @@ export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE,
     const profile = toMiaoProfile(row)
     if (!profile) { skipped.push(row.avatar_id); continue }
     profile._raw = row
-    const result = ArtisMark.getMarkDetail(profile, true)
-    avatars.push(shapeCharacter(row, profile, result, loc))
+    avatars.push(shapeCharacter(row, profile, ArtisMark.getMarkDetail(profile, true), loc))
   }
   return {
     locale: loc,

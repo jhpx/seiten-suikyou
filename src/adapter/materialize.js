@@ -1,29 +1,23 @@
 /*
  * materialize —— 把库里那几行组装成 miao 内核能吃的 profile
  *
- * 这是「计算出口」。方向是 id → 中文名：
- *   库里存的是 avatarId / itemId / propId 这些和语言无关的数字，
- *   而 miao 内核是拿中文名当键查表的（usefulAttr[char.name]、weaponCfg['护摩之杖']），
- *   所以这一层必须把 id 还原成 miao 要的中文名与真实对象。
+ * 这是「计算出口」，方向是 id → 中文名：库里存的是与语言无关的数字 id，
+ * 而内核拿中文名当键查表（usefulAttr[char.name]、weaponCfg['护摩之杖']）。
  *
- * 内核要求（从 ArtisMarkCfg 反推，缺了会炸）：
- *   char   必须是真 Character 对象（规则里读 char.name / char.isGs）
- *   artis  必须是真 Artis 实例（规则里调 artis.is('绝缘4')、读 artis.sets）
- *   attr   角色规则要用它做场景判定（76 个规则里 56 个读 attr）
- *   weapon 只要 { name, level, promote, affix }，name 必须是中文
+ * 内核要求（缺了会炸）：char 必须是真 Character 对象、artis 必须是真 Artis 实例、
+ * attr 得自己算好（76 个角色规则里 56 个要读它）、weapon 的 name 必须是中文。
  */
 import { Artis, Artifact, Attr, Character, Weapon } from '../index.js'
 
 /*
- * level 归一化 —— 全项目对数据源语义唯一需要「猜」的地方，所以单独一个函数 + 注释
+ * level 归一化 —— 全项目唯一需要「猜」数据源语义的地方。
  *
- * 内核要的是 0 基（5★ 满级 = 20）。enka 的 reliquary.level 是 1 基（满级给 21）：
- * 依据是上游 EnkaData.js 写的是 `Math.min(20, level - 1)` —— 那个 20 的上限
- * 只在「1 基」假设下才有意义（0 基的话根本不会超过 20）。
- * 而 MysPanelData 那边不减，是因为米游社给的就是 0 基。
+ * 内核要 0 基（5★ 满级 = 20），enka 给的是 1 基（满级 21）：依据是上游 EnkaData.js
+ * 写的 `Math.min(20, level - 1)`，那个 20 的上限只在 1 基假设下才有意义。
+ * 米游社那边不减，因为它给的就是 0 基。
  *
- * 所以库里存的是 level_raw（原样），基数差异在这里按 source 处理。
- * 万一将来发现推错了，改这一个函数就能全量重算，不用重新抓 enka。
+ * 库里存的是 level_raw（原样），基数差异在这里按 source 处理 —— 万一推错了，
+ * 改这一个函数就能全量重算，不用重新抓 enka。
  */
 export function normalizeLevel (levelRaw, source = 'enka') {
   const n = Number(levelRaw)
@@ -62,7 +56,7 @@ export function toMiaoProfile (row) {
   const char = Character.get(row.avatar_id)
   if (!char) return null
 
-  /* 圣遗物：仍然只喂「部件名 + 原始 prop id」，让内核自己去解析属性 */
+  /* 圣遗物仍然只喂「部件名 + 原始 prop id」，属性让内核自己解析 */
   const artis = new Artis('gs', true)
   for (const a of row.artifacts || []) {
     const obj = Artifact.get(a.item_id)
@@ -75,8 +69,6 @@ export function toMiaoProfile (row) {
       attrIds: a.append_prop_ids
     })
   }
-
-  const weaponName = row.weapon_item_id ? (Weapon.get(row.weapon_item_id)?.name || '') : ''
 
   const profile = {
     isProfile: true,
@@ -92,7 +84,7 @@ export function toMiaoProfile (row) {
     fetter: row.fetter,
     costume: row.costume,
     weapon: {
-      name: weaponName,
+      name: row.weapon_item_id ? (Weapon.get(row.weapon_item_id)?.name || '') : '',
       level: row.weapon_level ?? 1,
       promote: row.weapon_promote ?? 0,
       affix: row.weapon_affix ?? 1
@@ -100,13 +92,8 @@ export function toMiaoProfile (row) {
     artis
   }
 
-  /* 面板属性：不是数据源给的，是 miao 自己按「基础值 + 武器 + 圣遗物」算出来的
-     （上游 models/Avatar.js:320 那句 attr.calc()）。角色规则读它。
-
-     顺手把 base 也留下来：Attr 实例算完 final 之后，内部的 AttrData 还记着哪些是
-     基础值（isBase=true 的那些，见 Attr.calc 里 recharge/cpct/cdmg 与 setCharAttr）。
-     上游 Avatar 有个 base getter 走 getBase()，我们要用它渲染「基础值 +绿字」，
-     所以这里一并存 —— 不存的话想渲染就得再算一遍。 */
+  /* 面板属性不是数据源给的，是 miao 按「基础值 + 武器 + 圣遗物」算的（上游 Avatar.js:320）。
+     base 也一并留下 —— Attr 算完 final 后内部还记着哪些是基础值，页面要拿它渲染「基础值 +绿字」。 */
   const attrCalc = Attr.create(profile)
   profile.attr = attrCalc.calc()
   profile.base = attrCalc.getBase() || {}

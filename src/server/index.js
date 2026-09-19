@@ -1,18 +1,10 @@
 /*
  * HTTP 服务 —— 把 store + materialize + i18n 串成一个能看的页面和一组接口
  *
- * 启动：
- *   node --disable-warning=ExperimentalWarning src/server/index.js
- *   node src/server/index.js --port 8787 --db data/gs.db
- *   （或 npm run server）
- *
- * 为什么不用 Fastify（README 里那句旧计划）：
- *   本项目有条硬约束 —— 运行时依赖只有 lodash，`test/arch.mjs` 里直接断言
- *   `dependencies === ['lodash']`。而这里要的东西很薄（几个 JSON 接口 + 三个静态文件），
- *   node:http 完全够用。为了省一张路由表就把「零依赖」这条线破掉，不划算。
+ * 为什么用 node:http 手写而不是引框架：`test/arch.mjs` 锁死了「运行时依赖只有 lodash」，
+ * 而这里要的东西很薄（几个 JSON 接口 + 几个静态文件），不值得为省一张路由表把那条线破掉。
  *
  * 分层：这一层只做「HTTP ⇄ 视图对象」的翻译，不碰 SQL、不碰评分算法。
- *   路由 → repo（读库）/ enka（抓数）→ view/shape（成型 + 本地化）→ JSON。
  */
 import http from 'node:http'
 import fs from 'node:fs'
@@ -29,18 +21,17 @@ import { buildAccountView, fmtTime } from '../view/shape.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC = path.join(HERE, 'public')
-
-/* 静态文件白名单。不做通用静态服务 —— 几个文件而已，白名单顺手把目录穿越问题也解决了。 */
-const STATIC = {
-  '/': ['index.html', 'text/html; charset=utf-8'],
-  '/index.html': ['index.html', 'text/html; charset=utf-8'],
-  '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
-  '/style.css': ['style.css', 'text/css; charset=utf-8'],
-  /* 角色评分卡（miao 结果图移植版）单独一个样式表，和外壳样式分开管 */
-  '/miao.css': ['miao.css', 'text/css; charset=utf-8']
-}
-
 const ASSETS_DIR = path.join(PUBLIC, 'assets')
+const ASSETS_ROOT = path.resolve(ASSETS_DIR)
+
+/* 静态页白名单。不做通用静态服务 —— 几个文件而已，白名单顺手把目录穿越也解决了。 */
+const STATIC = {
+  '/': 'index.html',
+  '/index.html': 'index.html',
+  '/app.js': 'app.js',
+  '/style.css': 'style.css',
+  '/miao.css': 'miao.css'      /* 评分卡样式（miao 结果图移植版），和外壳样式分开管 */
+}
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -60,7 +51,7 @@ const MIME_TYPES = {
 
 const BODY_LIMIT = 64 * 1024
 
-/* ---------------- HTTP 小工具 ---------------- */
+/* ---------------- 小工具 ---------------- */
 
 function sendJson (res, status, obj) {
   const body = JSON.stringify(obj)
@@ -75,6 +66,16 @@ function sendJson (res, status, obj) {
 /* 失败一律走这个形状：{ ok:false, error:{ code, message } } */
 function sendError (res, status, code, message) {
   sendJson(res, status, { ok: false, error: { code, message } })
+}
+
+function sendFile (res, file, { cache = 'no-cache' } = {}) {
+  const buf = fs.readFileSync(file)
+  res.writeHead(200, {
+    'Content-Type': MIME_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
+    'Content-Length': buf.length,
+    'Cache-Control': cache
+  })
+  res.end(buf)
 }
 
 function readBody (req) {
@@ -95,90 +96,66 @@ function readBody (req) {
   })
 }
 
+/* 图片素材：扩展名白名单 + 目录穿越防护 */
+function serveAsset (res, pathname) {
+  const ext = path.extname(pathname).toLowerCase()
+  if (!MIME_TYPES[ext]) {
+    sendError(res, 404, 'asset_type', `不支持的资源类型：${ext}`)
+    return
+  }
+  const rel = decodeURIComponent(pathname.slice('/assets/'.length))
+  const filePath = path.resolve(path.join(ASSETS_DIR, rel))
+  if (!filePath.startsWith(ASSETS_ROOT + path.sep) && filePath !== ASSETS_ROOT) {
+    sendError(res, 403, 'asset_escape', '路径不合法')
+    return
+  }
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    sendError(res, 404, 'asset_missing', '资源不存在')
+    return
+  }
+  sendFile(res, filePath, { cache: 'public, max-age=86400' })
+}
+
 /* ---------------- 应用 ---------------- */
 
 /**
  * 组装一个服务实例（不开监听），方便测试直接拿来做内存请求。
- * @param {object} opts
- * @param {string} opts.dbFile   SQLite 文件，默认 data/gs.db
- * @param {Function} opts.fetchImpl  允许替换 enka 抓取（测试用）
+ * @param {string} opts.dbFile      SQLite 文件，默认 data/gs.db
+ * @param {Function} opts.fetchImpl 允许替换 enka 抓取（测试用）
  */
 export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fetchEnka } = {}) {
   const db = openDb(dbFile)
-  /* 同一个 uid 同时来两次抓取请求时，共用一个 promise，别把 enka 打两遍 */
+  /* 同一个 uid 同时来两次抓取请求时共用一个 promise，别把 enka 打两遍 */
   const inflight = new Map()
 
-  /* 库里的行 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。*/
+  /* 库里的行 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
   function viewOf (uid, locale) {
     const { account, avatars: rows } = repo.loadUid(db, uid)
     if (!rows.length && !account) return null
-    return buildAccountView({
-      account,
-      rows,
-      locale,
-      fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null
-    })
+    return buildAccountView({ account, rows, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
   }
 
-  async function handleFetch (uid) {
-    if (inflight.has(uid)) return inflight.get(uid)
-    const task = (async () => {
-      const payload = await fetchImpl(uid)
-      const summary = ingestPayload(payload, { source: 'enka' })
-      repo.saveFetch(db, { ...summary, stamp: new Date().toISOString() })
-      return summary
-    })()
-    inflight.set(uid, task)
-    try {
-      return await task
-    } finally {
-      inflight.delete(uid)
+  function handleFetch (uid) {
+    if (!inflight.has(uid)) {
+      inflight.set(uid, (async () => {
+        const payload = await fetchImpl(uid)
+        const summary = ingestPayload(payload, { source: 'enka' })
+        repo.saveFetch(db, { ...summary, stamp: new Date().toISOString() })
+        return summary
+      })().finally(() => inflight.delete(uid)))
     }
+    return inflight.get(uid)
   }
 
   async function route (req, res, url) {
     const { pathname } = url
+    const isGet = req.method === 'GET'
 
-    /* ---- 静态图片资源 ---- */
-    if (req.method === 'GET' && pathname.startsWith('/assets/')) {
-      /* 只认白名单里的扩展名，拒绝目录穿越 */
-      const ext = path.extname(pathname).toLowerCase()
-      if (!MIME_TYPES[ext]) {
-        sendError(res, 404, 'asset_type', `不支持的资源类型：${ext}`)
-        return
-      }
-      const rel = decodeURIComponent(pathname.slice('/assets/'.length))
-      const filePath = path.resolve(path.join(ASSETS_DIR, rel))
-      const root = path.resolve(ASSETS_DIR)
-      if (!filePath.startsWith(root + path.sep) && filePath !== root) {
-        sendError(res, 403, 'asset_escape', '路径不合法')
-        return
-      }
-      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-        sendError(res, 404, 'asset_missing', '资源不存在')
-        return
-      }
-      const buf = fs.readFileSync(filePath)
-      res.writeHead(200, {
-        'Content-Type': MIME_TYPES[ext],
-        'Content-Length': buf.length,
-        'Cache-Control': 'public, max-age=86400'
-      })
-      res.end(buf)
-      return
-    }
-
-    /* ---- 静态页 ---- */
-    if (req.method === 'GET' && STATIC[pathname]) {
-      const [file, mime] = STATIC[pathname]
-      const buf = fs.readFileSync(path.join(PUBLIC, file))
-      res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'no-cache' })
-      res.end(buf)
-      return
-    }
+    if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
+    if (isGet && STATIC[pathname]) return sendFile(res, path.join(PUBLIC, STATIC[pathname]))
 
     /* ---- 元信息：有哪些语言、表在不在 ---- */
-    if (req.method === 'GET' && pathname === '/api/meta') {
+    if (isGet && pathname === '/api/meta') {
       sendJson(res, 200, {
         ok: true,
         data: {
@@ -186,31 +163,29 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
           defaultLocale: i18n.DEFAULT_LOCALE,
           /* 表还没同步时为 false —— 页面据此提示「只有中文」 */
           i18nReady: i18n.available(),
-          /* 界面文字也一并返回：切语言不用再问后端一次。
-             归一化过一遍，'zh-cn' 这种写法也能落到 chs。 */
+          /* 界面文字也一并返回（切语言不用再问后端一次）；归一化过一遍，'zh-cn' 也能落到 chs */
           ui: i18n.uiTable(i18n.resolveLocale(url.searchParams.get('locale')))
         }
       })
       return
     }
 
-    if (req.method === 'GET' && pathname === '/api/health') {
+    if (isGet && pathname === '/api/health') {
       sendJson(res, 200, { ok: true, data: { uids: repo.listUids(db).length } })
       return
     }
 
     /* ---- 库里有哪些 uid ---- */
-    if (req.method === 'GET' && pathname === '/api/uids') {
+    if (isGet && pathname === '/api/uids') {
       const list = repo.listUids(db).map(uid => {
         const acc = repo.getAccount(db, uid)
-        const last = repo.lastFetch(db, uid)
         return {
           uid,
           nickname: acc?.nickname ?? null,
           level: acc?.level ?? null,
           worldLevel: acc?.world_level ?? null,
           avatarCount: repo.listAvatarIds(db, uid).length,
-          fetchedAt: fmtTime(last?.fetched_at)     /* ISO UTC → 本地时区文本，见 shape.js 的 fmtTime */
+          fetchedAt: fmtTime(repo.lastFetch(db, uid)?.fetched_at)   /* ISO UTC → 本地时区文本 */
         }
       })
       sendJson(res, 200, { ok: true, data: list })
@@ -218,11 +193,10 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
     }
 
     /* ---- 一个 uid 的完整视图 ---- */
-    const mUid = pathname.match(/^\/api\/uid\/(\d+)$/)
-    if (req.method === 'GET' && mUid) {
+    const mUid = isGet && pathname.match(/^\/api\/uid\/(\d+)$/)
+    if (mUid) {
       const uid = Number(mUid[1])
-      const locale = url.searchParams.get('locale') || i18n.DEFAULT_LOCALE
-      const view = viewOf(uid, locale)
+      const view = viewOf(uid, url.searchParams.get('locale') || i18n.DEFAULT_LOCALE)
       if (!view) {
         sendError(res, 404, 'no_data', `库里没有 uid ${uid}。先抓一次：POST /api/fetch {"uid":${uid}}`)
         return
@@ -243,15 +217,14 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
       const locale = body.locale || url.searchParams.get('locale') || i18n.DEFAULT_LOCALE
       try {
         const summary = await handleFetch(uid)
-        const view = viewOf(uid, locale)
         sendJson(res, 200, {
           ok: true,
-          data: view,
+          data: viewOf(uid, locale),
           meta: { fetched: summary.avatarCount, source: summary.source }
         })
       } catch (e) {
         /* enka 的业务错误（未公开 / 查不到 / 太频繁）在 message 里已经是人话了，
-           对浏览器来说这类都是「上游没给数据」，用 502 表达「网关上游失败」最贴切。*/
+           对浏览器来说这类都是「上游没给数据」，用 502 表达「网关上游失败」最贴切。 */
         sendError(res, 502, 'fetch_failed', e.message)
       }
       return
@@ -261,8 +234,7 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
   }
 
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://localhost')
-    route(req, res, url).catch((e) => {
+    route(req, res, new URL(req.url, 'http://localhost')).catch((e) => {
       sendError(res, 500, 'internal', e.message)
     })
   })
@@ -299,10 +271,9 @@ function parseArgs (argv) {
 /* 只有被当成脚本跑时才起服务；被 import 时（测试）什么都不做 */
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2))
-  const port = Number(args.port || process.env.PORT || 8787)
   const host = args.host || '127.0.0.1'
   const dbFile = args.db || path.join('data', 'gs.db')
-  const app = await startServer({ port, host, dbFile })
+  const app = await startServer({ port: Number(args.port || process.env.PORT || 8787), host, dbFile })
 
   /* 绑 0.0.0.0 时把各网卡地址列出来 —— 手机要访问得知道往哪打。
      虚拟机网卡（VMware / WSL）也在里面，扫一眼就能认出哪个是 Wi-Fi 的。 */

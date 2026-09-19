@@ -44,12 +44,13 @@ npm run server       # http://127.0.0.1:8787
 npm run score -- --help
 
 # 测试
-npm test             # 全量：smoke → arch → pipeline → i18n → server → regression → verify
+npm test             # 全量：smoke → arch → pipeline → i18n → server → cli → regression → verify
 npm run smoke        # 只跑冒烟
 npm run arch         # 只跑架构契约
 npm run pipeline     # 只跑管线
 npm run i18n         # 只跑多语言
 npm run server:test  # 只跑服务测试
+npm run cli:test     # 只跑命令行测试
 npm run regression   # 只跑回归断言
 npm run verify       # 只跑评分验证
 
@@ -57,6 +58,9 @@ npm run verify       # 只跑评分验证
 npm run sync         # 从 miao-plugin 重新同步内核（需 MIAO_PLUGIN_PATH）
 npm run sync:i18n    # 从官方数据重新提取多语言表
 npm run sync:assets  # 按需下载页面图片素材
+
+# 文档
+npm run check:docs   # 校验 README / docs 里的相对链接没写歪（搬过家就跑一遍）
 ```
 
 ## 命令行评分
@@ -74,7 +78,7 @@ npm run score -- --uid 101242308 --json      # 额外输出结构化结果
 npm run score -- --locale en                 # 换语言输出
 ```
 
-输出长这样（真实数据，完整存档见 [`sample/cli-output.txt`](sample/cli-output.txt)）：
+输出长这样（真实数据，完整存档见 [`docs/sample/cli-output.txt`](docs/sample/cli-output.txt)）：
 
 ```
 账号  阿空（uid:101242308）  Lv.60  世界等级 9
@@ -198,7 +202,7 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 npm test
 ```
 
-七套，分工不重叠：
+八套，分工不重叠：
 
 | 套 | 项数 | 管什么 |
 |---|---|---|
@@ -207,13 +211,15 @@ npm test
 | `pipeline` | 58 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、迁移、合并抓取、真实数据 + 面板对拍 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
 | `server` | 58 | 真起监听打真 HTTP：路由、静态与素材、错误形状、多语言出口、POST 抓取（用假 enka，不联网） |
+| `cli` | 51 | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / 面板对拍 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
 | `regression` | — | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
 | `verify` | — | 端到端评分（输出即基线，可 diff） |
 
-两条约定：
+几条约定：
 
 - **测试只 import `src/index.js` 的出口 API，不碰内部路径**。这样 vendor 内部怎么搬、别名怎么解析，
   对测试都透明 —— 内部重构不必改测试。
+  （`cli` 那套是例外：它跑子进程，测的就是进程边界本身。）
 - **`verify.mjs` 的 stdout 就是基线**，断言只在失败时打印、通过时静默：
 
   ```bash
@@ -224,8 +230,10 @@ npm test
   数值一个没动）。合成数据只能测「逻辑对不对」，真实数据才能测「翻没翻错」——
   面板对拍那条断言就靠它。
 
-**`src/cli/score.js` 不在任何一套自动化测试里** —— 改完请手动跑一遍
-`npm run score -- --uid <uid> --offline`（它挂过一次，而 `npm test` 全绿照样看不见）。
+- `cli` 那套**只看输出、不看退出码**是不行的，反过来只看退出码也不行：CLI 挂过一次 ——
+  汇总段用了未定义的变量，异常被外层 `catch` 吞掉后提前返回，**后面的面板对拍整段不执行**，
+  而进程退出码当时还是 0。所以它断言的是「汇总段 / 面板对拍段在不在」。
+  单独跑：`npm run cli:test`。
 
 改动前端样式后想验收，用 `tools/probe.mjs` 直读真实 DOM（尺寸 / 折行 / 计算样式），
 别去数截图像素 —— 截到立绘的深色衣服会以为是背景色，会得出错的结论（实测踩过两次）。
@@ -267,13 +275,16 @@ seiten-suikyou/
 │   ├── sync_assets.py        # 图片素材按需下载（只下库里实际出现的）
 │   ├── list_assets.mjs       # 问应用本人「页面会请求哪些图」，喂给上面那个脚本
 │   ├── probe.mjs             # 在真实页面跑 JS 量布局（改样式后的验收工具）
-│   └── shot.mjs              # headless chrome 截图
+│   ├── shot.mjs              # headless chrome 截图
+│   └── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
 ├── test/                     # 见「测试」一节
-├── docs/                     # 设计文档
+├── docs/                     # 设计文档 + 参考稿
 │   ├── DESIGN.md             #   总设计（为什么内嵌内核 / 页面与多语言怎么还原 / 工程约束）
 │   ├── DESIGN-DATA-MODEL.md  #   数据层专项：enka → 缓存 → 内核，为什么不设计算中间层
+│   ├── 角色列表页.jpg         #   首页网格的版式参考（原魔工具箱「角色展柜」）
+│   ├── miao结果图参考.jpeg    #   明细页对拍基准（奥黛塔 248.0 / ACE）
+│   ├── sample/               #   样例数据：一次真实运行的完整命令行输出存档
 │   └── reports/              #   同步脚本每次生成的报告（sync-report / i18n-report）
-├── sample/cli-output.txt     # 一次真实运行的完整命令行输出存档
 └── data/                     # 本地库（/data/ 已 gitignore）
 ```
 
@@ -284,5 +295,5 @@ seiten-suikyou/
 | 怎么装、怎么跑、接口有哪些 | 本文件 |
 | 为什么内嵌 miao 内核、页面与多语言怎么还原、改动前的硬约束 | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | 数据层设计（存储存 id 不存名字、为什么不设计算中间层） | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
-| 命令行输出长什么样 | [`sample/cli-output.txt`](sample/cli-output.txt) |
+| 命令行输出长什么样 | [`docs/sample/cli-output.txt`](docs/sample/cli-output.txt) |
 | 上一次同步搬了什么、多语言覆盖率如何 | [`docs/reports/`](docs/reports/) |
