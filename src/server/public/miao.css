@@ -1,0 +1,701 @@
+/* ============================================================================
+ * 角色评分卡 —— miao-plugin 的 profile-detail 移植版
+ *
+ * 来源（照抄，不是凭印象）：
+ *   resources/character/profile-detail.css
+ *   resources/common/common.css   （.container/.cont/.elem-bg）
+ *   resources/common/layout/elem.html （元素背景的挂法）
+ *
+ * 设计前提：miao 的这张结果图是**一张固定 600px 宽的画布**。要长得像，
+ * 就不能把它拆成流式响应式布局 —— 我们照搬 600px 画布，再由 app.js 用 zoom
+ * 把整张画布等比缩到屏幕宽度。这样万像素缩小版，构图和 miao 出图完全一致。
+ *
+ * 立绘是「左溢出、信息浮右侧」：.main-pic 宽 1400px、margin-left -545px，
+ * 所以角色图占左三分之二，数值列绝对定位在右上角，不会挡脸。
+ * ========================================================================== */
+
+/* 缩放外壳：zoom 由 app.js 按视口宽度直接写内联样式，PC 上恒为 1（原尺寸） */
+.pd-frame {
+  width: 600px;
+  margin: 0 auto;
+}
+
+/* 画布本体：元素背景图由 JS 内联上去（对应 miao 的 <div class="container elem-bg">） */
+.pd-canvas {
+  position: relative;
+  width: 600px;
+  overflow: hidden;
+  border-radius: 12px;
+  background-color: #233;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: top center;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.4;
+  font-family: Number, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+
+.profile-cont { padding: 0 10px; margin-right: 5px; }
+.game-gs { }
+
+/* ───────────────────────── .basic：立绘 + 角色信息 ───────────────────────── */
+
+.basic { position: relative; margin: 0 -15px 15px -10px; }
+/* 立绘下方那圈白色描边圆角框（miao 用它把上下两块视觉断开） */
+.basic::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 8px; top: 115px; bottom: 0; right: 8px;
+  box-shadow: 0 0 2px 0 #fff;
+  border-radius: 5px;
+  z-index: 1;
+}
+
+/* 立绘：1400×500 的图居中放，靠负 margin 让角色落在画布左侧 */
+.main-pic {
+  width: 1400px;
+  height: 500px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  margin-left: -545px;
+  position: relative;
+  z-index: 2;
+}
+
+/* 信息列：绝对定位在右上角 —— 这就是「不挡脸」的关键 */
+.detail {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  color: #fff;
+  z-index: 3;
+}
+.char-name {
+  font-size: 50px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: right;
+  text-shadow: 0 0 3px #000, 2px 2px 4px rgba(0, 0, 0, .7);
+}
+.char-lv {
+  margin-bottom: 20px;
+  font-size: 16px;
+  text-align: right;
+  text-shadow: 0 0 3px #000, 2px 2px 4px rgba(0, 0, 0, .7);
+}
+.char-lv .cons { margin-left: 5px; vertical-align: bottom; }
+
+/* 命座小徽章（miao 的 cons-N 用背景图，这里退化成文字胶囊） */
+.cons-badge {
+  display: inline-block;
+  padding: 0 8px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 11px;
+  font-size: 13px;
+  background: rgba(0, 0, 0, .55);
+  color: #ffd479;
+  box-shadow: 0 0 1px 0 rgba(255, 255, 255, .5) inset;
+}
+
+/* ── 天赋 a/e/q ── */
+.char-talents { display: flex; width: 300px; margin: 0 0 10px 0; }
+.char-talents .talent-item { flex: 1; }
+.talent-icon {
+  width: 100px; height: 100px;
+  padding: 5px;
+  position: relative;
+  border-radius: 50%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+  z-index: 90;
+}
+/*
+ * 天赋图标的底座是一张按元素分的 100px 圆环图（miao common.css: `.elem-x .talent-icon`）。
+ * 少了它，图标就是几个悬空的小图 —— 看着「简易」。
+ */
+.elem-pyro .talent-icon { background-image: url("/assets/common/bg/talent-pyro.webp"); }
+.elem-hydro .talent-icon { background-image: url("/assets/common/bg/talent-hydro.webp"); }
+.elem-anemo .talent-icon { background-image: url("/assets/common/bg/talent-anemo.webp"); }
+.elem-electro .talent-icon { background-image: url("/assets/common/bg/talent-electro.webp"); }
+.elem-dendro .talent-icon { background-image: url("/assets/common/bg/talent-dendro.webp"); }
+.elem-cryo .talent-icon { background-image: url("/assets/common/bg/talent-cryo.webp"); }
+.elem-geo .talent-icon { background-image: url("/assets/common/bg/talent-geo.webp"); }
+.talent-icon img,
+.talent-icon .talent-icon-img {
+  width: 46%; height: 46%;
+  position: absolute;
+  top: 50%; left: 50%;
+  margin: -22% 0 0 -23%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.talent-icon img { object-fit: contain; margin: 0; top: 27%; left: 27%; }
+.talent-icon strong {
+  position: absolute;
+  bottom: 2px; left: 50%;
+  margin-left: -15px;
+  width: 34px; height: 26px;
+  line-height: 26px;
+  font-size: 17px;
+  text-align: center;
+  border-radius: 5px;
+  background: #fff;
+  color: #000;
+  box-shadow: 0 0 5px 0 #000;
+}
+/* 天赋超过固有等级（吃了命座/皇冠加成）→ 深底金字 */
+.talent-icon.talent-plus strong {
+  background: #2e353e;
+  color: #ffdfa0;
+  font-weight: bold;
+  box-shadow: 0 0 1px 0 #d3bc8e, 1px 1px 2px 0 rgba(0, 0, 0, .5);
+}
+/* 满级（固有 10 级）→ 右上角皇冠 */
+.talent-icon.talent-crown::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 0;
+  width: 28px; height: 28px;
+  margin-left: -14px;
+  background: url("/assets/character/imgs/crown.png") no-repeat;
+  background-size: contain;
+  z-index: 2;
+}
+
+/* ── 面板属性表（8 行，斑马纹 + 权重胶囊 + 基础值/绿字） ── */
+.char-attr {
+  list-style: none;
+  margin: 0; padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, .2);
+  backdrop-filter: blur(2px);
+}
+.char-attr li {
+  width: 300px;
+  height: 32px;
+  line-height: 32px;
+  font-size: 17px;
+  display: flex;
+  padding-left: 3px;
+  text-shadow: 0 0 1px rgba(0, 0, 0, .5);
+}
+.char-attr li:nth-child(even) { background: rgba(0, 0, 0, .4); }
+.char-attr li:nth-child(odd) { background: rgba(50, 50, 50, .4); }
+
+.char-attr li .icon { width: 26px; padding: 2px 5px; }
+.char-attr li .icon i {
+  display: inline-block;
+  width: 16px; height: 16px;
+  vertical-align: -3px;
+  background-image: url("/assets/character/imgs/icon.png");
+  background-size: auto 16px;
+  background-repeat: no-repeat;
+}
+.char-attr li .title {
+  width: 75px;
+  text-shadow: 0 0 1px rgba(0, 0, 0, .8), 1px 1px 3px rgba(0, 0, 0, .5);
+}
+/* 权重：黑底小胶囊，≥80 金色 */
+.char-attr li .weight { width: 36px; }
+.char-attr li .weight span {
+  display: block;
+  width: 30px; height: 18px;
+  line-height: 18px;
+  margin: 7px auto 0;
+  border-radius: 5px;
+  font-size: 12px;
+  text-align: center;
+  background: rgba(0, 0, 0, .5);
+  color: #fff;
+}
+.char-attr li .weight span.gold { color: #ffe699; }
+.char-attr li .value {
+  width: 100px;
+  padding-right: 10px;
+  text-align: right;
+  font-weight: normal;
+  text-shadow: 0 0 1px rgba(0, 0, 0, .8), 1px 1px 3px rgba(0, 0, 0, .5);
+}
+/* 基础值 / 绿字：上下两行小字 */
+.char-attr li .value2 {
+  width: 70px;
+  padding: 4px 10px 0 0;
+  font-size: 12px;
+  font-weight: normal;
+  text-align: right;
+  background: rgba(0, 0, 0, .2);
+}
+.char-attr li .value2 span {
+  display: block;
+  height: 13px;
+  line-height: 13px;
+}
+.char-attr li .value2 .base { color: #eee; }
+.char-attr li .value2 .base.zero { color: #aaa; }
+.char-attr li .value2 .plus { color: #90e800; }
+
+/* 属性图标精灵图：一张横图靠 background-position 切 */
+.i-hp { background-position: -16px 0; }
+.i-atk { background-position: -32px 0; }
+.i-def { background-position: -48px 0; }
+.i-mastery { background-position: -64px 0; }
+.i-cpct { background-position: -80px 0; }
+.i-cdmg { background-position: -96px 0; }
+.i-recharge { background-position: -112px 0; }
+.i-dmg { background-position: -128px 0; }
+
+/* ── 命座 6 格（左下角一排） ── */
+.char-cons {
+  display: flex;
+  width: 250px;
+  position: absolute;
+  bottom: 5px; left: 20px;
+  z-index: 3;
+}
+.char-cons .cons-item { flex: 1; }
+/*
+ * 命座图标本身是**透明的浅色线条图**（cons-N.webp），必须压在元素圆盘上才看得清 ——
+ * 所以这里不能清掉背景，底图由上面的 .elem-x .talent-icon 规则给。
+ * 尺寸也照 miao：50px 圆盘 + 居中 46% 的图标。
+ */
+.char-cons .talent-icon {
+  width: 50px; height: 50px;
+  margin: 0 -5px;
+}
+.char-cons .talent-icon.off { filter: grayscale(100%); opacity: .4; }
+
+/* ── 数据源 / 时间（右下角小字） ── */
+.data-info {
+  position: absolute;
+  bottom: -10px; right: 15px;
+  padding-right: 5px;
+  font-size: 12px;
+  line-height: 20px;
+  color: rgba(255, 255, 255, .85);
+  text-align: right;
+  text-shadow: 1px 1px 1px #000;
+  z-index: 2;
+}
+.data-info .time { margin-left: 5px; }
+
+/* ───────────────────────── 通用卡片底 (.cont) ───────────────────────── */
+
+.cont {
+  position: relative;
+  margin: 5px 0;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 16px;
+  overflow: hidden;
+  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background-size: auto 100%;
+  box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
+}
+
+/* ───────────────────────── 圣遗物总分卡 (.arti-mark-cont) ───────────────────────── */
+
+.arti-mark-cont { display: flex; }
+.arti-stat {
+  width: 185px;
+  flex: none;
+  background: rgba(0, 0, 0, .4);
+  box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
+}
+.arti-stat-ret {
+  width: 100%;
+  height: 78px;
+  padding: 12px 10px 2px;
+  display: table;
+}
+.arti-stat-ret > div {
+  display: table-cell;
+  text-align: center;
+  color: #fff;
+}
+.arti-stat-ret strong {
+  display: block;
+  height: 35px;
+  font-size: 30px;
+  line-height: 32px;
+  font-weight: bold;
+}
+.arti-stat span { font-size: 12px; line-height: 20px; color: #bbb; }
+.arti-class-title {
+  height: 25px; line-height: 25px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, .9);
+  text-align: center;
+  text-shadow: 0 0 2px #000;
+  background: rgba(0, 0, 0, .5);
+}
+
+/* 右侧：有效词条汇总（每列 3 条 × 26px，三列排满） */
+.arti-info { width: 390px; }
+.arti-info .arti-all-attr { height: 78px; overflow: hidden; }
+.arti-info .arti-all-attr .arti-attr {
+  position: relative;
+  /* 这个 ul 身上还挂着 .detail，会被上面 `.detail { position:absolute; right:20px }`
+     命中 —— 相对定位下 right:20px 等于整体左移 20px，第一列的词条角标就被
+     分数卡盖掉一截。上游同样用 right/top 归零来解，照抄。 */
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: column;
+  /* 3 条 × 26px —— 和后一条（评分规则那行）严丝合缝，多了会压到它上面 */
+  height: 78px;
+  width: 100%;
+  margin: 0; padding: 0;
+  list-style: none;
+}
+/*
+ * 有效词条那一行沿用「 .artis / .arti-info 」成对选择器 —— 上游每一条都是成对的，
+ * 我们之前只搬了 .artis 那一半，结果右边这块既没有黄/灰配色，也没有斑马纹。
+ */
+.arti-info ul.detail li {
+  position: relative;
+  padding: 0 3px;
+  font-size: 14px;
+  width: 100%;
+  display: table-row;
+  line-height: 26px;
+  height: 26px;
+  white-space: nowrap;
+}
+.arti-info ul.detail li:nth-child(even) { background: rgba(0, 0, 0, .4); }
+.arti-info ul.detail li:nth-child(odd) { background: rgba(50, 50, 50, .4); }
+.arti-info ul.detail li span { color: #fff; }
+.arti-info ul.detail li.great span.title { color: #ffe699; }
+.arti-info ul.detail li.nouse span { color: #888; }
+.arti-info .arti-all-attr .arti-attr li {
+  width: 33.33%;
+  display: flex;
+  line-height: 26px;
+  height: 26px;
+  font-size: 14px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+/* .title 不设定位：角标按上游口径锚在 li 上（li 才是 relative） */
+.arti-info .arti-all-attr .arti-attr li span.title {
+  padding-left: 36px;
+  width: 60%;
+  text-align: left;
+}
+.arti-info .arti-all-attr .arti-attr li span.title i.eff {
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  width: 28px; height: 18px;
+  line-height: 18px;
+  font-size: 12px;
+  font-style: normal;
+  text-align: center;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, .5);
+}
+.arti-info .arti-all-attr .arti-attr li span.val {
+  padding-right: 5px;
+  width: 40%;
+  font-size: 13px;
+  text-align: right;
+  color: #fff;
+}
+.arti-info .arti-notice {
+  height: 25px;
+  line-height: 25px;
+  margin-left: 1px;
+  /* 照 miao 只留左边距 —— 文案（带 #角色圣遗物 那句）本来就贴着宽度上限，
+     两边都塞 10px 就会挤掉最后一截 */
+  padding: 0 0 0 10px;
+  font-size: 10px;
+  text-align: center;
+  color: #aaa;
+  background: rgba(0, 0, 0, .7);
+  /* 兜底：真放不下时截断，而不是溢到左边的总分卡上 */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.arti-info .arti-notice strong { color: #d3bc8e; font-weight: normal; padding: 0 3px; }
+
+/* ───────────────────────── 武器 + 5 件圣遗物 (.artis) ───────────────────────── */
+
+.artis {
+  display: flex;
+  flex-wrap: wrap;
+  width: 600px;
+  margin: 10px -5px 5px;
+}
+.artis .item {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background-size: auto 100%;
+  box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
+}
+/* 每张卡 185px，600px 画布下正好放 3 列 */
+.artis .item.arti { width: 185px; margin: 5px; overflow: visible; }
+.artis .item.weapon { width: 185px; height: 190px; margin: 5px; overflow: visible; }
+
+/* ── 武器卡 ── */
+.artis .weapon .img {
+  position: absolute;
+  top: -10px; right: -10px;
+  width: 100px; height: 100px;
+  z-index: 2;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.artis .weapon .head {
+  position: relative;
+  height: 90px;
+  padding: 15px 0 10px 15px;
+  z-index: 3;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, .7), rgba(0, 0, 0, .7), rgba(25, 25, 25, .5), rgba(25, 25, 25, 0), rgba(25, 25, 25, 0));
+}
+.artis .weapon .head strong { display: block; font-size: 15px; margin-bottom: 3px; }
+.artis .weapon .head > span { display: block; }
+.artis .weapon span.info { font-size: 14px; margin-bottom: 8px; }
+.artis .weapon .weapon-attr {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  width: 100%;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 5px 0 10px;
+  font-size: 14px;
+  text-align: center;
+  background: rgba(0, 0, 0, .3);
+  text-shadow: 0 0 1px #000, 1px 1px 2px rgba(0, 0, 0, .7);
+}
+.artis .weapon .weapon-attr div { width: 50%; text-align: left; }
+.artis .weapon .weapon-attr div span { color: #ffe699; font-weight: bold; }
+.artis .weapon .weapon-desc-cont {
+  height: 100px;
+  overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  background: rgba(0, 0, 0, .4);
+}
+.artis .weapon .weapon-desc {
+  height: 100px;
+  padding: 6px 5px 7px 10px;
+  color: #bbb;
+  font-size: 12px;
+  font-weight: normal;
+  display: table-cell;
+  vertical-align: middle;
+  word-break: break-all;
+}
+.artis .weapon .weapon-desc nobr {
+  display: inline-block;
+  height: 16px; line-height: 16px;
+  padding: 0 3px;
+  margin: 0 2px;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  color: #ffe699;
+  background: rgba(0, 0, 0, .5);
+}
+/* 精炼徽章：1~5 阶各一色（照 miao） */
+.artis .weapon .affix {
+  display: inline-block;
+  width: 40px;
+  margin-right: 5px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #000;
+}
+.affix-1 { background: #ebebebaa; box-shadow: 0 0 4px 0 #a3a3a3 inset; }
+.affix-2 { background: #ddffdeaa; box-shadow: 0 0 4px 0 #51b72fbd inset; }
+.affix-3 { background: #ddebffaa; box-shadow: 0 0 4px 0 #396cdecf inset; }
+.affix-4 { background: #ffddf0aa; box-shadow: 0 0 4px 0 #c539debf inset; }
+.affix-5 { background: #fff6dd; box-shadow: 0 0 4px 0 #deaf39 inset; }
+
+/* 武器星级：一张竖排 5 星的图，按星级切 */
+.artis .weapon .star {
+  display: inline-block;
+  width: 100px; height: 20px;
+  background: url("/assets/common/item/star.png") no-repeat;
+  background-size: 100px 100px;
+  transform: scale(.8);
+  transform-origin: 0 10px;
+}
+.star-1 { background-position: 0 0; }
+.star-2 { background-position: 0 -20px; }
+.star-3 { background-position: 0 -40px; }
+.star-4 { background-position: 0 -60px; }
+.star-5 { background-position: 0 -80px; }
+
+/* ── 圣遗物卡 ── */
+.artis .item.arti .arti-icon {
+  position: absolute;
+  top: -12px; right: 0;
+  width: 90px; height: 90px;
+  z-index: 2;
+}
+/* 图标没同步到时的兜底：露一个淡部位字（花/羽/沙/杯/冠） */
+.artis .item.arti .arti-icon::before {
+  content: attr(data-slot);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: rgba(255, 255, 255, .22);
+}
+.artis .item.arti .arti-icon .img {
+  width: 100%; height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  /* 斜切淡出，跟卡面融在一起（miao 用 -webkit-mask 的等价写法） */
+  -webkit-mask: linear-gradient(45deg, #0000 0, #0005 30%, #000 50%);
+  mask: linear-gradient(45deg, #0000 0, #0005 30%, #000 50%);
+}
+.artis .item.arti .arti-icon span {
+  position: absolute;
+  top: 50px; right: 8px;
+  height: 18px; line-height: 18px;
+  padding: 0 3px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, .8);
+}
+.artis .head {
+  position: relative;
+  color: #fff;
+  padding: 15px 10px 5px 15px;
+  border-radius: 10px 10px 0 0;
+  text-shadow: 0 0 1px #000, 1px 1px 2px rgba(0, 0, 0, .7);
+  background: linear-gradient(to right, rgba(0, 0, 0, .7), rgba(0, 0, 0, .7), rgba(25, 25, 25, .3), rgba(25, 25, 25, 0), rgba(25, 25, 25, 0));
+}
+.artis .head strong {
+  display: block;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.artis .head span.mark { font-size: 14px; font-weight: bold; }
+
+/* 档位配色：红 / 黄 / 紫（照 miao 的 .mark-*） */
+.mark-ACE, .mark-MAX { color: #e85656; font-weight: bold; }
+.mark-SSS, .mark-SS { color: #ffe699; font-weight: bold; }
+.mark-S, .mark-A { color: #d699ff; font-weight: bold; }
+.mark-B, .mark-C, .mark-D { color: #fff; font-weight: bold; }
+
+/* 词条表：主词条一行 + 副词条若干行 */
+.artis ul.detail {
+  position: initial;
+  display: table;
+  width: 100%;
+  margin: 0; padding: 0;
+  list-style: none;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  backdrop-filter: blur(2px);
+}
+.artis ul.detail li {
+  display: table-row;
+  width: 100%;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 3px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.artis ul.detail li:nth-child(even) { background: rgba(0, 0, 0, .4); }
+.artis ul.detail li:nth-child(odd) { background: rgba(50, 50, 50, .4); }
+.artis ul.detail li span {
+  display: table-cell;
+  color: #fff;
+}
+.artis ul.detail li span.title {
+  position: relative;
+  padding-left: 30px;
+  text-align: left;
+  font-size: 14px;
+}
+.artis ul.detail li span.val {
+  padding-right: 10px;
+  text-align: right;
+  font-size: 14px;
+}
+/* 词条有效率角标 */
+.artis ul.detail li span.title i.eff {
+  position: absolute;
+  left: 3px; top: 4px;
+  display: block;
+  width: 23px; height: 18px;
+  line-height: 18px;
+  font-size: 12px;
+  font-style: normal;
+  text-align: center;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, .5);
+}
+/* 强化次数小图标（up-num-icon1/2/0，按 great/useful/nouse 换色） */
+.artis ul.detail li span.title i.up-num {
+  position: absolute;
+  left: 91px; top: 9px;
+  display: block;
+  width: 50px; height: 8px;
+  background-image: url("/assets/character/imgs/up-num-icon1.png");
+  background-repeat: no-repeat;
+  background-size: auto 500%;
+  background-position: 0 0;
+}
+.artis ul.detail li span.title i.up-num.up-2 { background-position: 0 -32px; }
+.artis ul.detail li span.title i.up-num.up-3 { background-position: 0 -24px; }
+.artis ul.detail li span.title i.up-num.up-4 { background-position: 0 -16px; }
+.artis ul.detail li span.title i.up-num.up-5 { background-position: 0 -8px; }
+.artis ul.detail li span.title i.up-num.up-1 { background: none !important; }
+
+/* 三档配色：黄=有效且权重大(≥80)、白=有用、灰=无效 */
+.artis ul.detail li.great span.title { color: #ffe699; }
+.artis ul.detail li.great span.title i.up-num { background-image: url("/assets/character/imgs/up-num-icon2.png"); background-size: auto 500%; }
+.artis ul.detail li.nouse span { color: #888; }
+.artis ul.detail li.nouse span.title i.up-num { background-image: url("/assets/character/imgs/up-num-icon0.png"); background-size: auto 500%; }
+
+/* 主词条行：加粗、深底 */
+.artis ul.detail li.arti-main {
+  font-size: 16px;
+  font-weight: bold;
+  padding: 3px 3px;
+  background: rgba(25, 25, 25, .5);
+  color: #fff;
+}
+.artis ul.detail li.arti-main .title { padding-left: 15px; }
+
+/* 空位（没装圣遗物） */
+.artis .item.arti.empty { opacity: .5; min-height: 120px; }
+.artis .item.arti.empty .arti-empty {
+  padding: 30px 15px;
+  font-size: 13px;
+  color: #aaa;
+  text-align: center;
+}
+
+/* 底部版权行 */
+.pd-copyright {
+  padding: 6px 5px 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .55);
+  text-align: right;
+}

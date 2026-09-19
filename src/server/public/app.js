@@ -35,6 +35,23 @@ const T = (key, vars) => {
   return s
 }
 
+/*
+ * 把文案里的 <strong> 段渲染成金色高亮（miao 的 arti-notice 就带这个标记）。
+ * 只认这一种标签、且手工拼节点 —— 不走 innerHTML，省得给文案开注入的口子。
+ */
+function richText (parent, text) {
+  const re = /<strong>([\s\S]*?)<\/strong>/g
+  let last = 0
+  let m
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parent.append(document.createTextNode(text.slice(last, m.index)))
+    parent.append(el('strong', '', m[1]))
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parent.append(document.createTextNode(text.slice(last)))
+  return parent
+}
+
 /* ───────────────────────── 后端调用 ───────────────────────── */
 
 async function api (path, opts) {
@@ -202,20 +219,26 @@ function renderRoster () {
 }
 
 /* ─────────────────────────
- * 明细页：按 miao-plugin 结果图（profile-detail）1:1 画
+ * 明细页：miao-plugin 的评分结果图（profile-detail）复刻
  *
- * DOM 结构、class 名、图片资源全部照抄 miao 的 resources/character/profile-detail.html：
- *   .basic            立绘 + 角色名/UID/等级/命座 + 天赋图 + 面板属性 + 命座图 + 数据时间
- *   .profile-detail
- *     .arti-mark-cont 圣遗物总分 / 评级 / 评分规则 + 有效词条汇总（great/useful/nouse）
- *     .artis          武器（图标+主副属性+精炼描述）+ 5 件圣遗物
+ * 这张结果图在 miao 那边是**一张固定 600px 宽的画布**（resources/character/profile-detail.html
+ * + .css），所以这里也照 600px 画布做，再由 fitDetailZoom() 把整张等比缩到屏幕宽度 ——
+ * 缩下来就是同一张图的缩小版，构图和 miao 出图一致。
  *
- * 图片全是从 miao-plugin 仓库同步来的真图（tools/sync_assets.py）：
- *   立绘     meta-gs/character/{名}/imgs/splash.webp
- *   命座     meta-gs/character/{名}/icons/cons-{1..6}.webp
- *   天赋 A   common/item/atk-{武器类型}.webp   （普攻图标本来就是武器图标）
- *   天赋 E/Q 提升它的那个命座图标             （miao 的 talentCons 规则）
- *   武器     meta-gs/weapon/{类型}/{名}/icon.webp
+ * 关键结构（照抄上游，不自己发明）：
+ *   .basic            立绘（1400×500 左溢出，margin-left:-545px）
+ *                     右上角浮信息：角色名 / UID-Lv / 天赋 a/e/q / 8 行属性表
+ *                     左下角 6 个命座、右下角数据时间
+ *   .arti-mark-cont   左：圣遗物总分 + 评级（按档位配色）；右：有效词条汇总 + 评分规则
+ *   .artis            武器卡 + 5 件圣遗物卡（185px 宽，一格一个）
+ *
+ * 图片全是 tools/sync_assets.py 从 miao-plugin 仓库同步的真图：
+ *   画布底图  common/bg/bg-{元素}.webp     （按属性分类的背景，见 elemLayout）
+ *   立绘      meta-gs/character/{名}/imgs/splash.webp
+ *   命座      meta-gs/character/{名}/icons/cons-{1..6}.webp
+ *   天赋 A    common/item/atk-{武器类型}.webp
+ *   天赋 E/Q  提升它的那个命座图标（miao 的 talentCons 规则）
+ *   武器      meta-gs/weapon/{类型}/{名}/icon.webp
  * ───────────────────────── */
 
 function renderDetail () {
@@ -228,17 +251,23 @@ function renderDetail () {
     return
   }
 
-  const cont = el('div', 'pd')
-  cont.style.setProperty('--elem', ELEM_COLOR[av.elem] || '#888')
-  cont.style.setProperty('--rank', rankColor(rankOf(av.score.markClass)))
-
-  /* 顶部返回栏 */
+  /* 顶部返回栏：画布之外，不跟着缩放 */
   const bar = el('div', 'detail-bar')
   const back = el('button', 'btn back', '← ' + T('back'))
   back.addEventListener('click', backToRoster)
   bar.append(back)
-  bar.append(el('span', 'detail-title', T('detailTitle')))
+  bar.append(el('span', 'detail-title', av.name))
   box.append(bar)
+
+  /* 600px 画布（元素背景 + 缩放外壳）。
+     元素类名照 miao 的 elemLayout：挂在容器上，CSS 据此选背景图和天赋底盘图 */
+  const frame = el('div', 'pd-frame')
+  const canvas = el('div', 'pd-canvas elem-' + (av.elem || 'hydro'))
+  if (av.elemBg) canvas.style.backgroundImage = `url("${av.elemBg}")`
+  const cont = el('div', 'profile-cont game-gs')
+  canvas.append(cont)
+  frame.append(canvas)
+  box.append(frame)
 
   /* ===== .basic ===== */
   const basic = el('div', 'basic')
@@ -246,19 +275,17 @@ function renderDetail () {
   const mainPic = el('div', 'main-pic')
   if (av.splash) mainPic.style.backgroundImage = `url("${av.splash}")`
   basic.append(mainPic)
-  /* 压暗层：立绘很亮，不压一层上面的白字看不清 */
-  basic.append(el('div', 'basic-shade'))
 
   const detail = el('div', 'detail')
   detail.append(el('div', 'char-name', av.name))
 
   const lvRow = el('div', 'char-lv')
   lvRow.append(el('span', '', `UID ${av.uid} - Lv.${av.level ?? '?'}`))
-  lvRow.append(el('span', 'cons', `${av.cons}${T('cons')}`))
+  lvRow.append(el('span', 'cons-badge', `${av.cons}${T('cons')}`))
   detail.append(lvRow)
 
-  /* 天赋 a/e/q：等级牌 + miao 的图标。
-     talent-plus = 被命座提升过，talent-crown = 原始等级满 10（戴皇冠），判定都来自后端 */
+  /* 天赋 a/e/q：图标 + 等级牌。
+     talent-plus = 被命座提升过，talent-crown = 原始等级满 10（戴皇冠）—— 判定来自后端 */
   const talents = el('div', 'char-talents')
   for (const k of ['a', 'e', 'q']) {
     const t = av.talent?.[k] || {}
@@ -274,7 +301,7 @@ function renderDetail () {
   }
   detail.append(talents)
 
-  /* 面板属性：图标 + 名称 + 权重 + 总值 +（基础值 / 绿字） */
+  /* 面板属性表：图标 + 名称 + 权重胶囊 + 总值 +（基础值 / 绿字） */
   if (av.attrTable?.length) {
     const ul = el('ul', 'char-attr')
     for (const r of av.attrTable) {
@@ -284,6 +311,7 @@ function renderDetail () {
       li.append(ic)
       li.append(el('div', 'title', r.label))
       const wt = el('div', 'weight')
+      /* 权重 0 的项 miao 也留空位，保持列对齐 */
       if (r.weight) wt.append(el('span', r.weight >= 80 ? 'gold' : 'normal', String(r.weight)))
       li.append(wt)
       li.append(el('div', 'value', r.value))
@@ -319,32 +347,38 @@ function renderDetail () {
   /* ===== .profile-detail ===== */
   const pd = el('div', 'profile-detail')
 
-  /* 圣遗物评分汇总 */
+  /* 圣遗物评分汇总：左总分卡 + 右有效词条 */
   const markCont = el('div', 'arti-mark-cont')
   const statBox = el('div', 'arti-stat')
   const ret = el('div', 'arti-stat-ret')
+
   const boxTotal = el('div')
   boxTotal.append(el('span', '', T('artisTotal')))
   boxTotal.append(el('strong', '', av.score.mark))
   ret.append(boxTotal)
+
   const boxRank = el('div')
   boxRank.append(el('span', '', T('artisRank')))
+  /* 档位本身按 miao 的配色上色：红(ACE/MAX) / 黄(SSS/SS) / 紫(S/A) */
   boxRank.append(el('strong', 'mark-' + rankOf(av.score.markClass), av.score.markClass))
   ret.append(boxRank)
+
   statBox.append(ret)
   if (av.score.classTitle) {
     statBox.append(el('div', 'arti-class-title', `${T('rule')}：${av.score.classTitle}`))
   }
   markCont.append(statBox)
 
-  /* 有效词条汇总（miao 的 allAttr，补到 9 格） */
   const infoBox = el('div', 'arti-info')
   const allWrap = el('div', 'arti-all-attr')
   const allUl = el('ul', 'detail attr arti-attr')
   for (const a of (av.allAttr || [])) {
     if (a && a.key) {
       const li = el('li', a.cls || 'nouse')
-      li.append(el('span', 'title', a.label))
+      const title = el('span', 'title')
+      if (a.eff && a.eff !== '-') title.append(el('i', 'eff', a.eff))
+      title.append(document.createTextNode(a.label))
+      li.append(title)
       li.append(el('span', 'val', '+' + a.value))
       allUl.append(li)
     } else {
@@ -353,54 +387,76 @@ function renderDetail () {
   }
   allWrap.append(allUl)
   infoBox.append(allWrap)
-  infoBox.append(el('div', 'dmg-desc arti-notice', T('artisNotice')))
+  infoBox.append(richText(el('div', 'arti-notice'),
+    T('artisNotice', { tag: T('artisTag', { name: av.name }) })))
   markCont.append(infoBox)
   pd.append(markCont)
 
   /* 武器 + 5 件圣遗物 */
   const artis = el('div', 'artis')
 
-  /* 武器卡：图标 + 名 + 精N/Lv.N + 主副属性 + 精炼描述（都来自 miao 的 Weapon 元数据） */
-  const wBox = el('div', 'artis-weapon')
-  const wItem = el('div', 'item weapon')
-  const wImg = el('div', 'img')
-  if (av.weapon?.icon) wImg.style.backgroundImage = `url("${av.weapon.icon}")`
-  wItem.append(wImg)
+  /* 武器卡：图标（右上溢出）+ 名 + 精N·Lv.N + 主副属性 + 精炼描述 */
+  if (av.weapon?.name) {
+    const wItem = el('div', 'item weapon')
+    const wImg = el('div', 'img')
+    if (av.weapon.icon) wImg.style.backgroundImage = `url("${av.weapon.icon}")`
+    wItem.append(wImg)
 
-  const wHead = el('div', 'head')
-  wHead.append(el('strong', '', av.weapon?.sName || av.weapon?.name || T('noWeapon')))
-  const wInfo = el('span', 'info')
-  wInfo.append(el('span', 'affix', `${T('refine')}${av.weapon?.affix ?? 1}`))
-  wInfo.append(document.createTextNode(` Lv.${av.weapon?.level ?? '?'}`))
-  wHead.append(wInfo)
-  wItem.append(wHead)
+    const wHead = el('div', 'head')
+    wHead.append(el('strong', '', av.weapon.sName || av.weapon.name))
+    if (av.weapon.star) wHead.append(el('div', 'star star-' + av.weapon.star))
+    const wInfo = el('span', 'info')
+    wInfo.append(el('span', 'affix affix-' + (av.weapon.affix ?? 1), `${T('refine')}${av.weapon.affix ?? 1}`))
+    wInfo.append(document.createTextNode(` Lv.${av.weapon.level ?? '?'}`))
+    wHead.append(wInfo)
 
-  const wa = el('div', 'weapon-attr')
-  for (const [k, v] of Object.entries(av.weapon?.attrs || {})) {
-    const d = el('div')
-    d.append(el('span', '', W_ATTR_TITLE[k] || k))
-    d.append(document.createTextNode(' +' + v))
-    wa.append(d)
-  }
-  wItem.append(wa)
+    /* 主副属性贴在 head 底部（miao 里 .weapon-attr 是 .head 的子元素、absolute bottom:0，
+       挂在整张卡上会掉到卡片底部去） */
+    const wa = el('div', 'weapon-attr')
+    for (const [k, v] of Object.entries(av.weapon.attrs || {})) {
+      const d = el('div')
+      d.append(el('span', '', W_ATTR_TITLE[k] || k))
+      d.append(document.createTextNode(' +' + v))
+      wa.append(d)
+    }
+    wHead.append(wa)
+    wItem.append(wHead)
 
-  if (av.weapon?.desc) {
     const dc = el('div', 'weapon-desc-cont')
-    /* miao 的描述里带 <nobr> 之类的高亮标签，这里只取纯文本（也顺手避免注入） */
-    dc.append(el('div', 'weapon-desc', av.weapon.desc.replace(/<[^>]*>/g, '')))
+    /* miao 的描述里带 <nobr> 高亮标签，这里只取纯文本（顺手避免注入） */
+    dc.append(el('div', 'weapon-desc', String(av.weapon.desc || '').replace(/<[^>]*>/g, '')))
     wItem.append(dc)
+
+    artis.append(wItem)
   }
-  wBox.append(wItem)
-  artis.append(wBox)
 
   for (const a of av.artifacts) artis.append(renderArtiCard(a, av.charWeight))
   pd.append(artis)
 
   cont.append(pd)
-  box.append(cont)
+
+  const copy = el('div', 'pd-copyright')
+  copy.textContent = `miao-plugin · ${T('artisRank')} ${av.score.markClass} · ${av.score.classTitle || ''}`
+  cont.append(copy)
+
+  fitDetailZoom()
 }
 
-/* 一件圣遗物：条目结构照抄 miao 的 .item.arti（图标 / 头 / 词条列表） */
+/*
+ * 把 600px 画布等比缩到屏幕宽度。
+ * PC 上可用宽度 > 600，所以 scale 恒为 1 —— 就是 miao 出图的原尺寸。
+ * 直接写 zoom 内联样式（不用 CSS 变量转一手，实测 var() 在这里不生效）。
+ */
+function fitDetailZoom () {
+  const frame = document.querySelector('.pd-frame')
+  if (!frame) return
+  const vw = document.documentElement.clientWidth || window.innerWidth
+  const avail = Math.min(vw, 760) - 16
+  frame.style.zoom = String(Math.min(1, avail / 600))
+}
+window.addEventListener('resize', fitDetailZoom)
+
+/* 一件圣遗物：条目结构照抄 miao 的 .item.arti（右上图标 / 头 / 词条表） */
 function renderArtiCard (a, cw = {}) {
   if (a.empty) {
     const c = el('div', 'item arti empty')
@@ -410,29 +466,20 @@ function renderArtiCard (a, cw = {}) {
     const head = el('div', 'head')
     head.append(el('strong', '', a.posName))
     c.append(head)
-    c.append(el('div', 'empty-tip', T('notEquipped')))
+    c.append(el('div', 'arti-empty', T('notEquipped')))
     return c
   }
 
   const rank = rankOf(a.markClass)
   const c = el('div', 'item arti arti-class-' + rank)
-  c.style.setProperty('--rank', rankColor(rank))
 
-  /* 图标：miao 的套装图标，404 时露出部位单字占位 */
+  /* 图标：miao 的套装图标（斜切淡出），缺图时露出部位单字兜底 */
   const icon = el('div', 'arti-icon')
-  if (a.icon) {
-    const img = el('img')
-    img.src = a.icon
-    img.alt = ''
-    img.loading = 'lazy'
-    /* 图标 404（比如还没同步到的套装）时藏掉自己，露出部位单字占位 */
-    img.onerror = function () { img.style.display = 'none'; icon.classList.add('fallback') }
-    icon.append(img)
-  } else {
-    icon.classList.add('fallback')
-  }
-  icon.append(el('span', 'arti-fallback', SLOT_GLYPH[a.pos] || '?'))
-  icon.append(el('span', 'arti-lv', '+' + (a.level ?? 0)))
+  icon.dataset.slot = SLOT_GLYPH[a.pos] || '?'
+  const im = el('div', 'img')
+  if (a.icon) im.style.backgroundImage = `url("${a.icon}")`
+  icon.append(im)
+  icon.append(el('span', '', '+' + (a.level ?? 0)))
   c.append(icon)
 
   const head = el('div', 'head')
@@ -448,7 +495,6 @@ function renderArtiCard (a, cw = {}) {
     const li = el('li', 'arti-main')
     li.append(el('span', 'title', a.main.label))
     li.append(el('span', 'val', '+' + a.main.value))
-    li.append(el('span', 'mark', a.main.point ?? '-'))
     ul.append(li)
   }
   for (const s of a.subs) {
@@ -456,13 +502,12 @@ function renderArtiCard (a, cw = {}) {
     const cls = w > 79.9 ? 'great' : (w > 0 ? 'useful' : 'nouse')
     const li = el('li', cls)
     const lab = el('span', 'title')
-    /* eff = 词条有效率（miao 算好的串），up-num = 这条滚了几次的小图标 */
+    /* eff = 词条有效率，up-num = 这条滚了几次的小图标（按三档换色，见 CSS） */
     if (s.eff && s.eff !== '-') lab.append(el('i', 'eff', s.eff))
-    if (s.upNum) lab.append(el('i', 'up-num up-' + s.upNum))
+    if (s.upNum > 1) lab.append(el('i', 'up-num up-' + Math.min(5, s.upNum)))
     lab.append(document.createTextNode(s.label))
     li.append(lab)
     li.append(el('span', 'val', '+' + s.value))
-    li.append(el('span', 'mark', s.point ?? '-'))
     ul.append(li)
   }
   c.append(ul)

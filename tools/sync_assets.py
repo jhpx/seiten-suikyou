@@ -42,7 +42,13 @@ COMMON_ASSETS = [
     "character/imgs/crown.png",
     "character/imgs/main-01.png",
     "character/imgs/main-02.png",
+    # 武器卡的星级图（miao common.css 里 .artis .weapon .star 用的）
+    "common/item/star.png",
 ]
+
+# 角色页整张画布的背景按元素分图：common/bg/bg-{元素}.webp
+# 上游 elemLayout 把 element 映射成英文类名后挂到 container 上（见 common/layout/elem.html）
+ELEM_BGS = ["pyro", "hydro", "anemo", "electro", "dendro", "cryo", "geo"]
 
 # 天赋「普攻」图标按武器类型取，是公共图（miao CharImg.getImgs 的规则）
 WEAPON_TYPES = ["sword", "claymore", "bow", "catalyst", "polearm"]
@@ -245,6 +251,17 @@ def main():
         stats[res] += 1
         if res in ("fail", "miss"):
             log(f"  [{res}] {rel}")
+
+    # 1b. 元素背景 + 天赋底盘：都按元素分图
+    #     bg-{元素}.webp     整张画布的底色
+    #     talent-{元素}.webp 天赋图标那个 100px 圆环底盘（miao common.css 的 .elem-x .talent-icon）
+    log("[info] 同步元素背景/天赋底盘图 ...")
+    for el in ELEM_BGS:
+        for rel in (f"common/bg/bg-{el}.webp", f"common/bg/talent-{el}.webp"):
+            res = sync_file(rel, out, REPO_RAW)
+            stats[res] += 1
+            if res in ("fail", "miss"):
+                log(f"  [{res}] {rel}")
 
     # 2. 角色 / 武器 / 圣遗物素材
     #

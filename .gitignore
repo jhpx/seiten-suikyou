@@ -7,3 +7,4 @@ __pycache__/
 .DS_Store
 # 从 miao-plugin 按需下载的图片素材（二进制，不提交）
 src/server/public/assets/
+/.workbuddy

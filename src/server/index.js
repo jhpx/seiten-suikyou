@@ -29,12 +29,14 @@ import { buildAccountView } from '../view/shape.js'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC = path.join(HERE, 'public')
 
-/* 静态文件白名单。不做通用静态服务 —— 三个文件而已，白名单顺手把目录穿越问题也解决了。 */
+/* 静态文件白名单。不做通用静态服务 —— 几个文件而已，白名单顺手把目录穿越问题也解决了。 */
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
-  '/style.css': ['style.css', 'text/css; charset=utf-8']
+  '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  /* 角色评分卡（miao 结果图移植版）单独一个样式表，和外壳样式分开管 */
+  '/miao.css': ['miao.css', 'text/css; charset=utf-8']
 }
 
 const ASSETS_DIR = path.join(PUBLIC, 'assets')

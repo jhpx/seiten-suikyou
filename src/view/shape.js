@@ -137,6 +137,16 @@ function charImgs (char) {
 }
 
 /*
+ * 整张角色页画布的背景按元素分图：common/bg/bg-{元素}.webp
+ *
+ * miao 的做法（resources/common/layout/elem.html:15）是把 element 映射成英文类名挂在
+ * container 上，再由 common.css 的 `.elem-{x} .elem-bg` 选背景图。原神这边角色元数据里
+ * 的 elem 本来就叫 pyro/cryo/...，所以直接当类名用，不用翻译。
+ * 只有旅行者是 multi，没有对应图，按上游的兜底取 hydro。
+ */
+const ELEM_BG = new Set(['pyro', 'hydro', 'anemo', 'electro', 'dendro', 'cryo', 'geo'])
+
+/*
  * 面板属性表 —— 顺序和键都照抄 miao 模板里的 attrMap（profile-detail.html:46）
  *
  * 每一项要三列：总值 / 基础值 / 绿字（基础值之外的加成），权重另起一列高亮。
@@ -163,8 +173,9 @@ function attrTableOf (profile, locale, charWeight = {}) {
   const zh = locale === 'chs' || locale === 'cht'
   const out = []
   for (const [key, kind] of ATTR_TABLE) {
-    const total = a[key]
-    if (!total) continue
+    /* miao 的模板是死循环那张 8 项表，缺项的属性（比如没有伤害加成的角色）
+       也照样出一行 0.0% —— 整张表恒为 8 行，行高和对齐才稳定。别在这里 continue。 */
+    const total = a[key] ?? 0
     const base = b[key] ?? 0
     out.push({
       key,
@@ -321,6 +332,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   }
 
   const imgs = charImgs(char)
+  const elemKey = profile.elem || char.elem || ''
 
   return {
     uid: profile.uid,
@@ -331,9 +343,11 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     level: profile.level,
     cons: profile.cons ?? 0,
     fetter: profile.fetter ?? null,
-    elem: profile.elem || char.elem || '',
+    elem: elemKey,
     /* 元素名暂时只有 miao 的中文单字（i18n 表里没收录元素，是不想为它多同步一轮） */
-    elemText: Format.elemName(profile.elem || char.elem || ''),
+    elemText: Format.elemName(elemKey),
+    /* 画布底图：按元素分的那张 bg-{元素}.webp，前端挂在 container 上（见上面的 ELEM_BG） */
+    elemBg: `/assets/common/bg/bg-${ELEM_BG.has(elemKey) ? elemKey : 'hydro'}.webp`,
     /*
      * 立绘：miao 用的是官方 splash（meta-gs/character/{名}/imgs/splash.webp），
      * 不是 character-img/ 那套同人插画 —— 之前选错了，现在按上游 CharImg.getImgs 来。
