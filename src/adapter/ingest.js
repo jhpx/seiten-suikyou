@@ -10,7 +10,7 @@
  *
  * 它**不解析属性**。enka 给的是 mainPropId / appendPropIdList 这种原始 prop id，
  * 原样存库；id → 属性 的换算交给 miao 内核（ArtisAttr.getData）做。
- * 理由见 docs/data-model.md：内核是靠 appendPropIdList 里「同一个 id 出现几次」
+ * 理由见 docs/DESIGN-DATA-MODEL.md：内核是靠 appendPropIdList 里「同一个 id 出现几次」
  * 算词条数和副词条有效率的，我们提前解析就会把这信息丢掉。
  */
 import { createHash } from 'node:crypto'

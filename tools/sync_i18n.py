@@ -33,7 +33,7 @@ miao 零 i18n 能力：`resources/` 全是中文，角色目录名、权重表�
 产物:
     vendor/i18n/names.json     紧凑名字表（提交进仓库）
     vendor/i18n/VENDOR.md      来源与覆盖情况（生成物，勿手工编辑）
-    docs/i18n-report.md        本次同步报告
+    docs/reports/i18n-report.md 本次同步报告
 """
 
 import argparse
@@ -49,7 +49,7 @@ CACHE = ROOT / ".tmp" / "i18n-src"          # 原始大文件缓存（.tmp 已�
 OUT_DIR = ROOT / "vendor" / "i18n"
 OUT_JSON = OUT_DIR / "names.json"
 OUT_VENDOR = OUT_DIR / "VENDOR.md"
-REPORT = ROOT / "docs" / "i18n-report.md"
+REPORT = ROOT / "docs" / "reports" / "i18n-report.md"
 
 RAW = "https://gitlab.com/Dimbreath/AnimeGameData/-/raw/master"
 ENKA_LOC = "https://cdn.jsdelivr.net/gh/EnkaNetwork/API-docs@master/store/loc.json"
@@ -392,7 +392,7 @@ def build_vendor(meta: dict, hashes: dict, groups: list, index: dict, locales: l
         "",
         "单语言完整表 43 MB / 54 万条，九成九是对白，我们一条都不要。",
         "这里存的是**离线提取后的子集**（几百 KB）。要核对提取对不对，重跑脚本并对比",
-        "`docs/i18n-report.md` —— 报告里有每种类别的条目数、每语言的命中率、以及撞名切分哨兵。",
+        "`docs/reports/i18n-report.md` —— 报告里有每种类别的条目数、每语言的命中率、以及撞名切分哨兵。",
         "",
     ])
 
@@ -415,6 +415,7 @@ def main() -> int:
     proxies = [p for p in [os.environ.get("I18N_PROXY"), "socks5h://127.0.0.1:4080"] if p]
     CACHE.mkdir(parents=True, exist_ok=True)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT.parent.mkdir(parents=True, exist_ok=True)      # 报告在 docs/reports/ 子目录下
 
     print("① 拉 ExcelBinOutput（id → 名字 hash）")
     for name in EXCEL_TABLES:

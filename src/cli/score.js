@@ -270,7 +270,7 @@ async function main () {
   console.log(line())
   const sorted = [...wanted].sort((a, b) => b.result._mark - a.result._mark)
   console.log(`${uiText('summary', locale)}（按总分降序，共 ${sorted.length} ${uiText('chars', locale)}）`)
-  for (const { profile, result } of sorted) {
+  for (const r of sorted) {
     const cname = i18n.avatarName(r.profile.id, locale) || r.profile.char.name
     console.log(`  ${padStart(r.result.mark, 6)}  ${padEnd(r.result.markClass, 4)} ${padEnd(cname, 10)} ${r.result.classTitle}`)
   }

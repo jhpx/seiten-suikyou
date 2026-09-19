@@ -19,5 +19,5 @@
 
 ## 同步了什么、改了什么
 
-见 `docs/sync-report.md`（完整清单 + 增量 + 改动说明）。
+见 `docs/reports/sync-report.md`（完整清单 + 增量 + 改动说明）。
 逐字节核对用 `git log -p -- vendor/miao`。

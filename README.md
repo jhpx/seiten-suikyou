@@ -1,305 +1,105 @@
 # 星天水镜 / seiten-suikyou
 
-原神角色养成评估器。**评分算法不做二次实现，直接内嵌 miao-plugin 的计算内核**，上游更新可一键对齐。
+原神角色养成评估器。**评分算法不做二次实现，直接内嵌 miao-plugin 的计算内核**，分数与上游逐字一致。
 
 名字取自莫娜的称号「星天水镜」（日文 `星天水鏡`，读作 せいてん すいきょう / Seiten Suikyō）。
 莫娜的水占术是「以水为镜映照星象，从幻象里读出真实」——面板数字是表象，评分才是那个自会显现的真实。
 
-## 核心设计：内嵌 + 定点处理
+> 这篇是**使用文档**。为什么这么设计（内嵌内核的取舍、数据通路三层、页面与多语言的还原思路、
+> 改动前的工程约束）在 [`docs/DESIGN.md`](docs/DESIGN.md)。
 
-miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设了一堆只有云崽才提供的运行时：
-全局 `redis`、注入的 `Bot`、`e.runtime.render`（puppeteer 截图）、米游社 Cookie，以及
-`#miao` 这类 package.json imports 别名。
+## 它能做什么
 
-本项目的做法是**把用得到的源码搬进 `vendor/miao/`，只对「确认本项目用不到」的云崽依赖做定点处理**：
-
-```bash
-npm run sync   # 从 miao-plugin 重新搬运 + 打补丁 + 校验 + 出对比报告
-npm test       # 全量测试：内核能加载、架构边界没烂、管线没搞坏数据、分数没变
-```
-
-三条原则：
-
-1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。505 个文件里 498 个是逐字节复制，
-   只有 7 个定点改写 + 2 个本地生成。
-2. **别名交给 package.json** —— `#miao` / `#miao.models` / `#miao.path` 原样保留在源码里，
-   由本项目 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。
-   **没有任何 import 语句被改写**，IDE 跳转和静态分析照常可用。
-3. **只处理云崽专属** —— 公共依赖用真的，云崽独有的才处理。
-
-### 云崽依赖的处理清单
-
-| 云崽的东西 | 出现在 | 处理方式 |
-|---|---|---|
-| 全局 `redis` | `components/Data.js` 的 4 个缓存方法 | 退化为空实现（评分链路不走缓存） |
-| 全局 `logger` | `components/Data.js` 的 `delFile` | 改 `console.error` |
-| `Common`（渲染）/ `App`（应用） | `components/index.js` | 从入口摘掉（本项目无人引用） |
-| 云崽模型 `User` / `MysApi` / `Player` / `Abyss` … | `models/index.js` | 从入口摘掉，连同顶层副作用 |
-| `Cfg`（用户配置） | 依赖 `cfg/CfgData.js` → 217 行 `cfg_system.js` schema | `components/_local/Cfg.js` 最小实现 |
-| `Version`（宿主版本检测） | 读 `package.json` / `CHANGELOG.md`、辨别 Yunzai V2/V3 | `components/_local/Version.js` 最小实现 |
-| `CharImg`（渲染层） | 写死云崽路径 + 依赖 `image-size` | 整体置空 |
-| `lodash` | 全仓库 46 种方法 | **直接用真依赖**，不替换 |
-| `image-size` | 只有 `CharImg` 用 | CharImg 已置空，故不引入 |
-
-`components/_local/` 下两个文件是本项目手写的（不是上游内容），同步时自动生成。
-
-### 搬运范围（为什么是 505 个文件 / 3.5MB）
-
-除了评分算法与角色元数据，还搬了两样「容易漏掉、漏了就出不了正确分」的东西：
-
-| 搬什么 | 为什么必须要 |
+| 能力 | 入口 |
 |---|---|
-| `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
-| `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21MB，评分用不到，全不搬。 |
+| 按 UID 抓展柜 → 存本地库 → 用 miao 规则打分 | `npm run score -- --uid <uid>` |
+| 网页：首页角色网格 + 角色明细页（复刻 miao 的评分结果图） | `npm run server` |
+| 拿游戏客户端算的最终面板**对拍**我们自己算的面板 | `npm run score -- --check` |
+| 多语言：简体 / 繁體 / English / 日本語 / 한국어 | 页面右上角，或 `--locale` |
+| 本地缓存：enka 只给展柜那 8–12 个角色，跨多次抓取累积 | 自动 |
+| JSON 接口 | `GET /api/uid/:uid?locale=en` |
 
-另外 `src/index.js` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
-对应模型就会静默返回 `false`（我们踩过一次 —— `Weapon.get()` 全返回 null，界面上武器显示「未识别」）。
-
-### 同步产出
-
-| 产物 | 内容 |
-|---|---|
-| `vendor/miao/VENDOR.md` | 来源、上游版本、文件数、处置方式、相对上一版的增量 |
-| `docs/sync-report.md` | **同步了哪些数据 / 相对上一版差在哪 / 改了什么 / 什么没动**。改动用凝练语言说清，不贴 diff —— 要逐行核对走 `git log -p` |
-
-增量不用自己维护一份「文件清单 + 哈希」——`vendor/miao` 本来就是 git 跟踪的，
-git 里逐字存着上一版的内容，「相对上一版多了什么、改了什么」直接问它就行。
-基准取「最后一个动过 `vendor/miao` 的提交」，也就是上一版同步的产物：
+## 快速开始
 
 ```bash
-git diff --name-status <基准提交> -- vendor/miao   # 只看增删改的文件名
-git log -p -- vendor/miao                          # 逐行看改了什么
+npm install                        # 只有一个运行时依赖：lodash
+npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
+npm run sync:assets                # 下页面用的图片素材（可选，不跑则用 CSS 色块占位）
+npm run server                     # 打开 http://127.0.0.1:8787
 ```
 
-脚本内部同样走这条路，并且 `git diff`（已跟踪文件的变化）和 `git status`
-（未跟踪的新文件，新搬进来的目录在 `git diff` 里是看不见的）两个来源都取，缺一不可。
-
-```bash
-MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_miao.py
-```
-
-### 相比早期方案
-
-早期用 Node 的 ESM loader hook 在运行时劫持 import 指向外部 miao-plugin 目录。已废弃，因为：
-项目依赖一个外部目录才能跑、边界模糊、IDE 跳转和静态分析全部失效、必须用 `--import` 启动。
-现在**仓库自包含**：`node test/verify.mjs` 直接跑。
-
-## 数据通路：三层，中间模型建在「存储」不在「计算」
-
-完整设计见 **`docs/data-model.md`**。一句话：**存储层存 id，不存名字。**
-
-```
-enka 原始响应
-   │  ① ingest：挑字段、原始 prop id 原样保留、记来源、带走官方文案 key
-   ▼
-② canonical store（本地库，本地化无关）
-   主键全是稳定的数字：uid / avatarId / itemId / propId / TextMapHash
-   │
-   ├─ ③ materialize → miao profile（id → miao 的中文名与真实对象）→ ArtisMark → 分数
-   ├─ ④ localize    → 多语言文案（id → 目标语言）→ 前端
-   └─ ⑤ panel-check → 拿游戏给的面板对拍 ③ 的结果，验证翻对了没有
-```
-
-**为什么不设「enka → 自有数据模型 → 再拼回 miao」的中间层**（三条实证）：
-
-1. **会丢信息** —— 内核的「词条数」是按 `appendPropIdList` 里**同一 key 出现几次**数出来的
-   （`ArtisAttr.js:41` 的 `tmp[key].upNum++`）。**原样保留每一次 roll** 是硬要求：
-   去重、或改存 enka 聚合好的 `reliquarySubstats`，这个信息就没了。
-2. **数值口径会打架** —— 内核完全不信外部给的属性值，主词条按
-   `attrCfg.value × (1.2 + 0.34 × level) × posEff × starEff` 自己算，副词条按自己的
-   `attrIdMap` 每 roll 值累加。外面先解析一遍不但白做，还可能算歪。
-3. **上游行为就是这样** —— miao 自己的 `models/serv/api/EnkaData.js`（106 行）
-   也只做「挑字段 + 位置映射 + level 减一」，属性解析一律留给内核。
-   这条边界随内核维护，另起一套就丢了同步性。
-
-**为什么要建这层库**（两条）：
-
-1. **enka 一次只给展柜里的角色**（约 8–12 个），玩家有 20–40+ 角色 → 必须跨多次抓取累积。
-   上游自己也这么干：`EnkaApi.updatePlayer` 是 `forEach(avatarInfoList, setAvatar)` + `player._update.push(id)`，
-   并且用响应里的 `ttl` 当缓存时长。
-2. **多语言** —— miao **零 i18n 能力**：`resources/` 全是中文，角色目录名就是中文（`character/胡桃/`），
-   权重表 / 套装缩写 / 武器特判全用中文名当键，全仓库零 `TextMapHash` 使用。
-   所以任何「显示英文/日文名」的需求都必须自建文案表，而文案表的主键只能是 id。
-
-   好消息是**文案主键不用自己造**：enka 的 `flat` 里直接带着官方的 `nameTextMapHash` /
-   `setNameTextMapHash`（实测 uid 101242308 的响应里有 132 处），那就是官方全语言文案表的主键
-   —— 存下 hash，接上官方 `TextMap` 就一次性拿到全部语言，不需要我们自己翻译。
-   所以这三个 hash 列（`artifact.name_hash` / `artifact.set_hash` / `avatar.weapon_name_hash`）
-   在 ingest 阶段就存下来：enka 白给的东西，丢了要补只能重抓。
-   唯一例外是**角色名**：`avatarInfo` 里只有 `avatarId`，没有 hash，得另配一份静态映射。
-
-## 目录结构
-
-```
-seiten-suikyou/
-├── src/
-│   ├── index.js              # 内核出口：注册元数据 + 原样导出评分模块
-│   ├── store/                # 本地库（SQLite）
-│   │   ├── schema.sql        #   表结构（权威定义）
-│   │   ├── db.js             #   连接 / 结构版本迁移（用 Node 自带的 node:sqlite）
-│   │   └── repo.js           #   读写：合并式 upsert、按 uid 取、文案 key 清单
-│   ├── adapter/              # enka ↔ 本项目 的转换
-│   │   ├── enka.js           #   按 uid 取原始响应（含各类错误的解释）
-│   │   ├── ingest.js         #   原始响应 → 库行（挑字段、位置映射、带文案 key，不解析属性）
-│   │   ├── materialize.js    #   库行 → miao profile（id → 中文名/对象 + 算面板）
-│   │   └── panel-check.js    #   拿游戏给的面板对拍，验证数据没翻错
-│   ├── cli/score.js          # 命令行评分入口
-│   ├── i18n/index.js         # 多语言：hash/id → 文案（读 vendor/i18n/names.json）
-│   └── i18n/ui.js            #   界面文字手写表（按钮/标题/提示，官方表里没有，5 语言 × 20 来条）
-│   ├── view/shape.js         # 视图成型：库行 + 评分结果 → 页面/接口用的对象（含本地化）
-│   └── server/               # HTTP 服务 + 页面
-│       ├── index.js          #   node:http 路由（API + 静态页），零新依赖
-│       └── public/           #   index.html / app.js / style.css（原生，无框架无 CDN）
-├── vendor/miao/              # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
-│   ├── components/index.js   #   `#miao`        入口（已摘掉 Common / App）
-│   ├── models/index.js       #   `#miao.models` 入口（已摘掉云崽模型）
-│   ├── tools/path.js         #   `#miao.path`   路径工具（零云崽依赖）
-│   └── components/_local/    #   本项目手写的最小实现：Cfg / Version
-├── vendor/i18n/              # 官方文案表（sync_i18n 生成，勿手工编辑）
-│   └── names.json            #   名字组 + hash 索引 + 部位名 + FIGHT_PROP_* 词条名
-├── tools/
-│   ├── sync_miao.py          # 同步脚本（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
-│   └── sync_i18n.py          # 多语言表提取（拉官方 TextMap + enka loc.json，离线压成几百 KB）
-├── docs/
-│   ├── data-model.md         # 数据模型设计（三层结构、为什么不设计算中间层）
-│   ├── sample-output.txt     # 真实运行的完整输出存档（含面板对拍）
-│   ├── i18n-report.md        # 每次同步生成：各类别条目数 / 每语言命中率 / 未收录清单
-│   └── sync-report.md        # 每次同步生成：同步了什么 / 改了什么 / 增量多少
-└── test/
-    ├── fixtures.mjs          测试用的合成数据（手写）
-    ├── data/enka-real.json   一份真实 enka 响应（换过 uid，数值没动）
-    ├── smoke.mjs             冒烟：内核能否脱离云崽独立加载
-    ├── arch.mjs              架构契约：别名解析 / 依赖策略 / vendor 自包含
-    ├── i18n.mjs              #   多语言：各类名字中英两路都对、兜底、表缺失时跳过
-    ├── pipeline.mjs          管线：ingest / 库往返 / 迁移 / 真实数据对拍 / materialize 不丢数据
-    ├── server.mjs            服务：真起监听打真 HTTP（路由 / 静态 / 错误形状 / 多语言出口）
-    ├── regression.mjs        回归断言：算法常量（上游更新后的安全网）
-    └── verify.mjs            端到端评分验证（输出即基线，可 diff）
-```
+- **运行时要求**：Node ≥ 22.5。本地库走 Node 自带的 `node:sqlite`，不引原生模块
+  （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
+- **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
+- **不跑 `sync:assets` 也能用**，只是角色立绘、圣遗物图标会退化成 CSS 色块。
+- 国内跑 `sync:assets` / `sync:i18n` 需要代理：`ASSETS_PROXY=socks5h://127.0.0.1:4080`。
 
 ## 运行
 
 ```bash
-npm install     # 只需 lodash
-npm test        # 全量：smoke → arch → pipeline → i18n → server → regression → verify
-npm run smoke   # 只跑冒烟
-npm run arch    # 只跑架构契约
-npm run pipeline# 只跑管线测试
-npm run i18n    # 只跑多语言
+npm install          # 只需 lodash
+
+# 跑起来
+npm run server       # http://127.0.0.1:8787
+npm run score -- --help
+
+# 测试
+npm test             # 全量：smoke → arch → pipeline → i18n → server → regression → verify
+npm run smoke        # 只跑冒烟
+npm run arch         # 只跑架构契约
+npm run pipeline     # 只跑管线
+npm run i18n         # 只跑多语言
 npm run server:test  # 只跑服务测试
-npm run verify  # 只跑评分验证
-npm run sync    # 从 miao-plugin 重新同步（需先设 MIAO_PLUGIN_PATH）
-npm run sync:i18n    # 从官方数据重新提取多语言表（国内需代理，见下）
-npm run server  # 起网页：http://127.0.0.1:8787
+npm run regression   # 只跑回归断言
+npm run verify       # 只跑评分验证
+
+# 同步（只在要更新数据时跑）
+npm run sync         # 从 miao-plugin 重新同步内核（需 MIAO_PLUGIN_PATH）
+npm run sync:i18n    # 从官方数据重新提取多语言表
+npm run sync:assets  # 按需下载页面图片素材
 ```
-
-`verify` 的 stdout 就是「基线」——改完内核后可以
-`npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt`，
-逐字为空才算没跑偏。所以它的断言只在失败时打印，通过时静默。
-
-同步时 miao-plugin 默认在同级目录 `../miao-plugin`，可用环境变量覆盖：
-
-```bash
-MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_miao.py
-```
-
-**为什么同步脚本用 Python**：它是开发期工具，不参与运行时。Python 标准库
-（`shutil` / `re` / `subprocess`）写这类「复制 + 文本改写 + 校验 + 出报告」的脚本更顺手，
-也不会让工具代码混进 Node 的模块图。
-
-## 多语言
-
-`src/i18n/` 分两张表，因为它们的**来源和性质完全不同**：
-
-| | `vendor/i18n/names.json` | `src/i18n/ui.js` |
-|---|---|---|
-| 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：读取、抓取、面板属性、命之座… |
-| 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
-| 规模 | 756 个名字组、11931 个 hash | 20 来条 × 5 种语言 |
-| 主键 | hash / avatarId / itemId / setId | 英文 key |
-
-名字表的提取有三个坑，都在脚本注释里记着：
-
-1. **官方把同一段文案复用在几十处** ——「胡桃」有 49 个键、「炽烈的炎之魔女」11 个，
-   enka 返回哪个变体无法预知。所以把所有变体收进**同一个名字组**，任意变体都查得到同一条。
-   同一组在各语言下文案一致（脚本会报冲突，当前 0 处）。
-2. **词条名不能走 hash** —— 走 enka 的 `loc.json`，它的词条区按 `FIGHT_PROP_*` 枚举键控，
-   和 miao 的 `StatType` 一一对应，没有歧义。它的数字 hash 键有 +512 偏移，不能用。
-3. **套装名要拐一道** —— `setId → equipAffixId → EquipAffixExcelConfigData[level=0].nameTextMapHash`。
-
-```bash
-npm run sync:i18n              # 默认 chs,cht,en,ja,ko
-npm run sync:i18n -- --locales chs,en
-I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
-```
-
-表不在时**静默降级**成只有中文（`i18n.available()` 返回 false，页面会提示），不会崩。
-
-## 网页服务
-
-```bash
-npm run server            # http://127.0.0.1:8787
-npm run server -- --port 9000 --host 0.0.0.0 --db data/other.db
-```
-
-**零新依赖**，用 `node:http` 手写。理由是 `test/arch.mjs` 锁死了「运行时依赖只有 lodash」——
-为了一个个人工具引 Fastify 进来，等于把自己定的边界拆了。默认值只绑 `127.0.0.1`，
-这是个本地工具，不该顺手暴露到局域网。
-
-| 接口 | 说明 |
-|---|---|
-| `GET /api/meta` | 有哪些语言、多语言表在不在、以及当前语言的**界面文字表** |
-| `GET /api/health` | 库里有几个 uid |
-| `GET /api/uids` | uid 列表（昵称、等级、角色数、最后抓取时间） |
-| `GET /api/uid/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
-| `POST /api/fetch` | `{uid, locale}` 从 enka 现抓一份并入库，直接回视图 |
-| `GET /` | H5 页面（纯手写 CSS，无 CDN、无框架、无图片） |
-
-页面在 `src/server/public/`，也是零依赖：原生 JS + `<template>` 克隆。
-
-**前端一个词条名都不写死** —— 部位名、词条名、套装名、角色名、武器名全是后端按 `locale` 给好的文本；
-连按钮和分组标题都从 `/api/meta` 的 `ui` 表来。加一门语言不用动前端，
-这也是为什么界面文字要单独手写一张表（`src/i18n/ui.js`）：官方 TextMap 里根本没有
-「读取」「圣遗物」这种我们自己页面的说法。
 
 ## 命令行评分
 
 ```bash
-npm run score -- --uid 101242308            # 抓 enka → 入库 → 打分
-npm run score -- --uid 101242308 --offline  # 不联网，直接读库打分
-npm run score -- --uid 101242308 --char 胡桃 # 只看一个角色
-npm run score -- --uid 101242308 --check    # 顺手对拍游戏面板，验证数据没翻错
-npm run score -- --file sample.json         # 从本地原始响应入库（不联网）
-npm run score -- --list                     # 库里存了哪些 uid
-npm run score -- --keys                     # 库里用到过哪些官方文案 key（做多语言时照着要）
-npm run score -- --uid 101242308 --json      # 额外输出结构化结果（给以后的前端/接口）
+npm run score -- --uid 101242308             # 抓 enka → 入库 → 打分
+npm run score -- --uid 101242308 --offline   # 不联网，直接读库打分
+npm run score -- --uid 101242308 --char 胡桃  # 只看一个角色
+npm run score -- --uid 101242308 --check     # 顺手对拍游戏面板，验证数据没翻错
+npm run score -- --file sample.json          # 从本地原始响应入库（不联网）
+npm run score -- --save-raw .tmp/raw         # 原始响应另存一份，方便复现
+npm run score -- --list                      # 库里存了哪些 uid
+npm run score -- --keys                      # 库里用到过哪些官方文案 key（做多语言时照着要）
+npm run score -- --uid 101242308 --json      # 额外输出结构化结果
+npm run score -- --locale en                 # 换语言输出
 ```
 
-输出长这样（真实数据）：
+输出长这样（真实数据，完整存档见 [`sample/cli-output.txt`](sample/cli-output.txt)）：
 
 ```
 账号  阿空（uid:101242308）  Lv.60  世界等级 9
-数据  enka 本次取得 12 个角色　|　最新抓取 2026-09-13T06:57:12.981Z　|　库里共 12 个角色
+数据  enka 本次取得 12 个角色　|　最后抓取 2026-09-19 21:59:09　|　12 个角色
 ────────────────────────────────────────────────────────────
-迪卢克 ★5 Lv.79 命2 好感10 pyro  A8 E8 Q8
+迪卢克 ★5 Lv.79 命之座2 好感10 pyro  A8 E8 Q8
   武器  狼的末路 Lv.90 精2
   套装  炽烈的炎之魔女×4
   1 生之花  魔女的炎之花   ★5 Lv.20     35.3  SS
-       主  小生命 4778.6
-       副  暴击率 6.6%×2  充能效率 5.2%  元素精通 32.6×2  大攻击 14.0%×3
+       主词条  生命值 4778.6
+       副  暴击率 6.6%×2  元素充能效率 5.2%  元素精通 32.6×2  攻击力 14.0%×3
   ...
-  面板  生命 17395  攻击 2450  防御 728  暴击率 56.7%  暴击伤害 158.0%  元素精通 161  元素充能 178.4%  元素伤害 15.0%
+  面板属性  生命值 17395  攻击力 2450  防御力 728  暴击率 56.7%  暴击伤害 158.0%  元素精通 161  元素充能效率 178.4%  伤害增加 15.0%
   场景  迪卢克-通用
   总分  184.7  SS
+────────────────────────────────────────────────────────────
+汇总（按总分降序，共 12 个角色）
+   214.4  SSS  夏沃蕾        夏沃蕾-通用
+   ...
+────────────────────────────────────────────────────────────
 ```
 
 `×N` 是「同一词条出了几次」（就是内核数出来的 `upNum`）。
 
-两个刻意的设计：
-
-- **打完分一定是从库里读回来再算**，而不是拿刚落库的内存数据直接算。多走一趟数据库，
-  才能证明「存进去」和「读出来」是同一个东西。
-- **原始响应可以另存一份**（`--save-raw <dir>`），方便复现问题和以后换解析逻辑时回放。
+数据时间统一按**本机时区**输出（库里的 ISO 是 UTC，展示时才本地化）。
 
 ### `--check`：拿游戏自己的面板当标准答案
 
@@ -321,7 +121,54 @@ npm run score -- --uid 101242308 --json      # 额外输出结构化结果（给
 且 miao 元数据里的基础生命/攻击/防御取了整，被百分比加成放大。
 真翻错了偏差是百分之几，这个容差挡不住 —— 所以它是有效的。
 
-## 评分调用方式
+**注意**：`--check` 必须对着原始响应做，所以 `--offline --check` 会提示做不了
+（库里故意不存面板属性，理由见 [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) §3）。
+
+## 网页服务
+
+```bash
+npm run server                                        # http://127.0.0.1:8787
+npm run server -- --port 9000 --db data/other.db
+npm run server -- --host 0.0.0.0                       # 手机同 Wi-Fi 可访问
+```
+
+默认只绑 `127.0.0.1`；绑 `0.0.0.0` 时启动日志会把各网卡地址列出来方便手机连，
+并提醒**本服务没有登录鉴权，测完记得停掉**。
+
+| 接口 | 说明 |
+|---|---|
+| `GET /api/meta` | 有哪些语言、多语言表在不在、以及当前语言的**界面文字表** |
+| `GET /api/health` | 库里有几个 uid |
+| `GET /api/uids` | uid 列表（昵称、等级、角色数、最后抓取时间） |
+| `GET /api/uid/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
+| `POST /api/fetch` | `{uid, locale}` 从 enka 现抓一份并入库，直接回视图 |
+| `GET /assets/<路径>` | 图片素材（扩展名白名单 + 目录穿越防护 + 一天缓存） |
+| `GET /` | H5 页面 |
+
+静态页走**白名单**（`/`、`/index.html`、`/app.js`、`/style.css`、`/miao.css`），不做通用静态服务。
+失败一律同一个形状：`{ ok:false, error:{ code, message } }`。
+
+**零新依赖**，用 `node:http` 手写 —— `test/arch.mjs` 锁死了「运行时依赖只有 lodash」，
+不为一个个人工具破这个例子。
+
+## 多语言
+
+页面右上角切换，命令行用 `--locale`：
+
+```bash
+npm run score -- --uid 101242308 --locale ja   # chs / cht / en / ja / ko
+npm run sync:i18n                              # 重新提取官方文案表（默认 chs,cht,en,ja,ko）
+npm run sync:i18n -- --locales chs,en
+I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
+```
+
+文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
+（`src/i18n/ui.js`，手写 68 条 × 5 种语言）两张表 —— 官方表里没有「读取」「圣遗物」这类
+我们自己页面的说法。两张表为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
+
+表不在时**静默降级**成只有中文（页面会给出提示），不会崩。
+
+## 当库用：评分调用方式
 
 用 miao 的官方入口，不自己拼：
 
@@ -340,41 +187,102 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 - `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/adapter/materialize.js` 里就是这么做的）
 - `weapon` 只要 `{ name, level, promote, affix }`，**`name` 必须是中文**（内核拿中文名查 `weaponCfg`）
 
-从 enka 数据出发的话，不用自己拼：`ingest` 负责入库、`materialize` 负责组装。
+**圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
+主副属性值一律由内核自解 —— 手工构造 profile 时也别自己算属性值。
 
-## 已知约束
+从 enka 数据出发的话不用自己拼：`ingest` 负责入库、`materialize` 负责组装。
 
-1. **圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
-   主副属性值一律由内核自解。手工构造 profile 时也别自己算属性值。
-2. `vendor/miao/` 是生成物，手工改动会被下次 `npm run sync` 覆盖。要改行为，改 `tools/sync_miao.py` 的清单或补丁。
-3. `Cfg` 恒为空配置（网页版没有配置交互层）。评分链路只用到 `Cfg.get('notReleasedData')` 和
-   `Cfg.get('qFace')` 两个布尔开关，`_local/Cfg.js` 复刻了「上游读不到配置文件」的行为。
-4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
-   所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
-5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
-   所以 `src/adapter/materialize.js` 的 `normalizeLevel()` 对 enka 减 1。
-   库里存的是原始值 + 来源，万一推断错了改一个函数就能全量重算，不用重新抓。
-6. **`test/fixtures.mjs` 的词条 key 与 miao 规范不一致**：它把大/小词条写反了
-   （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 应该是 `hpPlus`）。
-   因为 1/2 号位的主词条不参与评分、且胡桃的大小生命权重相同，所以基线数字没受影响，
-   但它不是一份「规范数据」。要扩测试的话建议先把它改规范并重生成基线。
-7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
-   若想版本化，建议单独 `git clone` 一份作为上游源。
-8. **改库结构必须同时加迁移**：`schema.sql` 全是 `CREATE TABLE IF NOT EXISTS`，
-   对**已存在**的表一列也不会加。改完要 +1 `SCHEMA_VERSION` 并在 `db.js` 的 `MIGRATIONS`
-   里补一版 `ALTER`，否则老库会静默不升级、跑起来报「no such column」。
-   缺某一版迁移函数时 `openDb` 会直接抛错拒绝启动（降级处理会静默丢数据）。
-9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
-   写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
-10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
-    （理由见 `docs/data-model.md` §3）。离库打分时 `--offline --check` 会提示做不了。
-11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。
-    不提交的话，它只能告诉你「自上次提交以来没变」，看不出这一轮到底搬了什么。
+## 测试
 
-## 下一步
+```bash
+npm test
+```
 
-1. 把多语言覆盖到**剩余的中文字面**：`classTitle`（胡桃-护摩这类场景名，miao 自己的中文串）、
-   元素名、以及 `docs/` 里的文档。前两个要给 i18n 表再补两类条目。
-2. 页面加图片：角色头像 / 圣遗物图标现在都是用首字和色块替代的，
-   vendor 里没有图，得另找图源或接 enka 的 UI 端点。
-3. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。
+七套，分工不重叠：
+
+| 套 | 项数 | 管什么 |
+|---|---|---|
+| `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
+| `arch` | 21 | 架构契约：别名可解析、依赖只有 lodash、vendor 自包含、云崽全局零残留 |
+| `pipeline` | 58 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、迁移、合并抓取、真实数据 + 面板对拍 |
+| `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
+| `server` | 58 | 真起监听打真 HTTP：路由、静态与素材、错误形状、多语言出口、POST 抓取（用假 enka，不联网） |
+| `regression` | — | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
+| `verify` | — | 端到端评分（输出即基线，可 diff） |
+
+两条约定：
+
+- **测试只 import `src/index.js` 的出口 API，不碰内部路径**。这样 vendor 内部怎么搬、别名怎么解析，
+  对测试都透明 —— 内部重构不必改测试。
+- **`verify.mjs` 的 stdout 就是基线**，断言只在失败时打印、通过时静默：
+
+  ```bash
+  npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt   # 逐字为空才算没跑偏
+  ```
+
+- `test/data/enka-real.json` 是**一份带数值的真实 enka 响应**（只换过 uid/昵称、只留 3 个不同元素的角色，
+  数值一个没动）。合成数据只能测「逻辑对不对」，真实数据才能测「翻没翻错」——
+  面板对拍那条断言就靠它。
+
+**`src/cli/score.js` 不在任何一套自动化测试里** —— 改完请手动跑一遍
+`npm run score -- --uid <uid> --offline`（它挂过一次，而 `npm test` 全绿照样看不见）。
+
+改动前端样式后想验收，用 `tools/probe.mjs` 直读真实 DOM（尺寸 / 折行 / 计算样式），
+别去数截图像素 —— 截到立绘的深色衣服会以为是背景色，会得出错的结论（实测踩过两次）。
+
+## 目录结构
+
+```
+seiten-suikyou/
+├── src/
+│   ├── index.js              # 内核出口：注册元数据 + 原样导出评分模块
+│   ├── store/                # 本地库（SQLite）
+│   │   ├── schema.sql        #   表结构（权威定义）
+│   │   ├── db.js             #   连接 / 结构版本迁移（node:sqlite）
+│   │   └── repo.js           #   读写：合并式 upsert、按 uid 取、文案 key 清单
+│   ├── adapter/              # enka ↔ 本项目 的转换
+│   │   ├── enka.js           #   按 uid 取原始响应（把 HTTP 码翻译成人话）
+│   │   ├── ingest.js         #   原始响应 → 库行（挑字段、带文案 key，不解析属性）
+│   │   ├── materialize.js    #   库行 → miao profile（id → 中文名/对象 + 算面板）
+│   │   └── panel-check.js    #   拿游戏给的面板对拍，验证数据没翻错
+│   ├── view/shape.js         # 视图成型：库行 + 评分结果 → 页面/接口/CLI 共用的对象
+│   ├── i18n/
+│   │   ├── index.js          #   多语言：hash/id → 游戏文案（读 vendor/i18n/names.json）
+│   │   └── ui.js             #   界面文字手写表（按钮/标题/提示，官方表里没有）
+│   ├── cli/score.js          # 命令行评分入口
+│   └── server/
+│       ├── index.js          #   node:http 路由（API + 静态页），零新依赖
+│       └── public/           #   页面：原生 JS，无框架无 CDN
+│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚）
+│           ├── app.js        #     渲染 + 交互（首页网格、明细画布、缩放、i18n）
+│           ├── style.css     #     外壳样式
+│           ├── miao.css      #     评分卡样式（miao 的 profile-detail.css 移植版）
+│           └── assets/       #     图片素材（sync:assets 下载，不进 git）
+├── vendor/
+│   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
+│   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
+├── tools/                    # 同步 / 验收工具（开发期用，不参与运行时）
+│   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
+│   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
+│   ├── sync_assets.py        # 图片素材按需下载（只下库里实际出现的）
+│   ├── list_assets.mjs       # 问应用本人「页面会请求哪些图」，喂给上面那个脚本
+│   ├── probe.mjs             # 在真实页面跑 JS 量布局（改样式后的验收工具）
+│   └── shot.mjs              # headless chrome 截图
+├── test/                     # 见「测试」一节
+├── docs/                     # 设计文档
+│   ├── DESIGN.md             #   总设计（为什么内嵌内核 / 页面与多语言怎么还原 / 工程约束）
+│   ├── DESIGN-DATA-MODEL.md  #   数据层专项：enka → 缓存 → 内核，为什么不设计算中间层
+│   └── reports/              #   同步脚本每次生成的报告（sync-report / i18n-report）
+├── sample/cli-output.txt     # 一次真实运行的完整命令行输出存档
+└── data/                     # 本地库（/data/ 已 gitignore）
+```
+
+## 相关文档
+
+| 想了解 | 看哪 |
+|---|---|
+| 怎么装、怎么跑、接口有哪些 | 本文件 |
+| 为什么内嵌 miao 内核、页面与多语言怎么还原、改动前的硬约束 | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| 数据层设计（存储存 id 不存名字、为什么不设计算中间层） | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
+| 命令行输出长什么样 | [`sample/cli-output.txt`](sample/cli-output.txt) |
+| 上一次同步搬了什么、多语言覆盖率如何 | [`docs/reports/`](docs/reports/) |

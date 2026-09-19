@@ -11,7 +11,7 @@
  *      退回不是「凑合」—— 表里没有的 id 只能这么办，而且中文至少是对的、不是乱码。
  *
  *   2. 圣遗物的名字用**库里存的 hash** 查，不用 miao 给的中文名反查。
- *      name_hash / set_hash 是 enka 白给的官方文案主键（见 docs/data-model.md），
+ *      name_hash / set_hash 是 enka 白给的官方文案主键（见 docs/DESIGN-DATA-MODEL.md），
  *      直接查比拿中文名对字符串稳得多，也不受 miao 改名影响。
  *
  *   3. 词条数值一律用 miao 已格式化好的字符串（`main.value` / `attrs[].value`）。

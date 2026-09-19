@@ -4,7 +4,7 @@
 星天水镜 / seiten-suikyou —— miao 评分内核同步脚本
 
 把 miao-plugin 里评分用得上的源码搬进 vendor/miao/，并只对「云崽机器人专属」
-的依赖做定点处理。每次同步额外产出 docs/sync-report.md，讲清三件事：
+的依赖做定点处理。每次同步额外产出 docs/reports/sync-report.md，讲清三件事：
 同步了哪些数据、改了哪些、相对上一版差在哪。
 
 用法:
@@ -35,7 +35,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 VENDOR = ROOT / "vendor" / "miao"
-REPORT = ROOT / "docs" / "sync-report.md"
+REPORT = ROOT / "docs" / "reports" / "sync-report.md"
 PKG = ROOT / "package.json"
 
 _env = os.environ.get("MIAO_PLUGIN_PATH")
@@ -864,7 +864,7 @@ def main(argv: list[str] | None = None) -> int:
                 "",
                 "## 同步了什么、改了什么",
                 "",
-                "见 `docs/sync-report.md`（完整清单 + 增量 + 改动说明）。",
+                "见 `docs/reports/sync-report.md`（完整清单 + 增量 + 改动说明）。",
                 "逐字节核对用 `git log -p -- vendor/miao`。",
             ]
         ),
@@ -916,7 +916,7 @@ def build_report(
     delta: dict,
     guard: dict,
 ) -> str:
-    """产出 docs/sync-report.md。
+    """产出 docs/reports/sync-report.md。
 
     这份报告要说清四件事：
       1. 同步了什么 —— 按类别列全，并点明哪些文件一个字没动

@@ -1,0 +1,272 @@
+# 星天水镜 · 设计文档
+
+**这篇讲「为什么这么设计」。** 怎么装、怎么跑、命令有哪些、接口长什么样 —— 看根目录
+[`README.md`](../README.md)。
+
+数据层（enka → 缓存 → 内核）的完整论证单独一篇：[`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md)。
+
+---
+
+## 一、内嵌 miao 内核，不重新实现
+
+miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设了一堆只有云崽才提供的运行时：
+全局 `redis`、注入的 `Bot`、`e.runtime.render`（puppeteer 截图）、米游社 Cookie，以及
+`#miao` 这类 package.json imports 别名。
+
+本项目的做法是**把用得到的源码搬进 `vendor/miao/`，只对「确认本项目用不到」的云崽依赖做定点处理**。
+
+三条原则：
+
+1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。505 个文件里 498 个是逐字节复制，
+   只有 7 个定点改写 + 2 个本地生成。
+2. **别名交给 package.json** —— `#miao` / `#miao.models` / `#miao.path` 原样保留在源码里，
+   由本项目 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。
+   **没有任何 import 语句被改写**，IDE 跳转和静态分析照常可用。
+3. **只处理云崽专属** —— 公共依赖用真的，云崽独有的才处理。
+
+### 云崽依赖的处理清单
+
+| 云崽的东西 | 出现在 | 处理方式 |
+|---|---|---|
+| 全局 `redis` | `components/Data.js` 的 4 个缓存方法 | 退化为空实现（评分链路不走缓存） |
+| 全局 `logger` | `components/Data.js` 的 `delFile` | 改 `console.error` |
+| `Common`（渲染）/ `App`（应用） | `components/index.js` | 从入口摘掉（本项目无人引用） |
+| 云崽模型 `User` / `MysApi` / `Player` / `Abyss` … | `models/index.js` | 从入口摘掉，连同顶层副作用 |
+| `Cfg`（用户配置） | 依赖 `cfg/CfgData.js` → 217 行 `cfg_system.js` schema | `components/_local/Cfg.js` 最小实现 |
+| `Version`（宿主版本检测） | 读 `package.json` / `CHANGELOG.md`、辨别 Yunzai V2/V3 | `components/_local/Version.js` 最小实现 |
+| `CharImg`（渲染层） | 写死云崽路径 + 依赖 `image-size` | 整体置空 |
+| `lodash` | 全仓库 46 种方法 | **直接用真依赖**，不替换 |
+| `image-size` | 只有 `CharImg` 用 | CharImg 已置空，故不引入 |
+
+`components/_local/` 下两个文件是本项目手写的（不是上游内容），同步时自动生成。
+`test/arch.mjs` 盯着这条线：`dependencies` 必须**恰好**是 `['lodash']`。
+
+### 搬运范围（为什么是 505 个文件 / 3.5 MB）
+
+除了评分算法与角色元数据，还搬了两样「容易漏掉、漏了就出不了正确分」的东西：
+
+| 搬什么 | 为什么必须要 |
+|---|---|
+| `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则文件里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
+| `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21 MB，评分用不到，全不搬。 |
+
+另外 `src/index.js` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
+对应模型就会静默返回 `false`（我们踩过一次 —— `Weapon.get()` 全返回 null，界面上武器显示「未识别」）。
+
+### 同步产出
+
+| 产物 | 内容 |
+|---|---|
+| `vendor/miao/VENDOR.md` | 来源、上游版本、文件数、处置方式、相对上一版的增量 |
+| `docs/reports/sync-report.md` | **同步了哪些数据 / 相对上一版差在哪 / 改了什么 / 什么没动**。改动用凝练语言说清，不贴 diff —— 要逐行核对走 `git log -p` |
+
+增量不用自己维护一份「文件清单 + 哈希」——`vendor/miao` 本来就是 git 跟踪的，
+git 里逐字存着上一版的内容，「相对上一版多了什么、改了什么」直接问它就行。
+基准取「最后一个动过 `vendor/miao` 的提交」，也就是上一版同步的产物：
+
+```bash
+git diff --name-status <基准提交> -- vendor/miao   # 只看增删改的文件名
+git log -p -- vendor/miao                          # 逐行看改了什么
+```
+
+脚本内部同样走这条路，并且 `git diff`（已跟踪文件的变化）和 `git status --porcelain -uall`
+（未跟踪的新文件 —— 新搬进来的目录在 `git diff` 里是看不见的）两个来源都取，缺一不可。
+
+同步脚本自带四道守卫，任一不过就报错退出：
+
+1. 相对 import 是否落地；2. `#miao*` 别名是否可解析；
+3. 云崽全局变量是否零残留；4. **未知外部依赖**（只允许 lodash 与 Node 内置模块）。
+
+### 相比早期方案
+
+早期用 Node 的 ESM loader hook 在运行时劫持 import 指向外部 miao-plugin 目录。已废弃，因为：
+项目依赖一个外部目录才能跑、边界模糊、IDE 跳转和静态分析全部失效、必须用 `--import` 启动。
+现在**仓库自包含**：`node test/verify.mjs` 直接跑。
+
+---
+
+## 二、数据通路三层，模型建在「存储」不在「计算」
+
+完整设计见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md)。一句话：**存储层存 id，不存名字。**
+
+```
+enka 原始响应
+   │  ① ingest：挑字段、原始 prop id 原样保留、记来源、带走官方文案 key
+   ▼
+② canonical store（本地库，本地化无关）
+   主键全是稳定的数字：uid / avatarId / itemId / propId / TextMapHash
+   │
+   ├─ ③ materialize → miao profile（id → miao 的中文名与真实对象）→ ArtisMark → 分数
+   ├─ ④ localize    → 多语言文案（id → 目标语言）→ 前端
+   └─ ⑤ panel-check → 拿游戏给的面板对拍 ③ 的结果，验证翻对了没有
+```
+
+**为什么不设「enka → 自有数据模型 → 再拼回 miao」的中间层**（三条实证）：
+
+1. **会丢信息** —— 内核的「词条数」是按 `appendPropIdList` 里**同一 key 出现几次**数出来的
+   （`ArtisAttr.js` 的 `tmp[key].upNum++`）。**原样保留每一次 roll** 是硬要求：
+   去重、或改存 enka 聚合好的 `reliquarySubstats`，这个信息就没了。
+2. **数值口径会打架** —— 内核完全不信外部给的属性值，主词条按
+   `attrCfg.value × (1.2 + 0.34 × level) × posEff × starEff` 自己算，副词条按自己的
+   `attrIdMap` 每 roll 值累加。外面先解析一遍不但白做，还可能算歪。
+3. **上游行为就是这样** —— miao 自己的 `models/serv/api/EnkaData.js`（106 行）
+   也只做「挑字段 + 位置映射 + level 减一」，属性解析一律留给内核。
+   这条边界随内核维护，另起一套就丢了同步性。
+
+**为什么要建这层库**（两条）：
+
+1. **enka 一次只给展柜里的角色**（约 8–12 个），玩家有 20–40+ 角色 → 必须跨多次抓取累积。
+   上游自己也这么干：`EnkaApi.updatePlayer` 是 `forEach(avatarInfoList, ...)` + `player._update.push(id)`，
+   并且用响应里的 `ttl` 当缓存时长。所以库里的 `saveFetch` 是**合并式 upsert**，不是覆盖。
+2. **多语言** —— miao **零 i18n 能力**（见 §四），所以任何「显示英文/日文名」的需求都必须自建文案表，
+   而文案表的主键只能是 id。
+
+   好消息是**文案主键不用自己造**：enka 的 `flat` 里直接带着官方的 `nameTextMapHash` /
+   `setNameTextMapHash`（实测 uid 101242308 的响应里有 132 处），那就是官方全语言文案表的主键
+   —— 存下 hash，接上官方 `TextMap` 就一次性拿到全部语言，不需要我们自己翻译。
+   所以这三个 hash 列（`artifact.name_hash` / `artifact.set_hash` / `avatar.weapon_name_hash`）
+   在 ingest 阶段就存下来：enka 白给的东西，丢了要补只能重抓。
+   唯一例外是**角色名**：`avatarInfo` 里只有 `avatarId`，没有 hash，得另配一份静态映射。
+
+**故意不存的东西**：面板属性、分数。面板能从库行重算（且对拍只能对着原始响应做），
+分数则随同步进来的权重表变化 —— 存了也要绑 `miao_version` 才敢用，不如不存。
+
+### 评分链路上两个刻意的选择
+
+- **打完分一定是从库里读回来再算**，而不是拿刚落库的内存数据直接算。多走一趟数据库，
+  才能证明「存进去」和「读出来」是同一个东西。
+- **原始响应可以另存一份**（`--save-raw <dir>`），方便复现问题和以后换解析逻辑时回放。
+
+---
+
+## 三、页面
+
+页面在 `src/server/public/`，原生 JS + `<template>` 克隆，无框架、无 CDN。
+分两个视图，都在同一个 HTML 里切换。首页与明细页都是**照着 miao 的出图还原**的。
+
+### 首页（角色大全）
+
+按总分降序铺成五列网格。每张卡：
+
+- 底色是 miao 的 `common/item/bg{4,5}.png`（游戏里五星橙 / 四星紫那张底），不是自己调的渐变
+- 左上角元素符号、右上角等级胶囊、右下角圣遗物评级（档位配色与 miao 一致）
+- 底部白块：左边武器图标，右边武器名 + `Lv.x · 精x`
+
+所有尺寸用 `cqw`（= 卡片宽度的 1%），配合 `container-type` —— 同一套版式桌面一张卡 90 px、
+手机 63 px，字号和内边距都跟着缩。写死 px 不是桌面太小就是手机溢出。
+
+### 明细页（评分卡）
+
+`miao.css` 是 miao 的 `resources/character/profile-detail.css` **照抄**的移植版，不是凭印象画的。
+
+设计前提：miao 的那张结果图是**一张固定 600 px 宽的画布**。要长得像就不能拆成流式响应式布局
+—— 这里照搬 600 px 画布，再由 `app.js` 用 `zoom` 把整张画布等比缩到屏幕宽度。
+缩下来就是同一张图的缩小版，构图与 miao 出图一致。
+
+结构（照抄上游，不自己发明）：
+
+```
+.basic            立绘（1400×500 左溢出、margin-left:-545px）
+                  右上角浮信息：角色名 / UID-Lv / 天赋 a e q / 8 行属性表
+                  左下角 6 个命座、右下角数据时间
+.arti-mark-cont   左：圣遗物总分 + 评级（按档位配色）；右：有效词条汇总 + 评分规则
+.artis            武器卡 + 5 件圣遗物卡（185px 宽，一格一个）
+```
+
+### 图片素材
+
+`vendor/miao/` 只同步代码与元数据，**不同步二进制图片**（太大）。页面要还原 miao 的评分卡，
+需要三类素材：角色立绘、圣遗物/武器图标、UI 小图。它们落在 `src/server/public/assets/`，
+**不进 git**，按需下载（命令见 README）。
+
+三个设计点：
+
+- **只下库里实际出现的角色和套装**，避免一上来就拖几百 MB。
+- **「页面要什么」由页面自己回答** —— 素材的目录名是**中文**（角色名 / 套装名），而库里存的是数字 id。
+  早先脚本自己拿 id 去几张元数据表反查名字，三张表各有各的缺口，总有零星图片漏下载，页面出现空框。
+  现在改成先用页面同一套 `buildAccountView` 跑一遍、把吐出来的图片 URL 收齐（`tools/list_assets.mjs`），
+  再交给下载脚本 —— 不再依赖任何猜测。
+- 元素符号不在 miao 仓库里（那边只有背景底图，不含符号本身），改从社区素材库 paimon-moe 取。
+- 404 / 缺图不报错，页面回退到 CSS 色块占位。
+
+---
+
+## 四、多语言：为什么是两张表
+
+`src/i18n/` 分两张表，因为它们的**来源和性质完全不同**：
+
+| | `vendor/i18n/names.json` | `src/i18n/ui.js` |
+|---|---|---|
+| 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：读取、抓取、面板属性、命之座… |
+| 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
+| 规模 | 756 个名字组、11931 个 hash | 68 条 × 5 种语言 |
+| 主键 | hash / avatarId / itemId / setId | 英文 key |
+
+**前端一个词条名都不写死** —— 部位名、词条名、套装名、角色名、武器名全是后端按 `locale` 给好的文本；
+连按钮和分组标题都从 `/api/meta` 的 `ui` 表来。加一门语言不用动前端，
+这也是为什么界面文字要单独手写一张表：官方 TextMap 里根本没有「读取」「圣遗物」这种我们自己页面的说法。
+
+**miao 侧零 i18n 能力**：`resources/` 全是中文，角色目录名就是中文（`character/胡桃/`），
+权重表 / 套装缩写 / 武器特判全用中文名当键，全仓库零 `TextMapHash` 使用。
+所以翻译只能挂在我们自己的出口上，内核那边一个字都不能动 —— 动了分数就可能变。
+
+名字表的提取有三个坑，都在脚本注释里记着：
+
+1. **官方把同一段文案复用在几十处** ——「胡桃」有 49 个键、「炽烈的炎之魔女」11 个，
+   enka 返回哪个变体无法预知。所以把所有变体收进**同一个名字组**，任意变体都查得到同一条。
+   同一组在各语言下文案一致（脚本会报冲突，当前 0 处）。
+2. **词条名不能走 hash** —— 走 enka 的 `loc.json`，它的词条区按 `FIGHT_PROP_*` 枚举键控，
+   和 miao 的 `StatType` 一一对应，没有歧义。它的数字 hash 键有 +512 偏移，不能用。
+3. **套装名要拐一道** —— `setId → equipAffixId → EquipAffixExcelConfigData[level=0].nameTextMapHash`。
+
+表不在时**静默降级**成只有中文（`i18n.available()` 返回 false，页面会提示），不会崩。
+每次同步产出 [`reports/i18n-report.md`](reports/i18n-report.md)：各类别条目数、每语言命中率、未收录清单。
+
+---
+
+## 五、工程约束（改代码前先读，逐条都有过教训）
+
+1. **圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
+   主副属性值一律由内核自解。手工构造 profile 时也别自己算属性值。
+2. `vendor/miao/` 与 `vendor/i18n/` 是生成物，手工改动会被下次 `npm run sync` 覆盖。
+   要改行为，改 `tools/sync_miao.py` 的清单或补丁。
+3. `Cfg` 恒为空配置（网页版没有配置交互层）。评分链路只用到 `Cfg.get('notReleasedData')` 和
+   `Cfg.get('qFace')` 两个布尔开关，`_local/Cfg.js` 复刻了「上游读不到配置文件」的行为
+   （返回 `undefined` 而不是默认值 —— 这点是逐字对齐上游的）。
+4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
+   所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
+5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
+   所以 `src/adapter/materialize.js` 的 `normalizeLevel()` 对 enka 减 1。
+   库里存的是原始值 + 来源，万一推断错了改一个函数就能全量重算，不用重新抓。
+6. **`test/fixtures.mjs` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
+   （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 小生命是 `hpPlus`、大生命才是 `hp`；
+   羽毛的主词条同理应是 `atkPlus`）。因为 1/2 号位的主词条不参与评分、且胡桃的大小生命/攻击权重相同，
+   所以基线数字没受影响，但它不是一份「规范数据」。要扩测试建议先改规范并重生成基线。
+7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
+   若想版本化，建议单独 `git clone` 一份作为上游源。
+8. **改库结构必须同时加迁移**：`schema.sql` 全是 `CREATE TABLE IF NOT EXISTS`，
+   对**已存在**的表一列也不会加。改完要 +1 `SCHEMA_VERSION` 并在 `db.js` 的 `MIGRATIONS`
+   里补一版 `ALTER`，否则老库会静默不升级、跑起来报「no such column」。
+   缺某一版迁移函数时 `openDb` 会直接抛错拒绝启动（降级处理会静默丢数据）。
+9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
+   写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
+   `src/server/public/assets/` 同理是故意忽略的（18 MB 二进制，重新下载即可）。
+10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
+    （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。离库打分时 `--offline --check` 会提示做不了。
+11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。
+    不提交的话，它只能告诉你「自上次提交以来没变」，看不出这一轮到底搬了什么。
+12. **CLI 还没有自动化测试** —— 七套测试里没有一套跑 `src/cli/score.js`。
+    它真挂过一次：汇总段用了未定义的 `r`（正确写法是 `for (const r of sorted)`），
+    `npm test` 全绿照样崩，只有真跑命令行才看得见。
+
+---
+
+## 六、下一步
+
+1. **给 CLI 补一套测试**（见 §五 12）。这是目前唯一没有自动化兜底的入口，
+   而它恰好挂过 —— 顺手把 `--list / --keys / --offline / --json / --check` 的输出形状都钉住。
+2. 把多语言覆盖到**剩余的中文字面**：`classTitle`（`胡桃-护摩` 这类场景名，是 miao 自己的中文串）、
+   元素名、以及目前个别还没进表的新武器/角色名（比如「寒息」在英/日文页仍是中文）。
+   前两个要给 i18n 表再补两类条目。
+3. 首页角色卡的进一步还原（排列/密度可调），以及明细页与 miao 出图的逐像素对拍。
+4. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。

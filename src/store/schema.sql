@@ -1,6 +1,6 @@
 -- 星天水镜 本地库结构（SQLite）
 --
--- 设计要点（详见 docs/data-model.md）：
+-- 设计要点（详见 docs/DESIGN-DATA-MODEL.md）：
 --   1. 只存「稳定的数字 id」，不存中文名。名字是渲染结果，中文只是 miao 的一种语言，
 --      存进去就把多语言的门焊死了。
 --   2. 圣遗物只存原始 prop id（main_prop_id / append_prop_ids），
