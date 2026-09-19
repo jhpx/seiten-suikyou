@@ -142,9 +142,11 @@ function renderCharCard (av) {
   card.style.setProperty('--elem', ELEM_COLOR[av.elem] || '#888')
 
   const splash = el('div', 'char-splash')
-  if (av.splash) {
+  /* 首页网格用正面大头照（face，256x256），比整张立绘裁出来更像「选人」界面 */
+  const faceUrl = av.imgs?.face || av.splash
+  if (faceUrl) {
     const img = el('img')
-    img.src = av.splash
+    img.src = faceUrl
     img.alt = ''
     img.loading = 'lazy'
     img.onerror = function () { img.style.display = 'none' }

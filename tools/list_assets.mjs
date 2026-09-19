@@ -37,6 +37,8 @@ for (const uid of uids) {
   const view = buildAccountView({ account: null, rows: avatars, locale: 'chs' })
   for (const av of view.avatars) {
     wanted.add(urlToRel(av.splash))
+    /* 首页角色网格用的正面大头照，和明细页的立绘是两张不同的图 */
+    wanted.add(urlToRel(av.imgs?.face))
     for (const k of ['a', 'e', 'q', 'cons1', 'cons2', 'cons3', 'cons4', 'cons5', 'cons6']) {
       wanted.add(urlToRel(av.imgs?.[k]))
     }
