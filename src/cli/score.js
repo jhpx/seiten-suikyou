@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, i18n } from '../index.js'
-import { fmtTime, panelText, slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
+import { attrValueText, fmtTime, panelText, slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
 import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { ingestPayload } from '../adapter/ingest.js'
@@ -96,12 +96,12 @@ function renderCharacter (row, profile, result, locale) {
     const aname = (dbRow?.name_hash && i18n.name(dbRow.name_hash, locale)) || a.name
     out.push(`  ${idx} ${slotLabel(idx, locale)}  ${padW(aname, 14)} ★5 Lv.${pad(a.level ?? 0, 2)}   ${pad(a.mark, 6)}  ${a.markClass}`)
     if (a.main && a.main.value !== undefined) {
-      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${a.main.value}`)
+      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${attrValueText(a.main.key, a.main.value)}`)
     }
     const subs = (a.attrs || []).filter(x => x.key)
     if (subs.length) {
       out.push(`       ${U('substat')}  ` + subs.map(x =>
-        `${statLabel(x.key, locale)} ${x.value}${x.upNum > 1 ? `×${x.upNum}` : ''}`
+        `${statLabel(x.key, locale)} ${attrValueText(x.key, x.value)}${x.upNum > 1 ? `×${x.upNum}` : ''}`
       ).join('  '))
     }
   }

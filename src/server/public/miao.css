@@ -604,7 +604,17 @@
   white-space: nowrap;
   overflow: hidden;
 }
-.artis .head span.mark { font-size: 14px; font-weight: bold; }
+/* 分项得分与评级（「35.3分 - SS」）。上游是 14px，这里放到 16px。
+   为什么停在 16 不多要一点 —— 拿真实页面扫过 14/15/16/17/18/20 六个值：
+   14~16 的 head 高（63.4）、卡片高（193.4）、mark 底 → 词条表顶的空档（6.4）**三个数一模一样**，
+   也就是这两行文字的**行盒高度没被字体顶开**（这一行的高度由继承来的 line-height 兜着），
+   16px 是「一点不花版式预算就能拿到的最大字号」；到 17px 行盒才开始撑开，
+   head 63.4→64.8、卡片 193.4→194.8，整页会跟着长高。所以 16 是白捡的上限。
+   宽度也不是约束：16px 下最宽的「42.9分 - SSS」墨迹 95.6px，
+   而 .head 内宽 160px（卡 185 − padding 15/10），还差 64px 才碰到右边界。
+   ⚠️ 别把这条和上面的 span.mark 的 z-index 规则合并：那条管「字盖图」的层级，
+   这条管字号，合并后调字号会连带动层级（踩过一次就分着放）。 */
+.artis .head span.mark { font-size: 16px; font-weight: bold; }
 
 /* 档位配色：红 / 黄 / 紫（照 miao 的 .mark-*） */
 .mark-ACE, .mark-MAX { color: #e85656; font-weight: bold; }
@@ -698,30 +708,38 @@
   border-radius: 5px;
   background: rgba(0, 0, 0, .5);
 }
-/* 强化命中次数 —— 圆形圈号（数字本身由 app.js 写进元素里）。
+/* 强化命中次数 —— 实心圆 + 镂空数字（数字从圆里抠掉，露出词条行的底色）。
    为什么不是上游那套箭头：miao 画的是 up-num-icon0/1/2 三张雪碧图，
    一行 » 的个数就是命中次数，看的人得先数箭头；游戏 5.3 起给圣遗物加了
-   「强化次数标记」，用的就是 ①② 这种圈号 —— 一个数字，一眼看清。
-   位置沿用原来那条带子：left:91 是「标签起点 30 + 标签带宽 61」，所以版式一点没动，
-   圈号只是从原来的 29px（箭头的可见范围）缩到 14px，右侧多出来的空白不吃谁的格子。
-   颜色不写死：great/useful/nouse 三档的配色都落在 span.title 上，color:inherit 直接接住
-   （别省这句 —— .artis ul.detail li span 那条通用规则给的是 #fff，
-   但 i 不是 span，本来也命中不了，这里只是把「跟着行色走」写明白）。
-   圈用 inset 阴影画、不用 border：14px 的圆套 1px border，内径只剩 12px，
-   10px 的字会顶到圈上；inset 阴影不进盒模型，宽度说 14px 就是 14px。 */
+   「强化次数标记」，就是「实心圆里一个镂空的数字」—— 一个数字，一眼看清。
+   位置沿用原来那条带子：left:91 是「标签起点 30 + 标签带宽 61」，所以版式一点没动。
+   圆和数字都在 app.js 的 hitMark() 造的那只 <svg> 里：
+     圆走 fill="currentColor" —— 三档配色（great 金 / useful 白 / nouse 灰）都落在 span.title 上，
+     这样下面那两条配色规则不用为它再写一遍；
+     color:inherit 就是给这个 currentColor 兜底的（i 本来就能继承到，写出来是让这份依赖看得见）。
+     数字必须镂空而不是填色：行的底色是「模糊的圣遗物图 + 半透明黑」叠出来的，
+     填哪个固定颜色都会露馅；所以只能走 SVG 的 mask，理由写在 app.js 那段注释里。
+   这里只给字体和尺寸 —— CSS 管不了字形做蒙版这件事。 */
 .artis ul.detail li span.title i.up-num {
   position: absolute;
   left: 91px; top: 6px;
   display: block;
   width: 14px; height: 14px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, .45);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3);
-  font-style: normal;
-  font-size: 10px;
-  line-height: 14px;
-  text-align: center;
   color: inherit;
+  /* 必须显式关掉斜体：<i> 天生 italic，而 SVG 的 <text> 照样吃 CSS 继承 ——
+     今天这套字体（Number/PingFang SC）没有斜体字面、浏览器也没给它做倾斜补偿，
+     所以看着是正的；换台机器换个字体就会歪着抠出来。原来的 » 角标是位图，没这个问题。 */
+  font-style: normal;
+}
+.artis ul.detail li span.title i.up-num svg {
+  display: block;
+  width: 100%; height: 100%;
+}
+/* 14px 的圆里放 10px 粗体：数字的笔画约 1.4px，抠出来是一条清楚的缝；
+   再小（9px 常规体）镂空就只剩断续的点，看不出是什么数。 */
+.artis ul.detail li span.title i.up-num text {
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* 三档配色：黄=有效且权重大(≥80)、白=有用、灰=无效。

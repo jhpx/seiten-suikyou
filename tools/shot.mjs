@@ -35,6 +35,15 @@ if (!fs.existsSync(SHELL)) {
 }
 fs.mkdirSync(path.dirname(out), { recursive: true })
 
+/* stdin 必须是 'ignore'，不能让它走默认的 pipe。
+   2026-09-25 踩到：`spawnSync` 只写 { encoding, timeout } 时三个流都默认 pipe，
+   于是每次调用**立刻**返回 `status=null` + `EBUSY`（libuv 报 EBUSY，对应 Windows 的
+   共享冲突），连 chrome 都没起来，而脚本原来不打 r.error，只打 status，所以看着像
+   「截图脚本坏了」而没有任何线索。同一时刻同一个 exe 用 Python 的 subprocess 调却是好的，
+   probe.mjs 也一直是好的 —— 差别就在 probe 用的是 stdio:'ignore'。
+   逐个试过：['ignore','pipe','pipe'] ✔ / [0,1,2] 继承 ✔ / ['ignore', f, f] 落文件 ✔ /
+   三个都 pipe ✘。所以只有 stdin 那条管道是雷。
+   stdout/stderr 保留管道：这脚本靠 stderr 报 chrome 的错（截图失败时是唯一线索）。 */
 const r = spawnSync(SHELL, [
   '--disable-gpu',
   '--no-sandbox',
@@ -45,9 +54,10 @@ const r = spawnSync(SHELL, [
   `--screenshot=${out}`,
   '--virtual-time-budget=8000',
   url
-], { encoding: 'utf8', timeout: 60000 })
+], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] })
 
 console.log('status=', r.status)
+if (r.error) console.log('error:', r.error.code, r.error.message)
 if (r.stderr) console.log('stderr:', r.stderr.slice(0, 500))
 console.log('out=', out, 'exists=', fs.existsSync(out), fs.existsSync(out) ? fs.statSync(out).size : '')
 fs.rmSync(prof, { recursive: true, force: true })

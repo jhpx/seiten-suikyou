@@ -10,6 +10,8 @@
  *      比拿中文名对字符串稳，也不受 miao 改名影响。
  *   3. 词条数值一律用 miao 格式化好的字符串（`main.value` / `attrs[].value`）——
  *      自己重算就可能和内核不一致，那条「逐字一致」的底线不能破。只有面板（attr）是裸数字。
+ *      唯一的例外是整数词条（精通 / 小攻击 / 小生命 / 小防御）：miao 给 1 位小数，游戏显整数，
+ *      到出口按 attrValueText 收整 —— 为什么不算「重算」，看那个函数的注释。
  */
 import { ArtisMark, Artifact, Format, i18n, Weapon } from '../index.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
@@ -54,6 +56,27 @@ function shortLabel (key, locale) {
 /* 词条 key → 本地化标题。查不到退回 miao 中文标题，再退回 key 本身。 */
 export function statLabel (key, locale) {
   return i18n.statName(key, locale) || KEY_TITLE[key] || key
+}
+
+/*
+ * 词条数值 → 给人看的串。
+ *
+ * miao 的 ArtisMark.formatArti 对每条词条一律 `Format.comma(val, 1)`，于是元素精通 /
+ * 小攻击 / 小生命 / 小防御（含生之花、死之羽那两个固定值主词条）到了页面就成了
+ * 「209.1」「16.3」「13.6」这种**游戏里根本不存在的值** —— 游戏这四类一律显整数，
+ * 它的强化档位本来就是整数累加出来的。
+ *
+ * 所以到出口把它们收回整数：数值还是 miao 给的那个数，这里只改「怎么显示」，
+ * 没重算、没碰内核，评分（mark）链路一个字没动。
+ * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num * 1).toFixed(fix)`，
+ *    Number('1,015.8') 是 NaN，会原样吐出 'NaN'。先剥逗号再进。
+ */
+const INT_ATTR_KEYS = new Set(['mastery', 'atkPlus', 'defPlus', 'hpPlus'])
+
+export function attrValueText (key, value) {
+  if (value == null || value === '') return value
+  if (!INT_ATTR_KEYS.has(key)) return value      /* 百分比词条原样透传 */
+  return Format.comma(Number(String(value).replace(/,/g, '')), 0)
 }
 
 /* 圣遗物位置：1 花 2 羽 3 沙 4 杯 5 冠 */
@@ -184,7 +207,7 @@ function artifactOf (pos, marked, dbRow, locale) {
     .map(x => ({
       key: x.key,
       label: artiLabel(x.key, locale),
-      value: x.value,
+      value: attrValueText(x.key, x.value),
       upNum: x.upNum || 0,
       /* 词条有效率：miao 算好的百分比串，'-' 表示没算（非有效词条） */
       eff: x.eff ?? '-',
@@ -213,7 +236,7 @@ function artifactOf (pos, marked, dbRow, locale) {
       ? {
           key: marked.main.key,
           label: artiLabel(marked.main.key, locale),
-          value: marked.main.value,
+          value: attrValueText(marked.main.key, marked.main.value),
           _mark: marked.main._mark ?? null,
           point: statPoint(marked.main._mark)
         }
@@ -254,7 +277,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     return {
       key: a.key,
       label: shortLabel(a.key, loc),
-      value: a.value,
+      value: attrValueText(a.key, a.value),
       upNum: a.upNum || 0,
       eff: a.eff ?? '-',
       cls: weightClass(cw[a.key] || 0)
@@ -283,9 +306,9 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     const wCalc = wObj.calcAttr?.(profile.weapon.level, profile.weapon.promote) || {}
     if (wCalc.atkBase) weaponAttrs.atkBase = Format.comma(wCalc.atkBase, 1)
     if (wCalc.attr?.key) {
-      /* 精通是整数，其余是百分比 —— 和上游 keyType 那张表一致 */
+      /* 精通显整数（和游戏、和上面 attrValueText 一个口径），其余是百分比 */
       weaponAttrs[wCalc.attr.key] = wCalc.attr.key === 'mastery'
-        ? Format.comma(wCalc.attr.value, 1)
+        ? Format.comma(wCalc.attr.value, 0)
         : Format.pct(wCalc.attr.value, 1)
     }
     weaponDesc = wObj.getAffixDesc?.(profile.weapon.affix)?.desc || ''

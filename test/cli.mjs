@@ -35,10 +35,15 @@ const DB = path.join(dir, 'cli.db')
 const EMPTY_DB = path.join(dir, 'empty.db')
 const rmDb = (f) => { for (const s of ['', '-wal', '-shm']) fs.rmSync(f + s, { force: true }) }
 
-/* 跑一次 CLI。不给 shell —— 参数里的中文/引号原样传过去，免得被 shell 再解释一道。 */
+/* 跑一次 CLI。不给 shell —— 参数里的中文/引号原样传过去，免得被 shell 再解释一道。
+   stdin 必须 ignore：写 { encoding } 时三个流默认全是 pipe，而这台机器上
+   **spawnSync + 管道 stdin 会让子进程根本起不来**（r.status=null、r.error.code='EBUSY'、
+   stderr 全空），于是整套 cli 测试齐刷刷报 `code=null` —— 与被测代码无关，
+   看着却像 CLI 全崩了。CLI 从不读 stdin，ignore 掉既修好这里也不改变被测行为。
+   （同一个坑也踩在 tools/shot.mjs 上，那边写得更细。） */
 function cli (...args) {
   const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, ...args],
-    { encoding: 'utf8', env: { ...process.env } })
+    { encoding: 'utf8', env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] })
   return { code: r.status, out: r.stdout || '', err: r.stderr || '' }
 }
 

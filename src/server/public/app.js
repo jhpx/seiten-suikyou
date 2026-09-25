@@ -452,6 +452,49 @@ function fitDetailZoom () {
 }
 window.addEventListener('resize', fitDetailZoom)
 
+/* 强化命中次数的标记：实心圆 + 镂空数字（数字从圆里抠掉，露出词条行的底色），
+ * 对齐游戏 5.3 的「强化次数标记」（米游社那篇教学里叫「强化命中次数」）。
+ *
+ * 为什么只能用 SVG 的 <mask> 抠：
+ *   CSS 的 mask 只能拿渐变/图片/路径当蒙版，**没法拿字形当蒙版**；
+ *   而想在 CSS 里硬做镂空，就只剩「拿一个不透明色去填数字」这条路 ——
+ *   可这一行的底色是「模糊的圣遗物图 + 半透明黑」叠出来的
+ *   （ul.detail 带 backdrop-filter，行本身还是 rgba(0,0,0,.4) 这种半透明），
+ *   填任何固定颜色都能看出一个色块。SVG 的 mask 抠出来的是真 alpha，行底下是什么就露什么。
+ *
+ * 数字写进 <mask> 里的 <text>、不给 <i> 加文本节点：
+ *   两者会画在同一层，文本节点会顺着镂空的口子露出来（等于没镂空）；
+ *   放进 mask 就只当蒙版用。它仍算 <i> 的后代，textContent 照样读得到那个数字。
+ */
+let hitMaskSeq = 0
+function hitMark (n) {
+  const NS = 'http://www.w3.org/2000/svg'
+  const mk = (tag) => document.createElementNS(NS, tag)
+  const attr = (node, kv) => { for (const [k, v] of Object.entries(kv)) node.setAttribute(k, v); return node }
+
+  const mask = mk('mask')
+  /* url(#id) 是全文档查的，同页几十个圈号不能重名 —— 用自增序号，一次页面加载内不会撞 */
+  mask.id = 'up-hit-' + (++hitMaskSeq)
+  /* 蒙版按亮度取：白整块留着（＝圆），黑的地方抠掉（＝数字） */
+  mask.append(attr(mk('rect'), { width: 14, height: 14, fill: '#fff' }))
+  /* x 用 7（圆心）当起点、再按实测校：
+     text-anchor 居中的是「字的宽度（advance）」而不是「墨迹」，这套字体（微软雅黑 Bold）
+     的数字墨迹偏左，实测 x=6 时墨迹中心落在 6.0、圆心在 7.0 —— 所以取 7。
+     y=10.6 是让数字墨迹的竖直中心压着圆心的基线位置（实测偏移 +0.0）。
+     两个数都是截图像素量出来的，不是估的；换字体要重量。 */
+  const digit = attr(mk('text'), { x: 7, y: 10.6, 'text-anchor': 'middle', fill: '#000' })
+  digit.textContent = String(n)
+  mask.append(digit)
+
+  const defs = mk('defs')
+  defs.append(mask)
+  /* 圆用 currentColor：跟着 span.title 的三档配色走，CSS 里不用再为它配一遍颜色 */
+  const disc = attr(mk('circle'), { cx: 7, cy: 7, r: 7, fill: 'currentColor', mask: `url(#${mask.id})` })
+  const svg = attr(mk('svg'), { viewBox: '0 0 14 14' })
+  svg.append(defs, disc)
+  return svg
+}
+
 /* 一件圣遗物：条目结构照抄 miao 的 .item.arti（右上图标 / 头 / 词条表）
  *
  * 词条名外面多包了一层 .label（miao 没有），为的是让过长的标签被省略号收在自己格里：
@@ -499,14 +542,18 @@ function renderArtiCard (a, cw = {}) {
   for (const s of a.subs) {
     const li = el('li', weightClass(Number(cw[s.key] ?? 0)))
     const lab = el('span', 'title')
-    /* eff = 词条有效率；up-num = 强化命中了几次，游戏 5.3 起用 ①② 那种圈号标它（见 CSS） */
+    /* eff = 词条有效率；up-num = 强化命中了几次，实心圆+镂空数字（见 hitMark 与 CSS） */
     if (s.eff && s.eff !== '-') lab.append(el('i', 'eff', s.eff))
     /* 命中次数 = upNum - 1：upNum 是这条「出过几次」，含初始那一次，而初始那次不算强化命中，
        所以滚过两回的词条是 1 次命中、滚过三回的是 2 次（和游戏里数出来的一样）。
        上限 5：五星一共 5 次强化，全砸在同一条上也只可能是 5 次。
        0 次命中的不画 —— 和游戏一样留空，也顺带省掉一排没信息的 ⓪。 */
     const hit = Math.min(5, (s.upNum || 0) - 1)
-    if (hit > 0) lab.append(el('i', 'up-num', String(hit)))
+    if (hit > 0) {
+      const um = el('i', 'up-num')
+      um.append(hitMark(hit))   /* append 返回 undefined，不能连在 el(...) 后面往 lab 里塞 */
+      lab.append(um)
+    }
     lab.append(el('span', 'label', s.label))
     li.append(lab, el('span', 'val', '+' + s.value))
     ul.append(li)
