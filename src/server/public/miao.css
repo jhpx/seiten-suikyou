@@ -650,7 +650,7 @@
    只要有一行这么长，整张表就被撑到 222px（卡只有 185），
    于是**每一行**的数值都右移到 185 之外，压在隔壁卡的字上（实测溢出 21~37px）。
    裁在这一层、不裁 .title：同一个 .title 里还有绝对定位的有效率角标 i.eff
-   （left:3）和强化次数小图标 i.up-num（left:91），
+   （left:3）和强化命中圈号 i.up-num（left:91），
    它们比标签列还宽，加在 .title 上的 overflow:hidden 会把它们整块裁掉。
    80px 够中文最长的 4 字标签（充能效率/元素精通/暴击伤害/治疗加成/雷伤加成，
    56px），英文放不下就省略号 —— 宁可自己短，也不许溢出去压别人。
@@ -668,15 +668,15 @@
      就全变白字了（像素对拍逮到的）。 */
   color: inherit;
 }
-/* 紧跟在 » 强化次数角标后面的那条标签，要让出角标那条带子。
-   角标是绝对定位、left:91（上游原值），标签从 30（.title 的 padding-left）起，
+/* 紧跟在强化命中圈号后面的那条标签，要让出圈号那条带子。
+   圈号是绝对定位、left:91（上游 » 角标的位置，照搬没动），标签从 30（.title 的 padding-left）起，
    所以这一行的标签只有 61px。中文最长 56px，本来就够、仍然留 5px 空档（和上游一致）；
    「CRIT Rate」(64.7px) / 「Elemental Mastery」(124px) 这类超出的才被收成省略号，
-   省略号正好停在 91 —— 角标左边。
-   为什么不干脆全局收到 61：没有角标的行（upNum=1）本来就有 80px 可用，
-   把 CRIT Rate/CRIT DMG 一起砍掉纯属白砍；角标才是抢地方的那个，让它赢在它出现的行。
+   省略号正好停在 91 —— 圈号左边。
+   为什么不干脆全局收到 61：没有圈号的行（命中 0 次）本来就有 80px 可用，
+   把 CRIT Rate/CRIT DMG 一起砍掉纯属白砍；圈号才是抢地方的那个，让它赢在它出现的行。
    用相邻兄弟选择器而不是给 .title 加类：DOM 里 .label 就是 i.up-num 的下一个兄弟，
-   这条规则自己就能表达「跟在角标后面」，JS 不用承担版式知识。 */
+   这条规则自己就能表达「跟在圈号后面」，JS 不用承担版式知识。 */
 .artis ul.detail li span.title > i.up-num + span.label {
   max-width: 61px;
 }
@@ -698,28 +698,36 @@
   border-radius: 5px;
   background: rgba(0, 0, 0, .5);
 }
-/* 强化次数小图标（up-num-icon1/2/0，按 great/useful/nouse 换色） */
+/* 强化命中次数 —— 圆形圈号（数字本身由 app.js 写进元素里）。
+   为什么不是上游那套箭头：miao 画的是 up-num-icon0/1/2 三张雪碧图，
+   一行 » 的个数就是命中次数，看的人得先数箭头；游戏 5.3 起给圣遗物加了
+   「强化次数标记」，用的就是 ①② 这种圈号 —— 一个数字，一眼看清。
+   位置沿用原来那条带子：left:91 是「标签起点 30 + 标签带宽 61」，所以版式一点没动，
+   圈号只是从原来的 29px（箭头的可见范围）缩到 14px，右侧多出来的空白不吃谁的格子。
+   颜色不写死：great/useful/nouse 三档的配色都落在 span.title 上，color:inherit 直接接住
+   （别省这句 —— .artis ul.detail li span 那条通用规则给的是 #fff，
+   但 i 不是 span，本来也命中不了，这里只是把「跟着行色走」写明白）。
+   圈用 inset 阴影画、不用 border：14px 的圆套 1px border，内径只剩 12px，
+   10px 的字会顶到圈上；inset 阴影不进盒模型，宽度说 14px 就是 14px。 */
 .artis ul.detail li span.title i.up-num {
   position: absolute;
-  left: 91px; top: 9px;
+  left: 91px; top: 6px;
   display: block;
-  width: 50px; height: 8px;
-  background-image: url("/assets/character/imgs/up-num-icon1.png");
-  background-repeat: no-repeat;
-  background-size: auto 500%;
-  background-position: 0 0;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3);
+  font-style: normal;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: inherit;
 }
-.artis ul.detail li span.title i.up-num.up-2 { background-position: 0 -32px; }
-.artis ul.detail li span.title i.up-num.up-3 { background-position: 0 -24px; }
-.artis ul.detail li span.title i.up-num.up-4 { background-position: 0 -16px; }
-.artis ul.detail li span.title i.up-num.up-5 { background-position: 0 -8px; }
-.artis ul.detail li span.title i.up-num.up-1 { background: none !important; }
 
-/* 三档配色：黄=有效且权重大(≥80)、白=有用、灰=无效 */
+/* 三档配色：黄=有效且权重大(≥80)、白=有用、灰=无效。
+   圈号跟着走 span.title 的颜色，所以这两条不用再为它单独配一份。 */
 .artis ul.detail li.great span.title { color: #ffe699; }
-.artis ul.detail li.great span.title i.up-num { background-image: url("/assets/character/imgs/up-num-icon2.png"); background-size: auto 500%; }
 .artis ul.detail li.nouse span { color: #888; }
-.artis ul.detail li.nouse span.title i.up-num { background-image: url("/assets/character/imgs/up-num-icon0.png"); background-size: auto 500%; }
 
 /* 主词条行：加粗、深底 */
 .artis ul.detail li.arti-main {

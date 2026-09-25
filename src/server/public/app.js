@@ -458,7 +458,7 @@ window.addEventListener('resize', fitDetailZoom)
  * 表格列宽是按「所有行里最宽的那个单元格」算的，英文标签最长 18 字
  * （Physical DMG Bonus / Elemental Mastery / Electro DMG Bonus），
  * 一行这么长就把整张表撑到 222px（卡只有 185），于是每一行的数值都右移到隔壁卡片上。
- * 详见 miao.css 的 .label 规则（含「跟在 » 角标后的标签只能有 61px」那条）。 */
+ * 详见 miao.css 的 .label 规则（含「跟在强化命中圈号后的标签只能有 61px」那条）。 */
 function renderArtiCard (a, cw = {}) {
   if (a.empty) {
     const c = el('div', 'item arti empty')
@@ -499,9 +499,14 @@ function renderArtiCard (a, cw = {}) {
   for (const s of a.subs) {
     const li = el('li', weightClass(Number(cw[s.key] ?? 0)))
     const lab = el('span', 'title')
-    /* eff = 词条有效率，up-num = 这条滚了几次的小图标（按三档换色，见 CSS） */
+    /* eff = 词条有效率；up-num = 强化命中了几次，游戏 5.3 起用 ①② 那种圈号标它（见 CSS） */
     if (s.eff && s.eff !== '-') lab.append(el('i', 'eff', s.eff))
-    if (s.upNum > 1) lab.append(el('i', 'up-num up-' + Math.min(5, s.upNum)))
+    /* 命中次数 = upNum - 1：upNum 是这条「出过几次」，含初始那一次，而初始那次不算强化命中，
+       所以滚过两回的词条是 1 次命中、滚过三回的是 2 次（和游戏里数出来的一样）。
+       上限 5：五星一共 5 次强化，全砸在同一条上也只可能是 5 次。
+       0 次命中的不画 —— 和游戏一样留空，也顺带省掉一排没信息的 ⓪。 */
+    const hit = Math.min(5, (s.upNum || 0) - 1)
+    if (hit > 0) lab.append(el('i', 'up-num', String(hit)))
     lab.append(el('span', 'label', s.label))
     li.append(lab, el('span', 'val', '+' + s.value))
     ul.append(li)
