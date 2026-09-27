@@ -7,7 +7,17 @@
   --ink: #f0f2f7;
   --ink-2: #b8bfcc;
   --ink-3: #6f7a8e;
-  --accent: #5b8cff;
+  /* 原神金 —— 顶栏控件用。三个色都不是新调的：
+       #d3bc8e 是 miao 的描边金（miao.css:158 的 box-shadow）、
+       #ffe699 是 SS/SSS 档位色（--rank-sss）、#f6ecd2 是卡片右下角评分那层米白。
+     顶栏要「和下侧搭」，就得从下侧已经在用的色里取 —— 另起一套必然搭不上。
+     这里原来放的是 #5b8cff 蓝（--accent），只服务顶栏三处、跟下面一处都不沾，这次一起退场。 */
+  --gold: #d3bc8e;
+  --gold-lt: #ffe699;
+  --cream: #f6ecd2;
+  --gold-line: rgba(211, 188, 142, .32);
+  --gold-line-hi: rgba(211, 188, 142, .72);
+  --ctrl-bg: rgba(22, 26, 36, .82);
   --radius: 14px;
   --radius-sm: 10px;
   --app-width: 520px;
@@ -50,55 +60,169 @@ body {
   z-index: 100;
   background: rgba(10, 12, 16, .92);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
   padding: 10px 14px;
+  /* 底边那条线由原来的实心灰蓝 border 换成下面的金线；
+     sticky + z-index 已经建了包含块，::after 才定得住 */
+}
+/* 底边金线：两头淡、中间实。和明细页卡片描边、评级胶囊是同一支金色，
+   比一条从左边灌到右边的实线更像游戏里的分隔条。 */
+.top::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    transparent, var(--gold-line) 16%, var(--gold-line) 84%, transparent);
 }
 
-.brand { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.brand { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+/* ✦ 那颗方章原来是紫蓝渐变 —— 全站唯一的紫蓝色块，下面全是金/米白/星级底，看着像别处抠来的。
+   改成金色浮雕：外渐变 + 内侧顶边高光 + 一圈暖投影，深棕字压在金上（白字在这块金上只有约 1.6:1）。 */
 .brand .mark {
-  width: 28px; height: 28px; border-radius: 8px;
-  background: linear-gradient(135deg, #5b8cff, #8f5cff);
+  width: 30px; height: 30px; border-radius: 9px;
+  background: linear-gradient(150deg, #f7e6bb, #d9bd83 55%, #b6934f);
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; color: #fff;
+  font-size: 15px; color: #33291a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 2px 10px rgba(211, 188, 142, .28);
 }
-.brand h1 { margin: 0; font-size: 17px; letter-spacing: 1px; }
-.brand p { margin: 0; font-size: 11px; color: var(--ink-3); }
+.brand h1 { margin: 0; font-size: 17px; letter-spacing: 2px; color: var(--cream); }
+.brand p { margin: 0; font-size: 11px; color: var(--ink-3); letter-spacing: .04em; }
 
 .query {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  /* 1fr → minmax(0, 1fr)：轨道才压得下去。input 的固有宽度按 size 属性算（约 20 字符），
+     光写 1fr 时它撑住的是 min-content 而不是 0 —— 360px 窄屏下新按钮宽了一点，整行就会被顶出去。 */
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: end;
 }
-.field { display: flex; flex-direction: column; gap: 2px; }
-.field span { font-size: 11px; color: var(--ink-3); }
+.field { display: flex; flex-direction: column; gap: 3px; }
+/* 标签改用金调暗版（游戏里属性名那种金色小字）+ 拉开字距，不用灰蓝 --ink-3 ——
+   那个灰蓝和顶栏原来那套是一伙的，下面一处都没有。
+   line-height 写死 13.5px 不是随手取的：11px 字继承下来的 1.5 倍是 16.5px，
+   再加 gap 与定高 36px 的输入框，整个 query 行会比改前高 1.3px ——
+   而 .top 是 sticky（**照常占正常流**），这 1.3px 会推着下面全部内容下移，
+   像素对拍时整页都脏。13.5 + 2 + 36 = 51.5，正好是改前那一行的高度。 */
+.field span { font-size: 11px; line-height: 13.5px; color: rgba(211, 188, 142, .75); letter-spacing: .14em; }
+/* 输入框与下拉统一 36px 定高（原来 input 31 / select 33，同一行底对齐后两个标签差 2px、
+   顶边也差 2px；定高 + 垂直居中之后严丝合缝）。垂直 padding 归零，全交给 height。 */
 .field input, .field select {
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  border-radius: 8px;
-  padding: 7px 10px;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--gold-line);
+  color: var(--cream);
+  border-radius: 10px;
   font-size: 13px;
   outline: none;
   width: 100%;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45);
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
-.field input:focus, .field select:focus { border-color: var(--accent); }
+/* placeholder 是提示不是内容：压到约 3.9:1，够看但不跟真值抢 */
+.field input::placeholder { color: rgba(240, 236, 225, .45); }
+.field input:hover, .field select:hover { border-color: rgba(211, 188, 142, .5); }
+/* focus 走一圈金晕。原来描的是 --accent 蓝边，蓝在这套配色里已经退场了 */
+.field input:focus, .field select:focus {
+  border-color: var(--gold-line-hi);
+  background: rgba(30, 35, 47, .95);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45), 0 0 0 3px rgba(211, 188, 142, .13);
+}
+/* 原生下拉箭头在深底上是灰的、还紧贴右边缘。换成内联的金色细箭头（data URI，不新引文件），
+   并让出 padding-right，免得选中的文字压到箭头上。 */
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23d3bc8e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+/* 展开后的列表由系统画，不写这条在 Windows/Chrome 上就是一片刺眼的白 */
+.field select option { background: #1a1f2b; color: #e7e0d0; }
 
+/* 按钮：从「灰蓝平板」换成游戏那套「深色玻璃 + 金描边 + 微浮雕」。三层全是 CSS，不引图：
+     ① 上下渐变当玻璃面；② inset 白线当顶边高光 —— 浮雕感全靠它，删了就塌回平板；
+     ③ hover 时外扩一圈金晕。字距 .08em 是给中文按钮的：两个字太短，不拉开还是「网页按钮」。
+   36px 定高与同一行的输入框/下拉严格等高（原来是 37 vs 31，底对齐后顶边差 6px）。 */
 .btn {
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  border-radius: 8px;
-  padding: 8px 12px;
+  height: 36px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(58, 64, 82, .92), rgba(34, 39, 52, .92));
+  border: 1px solid var(--gold-line);
+  color: #e7e0d0;
+  border-radius: 10px;
   font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .08em;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 2px 6px rgba(0, 0, 0, .35);
+  transition: border-color .16s ease, color .16s ease, box-shadow .16s ease,
+              background .16s ease, transform .1s ease;
 }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: #2b5cff; border-color: #2b5cff; color: #fff; }
-.btn.primary:hover { background: #3a6bff; }
-.btn:disabled { opacity: .5; cursor: default; }
-.btn.back { background: transparent; border: none; padding: 0; font-size: 14px; color: var(--ink-2); }
+.btn:hover {
+  border-color: var(--gold-line-hi);
+  color: var(--gold-lt);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 2px 10px rgba(0, 0, 0, .4),
+              0 0 12px rgba(211, 188, 142, .18);
+}
+.btn:active { transform: translateY(1px); }
+/* 键盘走到按钮上要看得见；鼠标点不算，所以用 :focus-visible 而不是 :focus */
+.btn:focus-visible { outline: 2px solid rgba(211, 188, 142, .55); outline-offset: 2px; }
+
+/* 主按钮（读取）= 金色实心，和卡片上的「精1」金、评级金同族。
+   字用深棕：白字压在这块金上只有约 1.6:1，深棕 #3a3020 是 8.3:1，过 AA。 */
+.btn.primary {
+  background: linear-gradient(180deg, #ffeec2, #e6cd92 52%, #d2b476);
+  border-color: #f2e0b4;
+  color: #3a3020;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65), 0 2px 12px rgba(211, 188, 142, .3);
+}
+.btn.primary:hover {
+  background: linear-gradient(180deg, #fff6d8, #eed9a4 52%, #dcc08a);
+  color: #2f2718;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 2px 16px rgba(211, 188, 142, .42);
+}
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+/* 禁用时把 hover 那套金晕压掉（:disabled:hover 的权重压不住 .btn.primary:hover，得单独写） */
+.btn:disabled:hover {
+  border-color: var(--gold-line); color: #e7e0d0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 2px 6px rgba(0, 0, 0, .35);
+}
+.btn.primary:disabled:hover {
+  border-color: #f2e0b4; color: #3a3020;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65), 0 2px 12px rgba(211, 188, 142, .3);
+}
+
+/* 明细页的「← 返回」是纯文字按钮，得把上面那套壳整个退掉 ——
+   不清 box-shadow / letter-spacing / height 的话，它会带着阴影、字距和 36px 定高。
+   它是 .btn 的例外（app.js:275），别跟着一起变。 */
+.btn.back {
+  height: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-2);
+  box-shadow: none;
+  transition: color .16s ease;
+}
+.btn.back:hover { color: var(--gold-lt); }
+.btn.back:active { transform: none; }
+
+/* 顶栏在 ≤380px 上：四个控件挤在一行，把按钮的水平内边距收一档，宽度让回 UID 框。
+   量过（360px 视口）：按钮 62.1×2 + 下拉 98 + 间距 24 之后只剩 85.8px 给 UID，
+   而 9 位 UID「101242308」连内边距要 89px —— 尾巴会被裁掉。
+   390px 及以上不用管（UID 有 115.8px，够）。 */
+@media (max-width: 380px) {
+  .btn { padding: 0 11px; letter-spacing: .04em; }
+}
 
 /* ───────────────────────── 提示条 ───────────────────────── */
 
@@ -431,7 +555,8 @@ body {
 }
 .spin {
   width: 28px; height: 28px; border-radius: 50%;
-  border: 3px solid var(--line); border-top-color: var(--accent);
+  /* 转圈也用金 —— --accent 蓝在这里是最后一处（顶栏那两处已改），留着它就还是有个孤立的蓝 */
+  border: 3px solid var(--line); border-top-color: var(--gold-lt);
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

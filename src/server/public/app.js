@@ -96,6 +96,17 @@ function rankOf (cls) {
   return RANK_ORDER.includes(cls) ? cls : 'D'
 }
 
+/*
+ * 名字拿不到时用什么词，看后端给的 weapon.state：
+ *   'none'    角色真没装备武器        → 「无武器」
+ *   'unknown' 装备了但元数据不认识这把 → 「未知武器」
+ * 只负责兜底，名字本身仍由调用点给（首页用全名、明细页 sName 优先，两处优先级不一样）。
+ * 别写成 `name || T('noWeapon')` —— 那把「装备了但不认识」也报成没武器。
+ */
+function weaponFallback (w) {
+  return T(w?.state === 'unknown' ? 'unknownWeapon' : 'noWeapon')
+}
+
 function rankColor (rank) {
   return RANK_COLOR[rank] || '#e8edf4'
 }
@@ -200,7 +211,7 @@ function renderCharCard (av) {
 
   /* 武器块：白底。没武器（或 miao 不认识这把）也要出这一块，整排高度才整齐。
      左边图标一整栏、右边名字 + 等级·精炼两行 —— 短名字也不会在底部空出一块。 */
-  const wName = av.weapon?.name || T('noWeapon')
+  const wName = av.weapon?.name || weaponFallback(av.weapon)
   const wText = el('div', 'cc-wtext')
   wText.append(el('strong', '', wName))
 
@@ -387,9 +398,11 @@ function renderDetail () {
   markCont.append(statBox, infoBox)
   pd.append(markCont)
 
-  /* 武器卡：图标（右上溢出）+ 名 + 精N·Lv.N + 主副属性 + 精炼描述 */
+  /* 武器卡：图标（右上溢出）+ 名 + 精N·Lv.N + 主副属性 + 精炼描述。
+     只要**装备了**就出这张卡（state 非 'none'）—— 元数据不认识这把时名字/属性/
+     描述都是空的，但等级和精炼是 enka 给的真实数据，不该整张卡消失。 */
   const artis = el('div', 'artis')
-  if (av.weapon?.name) artis.append(renderWeaponCard(av.weapon))
+  if (av.weapon && av.weapon.state !== 'none') artis.append(renderWeaponCard(av.weapon))
   for (const a of av.artifacts) artis.append(renderArtiCard(a, av.charWeight))
   pd.append(artis)
 
@@ -415,7 +428,7 @@ function renderWeaponCard (w) {
   item.append(setBg(el('div', 'img'), w.icon))
 
   const head = el('div', 'head')
-  head.append(el('strong', '', w.sName || w.name))
+  head.append(el('strong', '', w.sName || w.name || weaponFallback(w)))
   const wInfo = el('span', 'info')
   wInfo.append(el('span', 'affix affix-' + (w.affix ?? 1), `${T('refine')}${w.affix ?? 1}`))
   wInfo.append(document.createTextNode(` Lv.${w.level ?? '?'}`))

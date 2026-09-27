@@ -239,6 +239,75 @@ console.log('\n=== 8. 静态文件 ===')
   }
 }
 
+/* ---------------- 9. 武器三态：认不出这把武器 ≠ 没装备武器 ---------------- */
+/*
+ * 真实案例：奥黛塔拿的 11438，miao 和 i18n 表都还没收录，但 enka 照样给了
+ * level/promote/affix —— 说明**是装备着的**。早先出口用 `name || '无武器'` 兜底，
+ * 把它报成「无武器」，明细页还会因为 `if (weapon.name)` 整张武器卡消失。
+ *
+ * 夹具刻意用一个**不存在的 itemId**（11999），不用真实的 11438：那是真武器的 id，
+ * 将来元数据一收录，这条测试就会莫名其妙变红。这里要的是「查不到」这个性质本身。
+ */
+console.log('\n=== 9. 武器三态 ===')
+{
+  const CASES = [
+    {
+      label: '元数据不认识这把（itemId 换成查不到的）',
+      expect: 'unknown',
+      edit: (raw) => { weaponEntry(raw).itemId = 11999 }
+    },
+    {
+      label: '角色压根没装备武器（把武器那条整个摘掉）',
+      expect: 'none',
+      edit: (raw) => {
+        const a = raw.avatarInfoList.find(x => x.avatarId === 10000016)
+        a.equipList = a.equipList.filter(e => e.flat?.itemType !== 'ITEM_WEAPON')
+      }
+    },
+    {
+      label: '对照组（原样）',
+      expect: 'ok',
+      edit: () => {}
+    }
+  ]
+
+  function weaponEntry (raw) {
+    return raw.avatarInfoList.find(x => x.avatarId === 10000016)
+      .equipList.find(e => e.flat?.itemType === 'ITEM_WEAPON')
+  }
+
+  for (const c of CASES) {
+    const raw = structuredClone(REAL)
+    c.edit(raw)
+    const sum = ingestPayload(raw, { source: 'enka' })
+    const a = await startServer({ port: 0, dbFile: ':memory:' })
+    repo.saveFetch(a.db, { ...sum, stamp: '2026-09-13T00:00:00.000Z' })
+    const view = (await (await fetch(a.url + `/api/uid/${sum.uid}`)).json()).data
+    const w = view.avatars.find(x => x.avatarId === 10000016).weapon
+    a.server.close()
+
+    eq(w.state, c.expect, `state = ${c.expect}（${c.label}）`)
+    if (c.expect === 'ok') {
+      eq(w.name, '狼的末路', '  对照组照旧拿到名字')
+      continue
+    }
+    /* 名字是空串：文案由前端按 state 选（「未知武器」/「无武器」），后端不写死 */
+    eq(w.name, '', '  名字留空，不写死文案')
+    if (c.expect === 'unknown') {
+      ok(/^\/assets\/common\/item\/atk-[a-z]+\.webp$/.test(w.icon || ''),
+        `  退回**武器类型**通用图（${String(w.icon).split('/').pop()}）`)
+      /* 关键：等级/精炼是 enka 给的，跟元数据认不认识无关，必须留 */
+      eq(w.level, 90, '  等级留着（证明是「装备着」而不是「没装备」）')
+      eq(w.affix, 1 + 1, '  精炼留着')
+      eq(w.attrs, {}, '  属性/描述为空（元数据里确实没有）')
+      eq(w.desc, '', '')
+    } else {
+      eq(w.icon, null, '  真没装备时不给图（给张类型图反倒像有武器）')
+      eq(w.level, 1, '  等级回落默认 1')
+    }
+  }
+}
+
 /* ---------------- 收尾 ---------------- */
 
 app.server.close()

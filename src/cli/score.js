@@ -78,8 +78,11 @@ function renderCharacter (row, profile, result, locale) {
   const talent = deriveTalent(char, row.skill_level_map || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
   const name = i18n.avatarName(profile.id, locale) || char.name
+  /* 和网页一个口径（shape.js 的 weapon.state）：装备了但元数据不认识这把 → 「未知武器」，
+     真没装备才是「无武器」。别再写成「（未识别）」—— 那是角色行的词，用在这里会让人
+     以为角色没认出来。 */
   const wname = (row.weapon_item_id ? i18n.weaponName(row.weapon_item_id, locale) : null) ||
-    profile.weapon.name || '（未识别）'
+    profile.weapon.name || U(row.weapon_item_id ? 'unknownWeapon' : 'noWeapon')
 
   out.push(`${name} ★${char.star || 5} Lv.${profile.level ?? '?'} ${U('cons')}${profile.cons} ${U('fetter')}${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
   out.push(`  ${U('weapon')}  ${wname} Lv.${profile.weapon.level} ${U('refine')}${profile.weapon.affix}`)

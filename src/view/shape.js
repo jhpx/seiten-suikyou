@@ -314,6 +314,13 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     weaponDesc = wObj.getAffixDesc?.(profile.weapon.affix)?.desc || ''
   }
 
+  /* 武器名有两条来源：i18n 表（官方 TextMap，按 itemId）→ miao 元数据。
+     两条都查不到 ≠ 角色没装备武器，而是「这把武器比我们的元数据新」——
+     例：奥黛塔的 11438。enka 照样给了 level/promote/affix，说明是装备着的。
+     两种情况在界面上必须分开说，前端靠下面的 state 选文案。 */
+  const wName = (row.weapon_item_id ? i18n.weaponName(row.weapon_item_id, loc) : null) ||
+    profile.weapon.name || ''
+
   const imgs = charImgs(char)
   const elem = profile.elem || char.elem || ''
 
@@ -339,7 +346,12 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     imgs,
     talent: talentView,
     weapon: {
-      name: (row.weapon_item_id ? i18n.weaponName(row.weapon_item_id, loc) : null) || profile.weapon.name || '',
+      /* 三态，前端按它选文案，别再靠「name 是不是空串」猜：
+         'none'    角色压根没装备武器（enka 里 weapon_item_id 就是空）
+         'unknown' 装备了，但 i18n 表和 miao 元数据都不认识这把（新版本武器）
+         'ok'      查到名字了 */
+      state: !row.weapon_item_id ? 'none' : (wName ? 'ok' : 'unknown'),
+      name: wName,
       nameZh: profile.weapon.name || '',
       /* 卡片里显示的是缩写名（上游 weapon.sName || weapon.name） */
       sName: wObj?.sName || profile.weapon.name || '',
@@ -348,8 +360,13 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       promote: profile.weapon.promote,
       star: wObj?.star ?? 0,
       /* 图标：meta-gs/weapon/{类型}/{名}/icon.webp。中文名要逐段 encode ——
-         直接拼 wObj.img 会拿到未编码的中文。 */
-      icon: wObj ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp` : null,
+         直接拼 wObj.img 会拿到未编码的中文。
+         元数据不认识这把时退回**武器类型通用图**（common/item/atk-{type}.webp，
+         五张图都按类型分好了）：类型能从角色身上拿（char.weaponType），
+         卡片上就不至于空着一个格子。 */
+      icon: wObj
+        ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
+        : (row.weapon_item_id ? `/assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
       attrs: weaponAttrs,
       desc: weaponDesc
     },
