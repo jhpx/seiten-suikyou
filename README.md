@@ -24,7 +24,7 @@
 ```bash
 npm install                        # 只有一个运行时依赖：lodash
 npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
-npm run sync:assets                # 下页面用的图片素材（可选，不跑则用 CSS 色块占位）
+npm run sync:assets                # 从 miao-plugin 全量复制图片素材（可选，不跑则用 CSS 色块占位）
 npm run server                     # 打开 http://127.0.0.1:8787
 ```
 
@@ -32,10 +32,12 @@ npm run server                     # 打开 http://127.0.0.1:8787
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
 - **不跑 `sync:assets` 也能用**，只是角色立绘、圣遗物图标会退化成 CSS 色块。
-- 国内跑 `sync:assets` / `sync:i18n` 需要代理：`ASSETS_PROXY=socks5h://127.0.0.1:4080`。
-- `sync:assets` 跑完会按清单核对落盘结果，缺素材会逐个列出来并以失败退出。
-  别只看日志里的成功条数 —— 网络被掐时下载是**静默失败**的（连不上不是 404），
-  跑完看着一切正常，页面却是空的。
+- `sync:assets` 从 miao-plugin 的 `resources/` 整目录复制，**全程离线**：不联网、不按需、不猜名字
+  （素材源：`MIAO_PLUGIN_PATH`，默认 `../miao-plugin`，跟 `npm run sync` 一个约定）。
+  全量约 100 MB、1800+ 个文件，一次跑完以后随便加角色都不用再管。
+  miao 仓库里唯一没有的 7 张元素符号，作为种子放在 `tools/assets-seed/` 里随仓库走。
+- 想对账「页面要的图是不是都落盘了」：`npm run list:assets && npm run sync:assets`。
+  清单由页面自己的 `buildAccountView` 吐出来，缺哪个会列出来并以失败退出。
 
 ## 运行
 
@@ -60,7 +62,7 @@ npm run verify       # 只跑评分验证
 # 同步（只在要更新数据时跑）
 npm run sync         # 从 miao-plugin 重新同步内核（需 MIAO_PLUGIN_PATH）
 npm run sync:i18n    # 从官方数据重新提取多语言表
-npm run sync:assets  # 按需下载页面图片素材
+npm run sync:assets  # 全量复制页面图片素材（从 miao-plugin/resources）
 
 # 文档
 npm run check:docs   # 校验 README / docs 里的相对链接没写歪（搬过家就跑一遍）
@@ -268,15 +270,16 @@ seiten-suikyou/
 │           ├── app.js        #     渲染 + 交互（首页网格、明细画布、缩放、i18n）
 │           ├── style.css     #     外壳样式
 │           ├── miao.css      #     评分卡样式（miao 的 profile-detail.css 移植版）
-│           └── assets/       #     图片素材（sync:assets 下载，不进 git）
+│           └── assets/       #     图片素材（sync:assets 从 miao-plugin 复制，约 100MB，随仓库提交）
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
 ├── tools/                    # 同步 / 验收工具（开发期用，不参与运行时）
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
-│   ├── sync_assets.py        # 图片素材按需下载（只下库里实际出现的）
-│   ├── list_assets.mjs       # 问应用本人「页面会请求哪些图」，喂给上面那个脚本
+│   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）
+│   ├── list_assets.mjs       # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
+│   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
 │   ├── probe.mjs             # 在真实页面跑 JS 量布局（改样式后的验收工具）
 │   ├── shot.mjs              # headless chrome 截图
 │   └── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）

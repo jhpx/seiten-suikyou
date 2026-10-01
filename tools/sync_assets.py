@@ -1,47 +1,50 @@
 #!/usr/bin/env python3
 """
-从 miao-plugin GitHub 仓库下载图片素材到 src/server/public/assets/。
+把 miao-plugin 的图片素材**全量**复制进 src/server/public/assets/。
 
-本仓库的 vendor/miao/ 只同步代码与元数据，不同步二进制图片（太大了）。
-页面要还原 miao 的评分卡，需要角色立绘、圣遗物图标、UI 小图三类素材。
-这个脚本按需从上游拉取，下载结果进 src/server/public/assets/，并按原目录结构存放。
+为什么是「本地全量复制」而不是「按需从远端下载」：
+
+1. miao 的素材本来就是仓库自带的 —— resources/ 直接躺在 miao-plugin 目录里，
+   远端 GitHub 上是同一个目录。绕一圈网络去拿本地已有的东西没有意义，
+   还白白继承「国内连不上 + 连不上当 404 静默跳过」两个坑。
+   （miao 唯一额外拉的是「图片加量包」miao-res-plus，见 apps/admin.js:131 的 git clone，
+    那装的是 character-img/ 同人插画，评分面板根本不用，我们不跟。）
+2. 「按需」的前提是能猜对名字：先拿 id 反查中文名，再按名拼 URL。
+   名字表谁都覆盖不全（新角色没进表、圣遗物 id 跟游戏对不上），
+   结果就是零星角色/套装整片没图 —— 珐露珊、瓦雷莎、达达利亚就是这么空的。
+3. 全量之后不再需要任何名字表：**源目录里有什么就拷什么**。
+   缺哪张由源端决定，跟页面按存在性拼路径的逻辑（miao CharImg.getImgs）天然一致。
 
 用法：
     python tools/sync_assets.py
-    ASSETS_PROXY=socks5h://127.0.0.1:4080 python tools/sync_assets.py
-    python tools/sync_assets.py --db data/gs.db --out src/server/public/assets
+    MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_assets.py
+    python tools/sync_assets.py --out src/server/public/assets
 
-设计取舍：
-- 只下载本地库里实际出现的角色和圣遗物套装，避免一上来就拖几百 MB。
-- 404 不抛错 —— 上游没有这个角色/套装时安静地跳过，页面会回退到 CSS 占位。
-- 文件存在且大小对才跳过，避免断网重跑时把已有图片破坏掉。
+全程离线，一张图都不从网络下。唯一的例外是 7 张元素符号（common/elem/{元素}.png）：
+miao 整个仓库没有这图，所以把它们（7 张共 45KB）直接放在仓库里当种子
+tools/assets-seed/，同步时从种子复制 —— 换机器、断网都能重建出完整素材。
 """
 import argparse
 import json
 import os
-import sqlite3
+import shutil
 import sys
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-DEFAULT_DB = ROOT / "data" / "gs.db"
+ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "src" / "server" / "public" / "assets"
+DEFAULT_LIST = ROOT / ".tmp" / "asset-list.json"
+# 仓库自带的种子素材：miao 那边找不到、又必须有的图放这里，进 git
+SEED = ROOT / "tools" / "assets-seed"
 
-REPO_RAW = "https://raw.githubusercontent.com/yoimiya-kokomi/miao-plugin/master/resources"
+# miao-plugin 在哪：环境变量优先，其次 sibling 目录（跟 tools/sync_miao.py 一个约定）
+_env = os.environ.get("MIAO_PLUGIN_PATH")
+MIAO = Path(_env).resolve() if _env else (ROOT.parent / "miao-plugin").resolve()
 
 """
-元素图标的来源。
-
-为什么不在 miao-plugin 里拿：它整个仓库没有元素符号这个素材 —— resources/common/
-下只有 bg-{元素}.webp（整张画布底图）和 talent-{元素}.webp（天赋圆环底盘），
-都不含符号本身。而首页角色卡左上角那个小图标就是元素符号，绕不开。
-paimon-moe 是原神社区一直在维护的公开素材库，里面 elements/ 正好是游戏里那七张符号图，
-文件名（anemo/cryo/...）和我们元数据里的 elem 字段完全同名，直接对得上。
+通用 UI 小图，页面按固定路径直接引用（不是按角色/套装名拼出来的）。
+清单以外的 resources/common/ 大多是 css/less 字体，页面不需要。
 """
-ELEM_ICON_RAW = "https://raw.githubusercontent.com/MadeBaruna/paimon-moe/main/static/images/elements"
-
 COMMON_ASSETS = [
     "common/cont/card-bg.png",
     # 属性表那一行的小图标是**一张横向精灵图**，靠 background-position 切
@@ -55,401 +58,222 @@ COMMON_ASSETS = [
     "character/imgs/main-02.png",
     # 武器卡的星级图（miao common.css 里 .artis .weapon .star 用的）
     "common/item/star.png",
-    # 首页角色卡的星级底色：五星是 bg5、四星是 bg4，就是游戏里那张橙/紫底
-    # （miao 拿它当 .item-icon.star5 的背景，avatar-list.css 也用同一张）
+    # 首页角色卡的星级底色：五星 bg5、四星 bg4，就是游戏里那张橙/紫底
     "common/item/bg5.png",
     "common/item/bg4.png",
 ]
 
 # 角色页整张画布的背景按元素分图：common/bg/bg-{元素}.webp
-# 上游 elemLayout 把 element 映射成英文类名后挂到 container 上（见 common/layout/elem.html）
+# 天赋图标那个圆环底盘是 talent-{元素}.webp（miao common.css 的 .elem-x .talent-icon）
 ELEM_BGS = ["pyro", "hydro", "anemo", "electro", "dendro", "cryo", "geo"]
 
 # 天赋「普攻」图标按武器类型取，是公共图（miao CharImg.getImgs 的规则）
 WEAPON_TYPES = ["sword", "claymore", "bow", "catalyst", "polearm"]
 
 # 旅行者的立绘/命座在 meta-gs/character/旅行者/{元素}/ 下，不在自己名字的目录里
-TRAVELER_ELEMS = ["anemo", "geo", "electro", "dendro", "hydro", "pyro"]
+TRAVELER_ELEMS = ["anemo", "geo", "electro", "dendro", "hydro", "pyro", "cryo"]
+
+"""
+角色要拷哪些图 —— 与 src/view/shape.js 的 charImgs() 一一对应。
+
+talent-e / talent-q 是**可选**的：miao 的规则是「哪个命座提升这个天赋就用哪个命座图标，
+否则才用 talent-{e,q}.webp」，所以绝大多数角色目录里根本没有这俩文件（121/126 都没有）。
+源端没有就跳过，不算错误。
+"""
+CHAR_IMGS = ["splash.webp", "face.webp", "card.webp", "banner.webp"]
+CHAR_ICONS = [f"cons-{i}.webp" for i in range(1, 7)] + ["talent-e.webp", "talent-q.webp"]
+
+# 元素符号：miao 仓库里没有（星穹铁道那套 meta-sr/icons/elem-*.webp 不是原神的），
+# 所以从仓库自带的种子目录取，见 sync_elem_icons()
 
 
 def log(*args):
     print(*args, file=sys.stderr)
 
 
-def load_names(path: Path):
-    """读 vendor/i18n/names.json，拿到 id/hash/中文名 的映射。"""
-    if not path.exists():
-        log(f"[warn] 找不到 {path}，只能按中文名硬猜")
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+def resolve_miao_root() -> Path:
+    """定位 miao-plugin 的 resources 目录，找不到就把候选列出来让人一眼能改。"""
+    res = MIAO / "resources"
+    if res.is_dir():
+        return res
+    log(f"[err] 找不到素材源：{res}")
+    log(f"[hint] 设 MIAO_PLUGIN_PATH=/path/to/miao-plugin，或把 miao-plugin 放到 {MIAO.parent}")
+    cands = sorted(p.name for p in MIAO.parent.glob("miao-plugin*") if p.is_dir())
+    if cands:
+        log(f"[hint] {MIAO.parent} 下有这些候选：{', '.join(cands)}")
+    sys.exit(1)
 
 
-def chs_name_by_hash(names: dict, h):
-    """用 nameIndex 把任意 hash 翻成中文名。"""
-    idx = names.get("nameIndex", {})
-    groups = names.get("names", [])
-    gi = idx.get(str(h))
-    if gi is None:
-        return None
-    row = groups[gi] if 0 <= gi < len(groups) else {}
-    return row.get("chs") or row.get("en")
-
-
-def avatar_name(names: dict, avatar_id: int):
-    """avatarId → 中文角色名。"""
-    h = names.get("byId", {}).get("avatar", {}).get(str(avatar_id))
-    if not h:
-        return None
-    return chs_name_by_hash(names, h)
-
-
-def load_weapon_index() -> dict:
-    """
-    扫 vendor/miao/resources/meta-gs/weapon/{类型}/data.json，
-    建出「武器 itemId → (类型, 中文名)」。
-
-    为什么自己扫而不是查别的：sync 是 Python，拿不到 Node 那边的 Weapon.get()。
-    而 vendor 里 data.json 就摆在那儿，格式是 id → { id, name, star }，够用了。
-    """
-    idx = {}
-    base = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "weapon"
-    for wtype in WEAPON_TYPES:
-        f = base / wtype / "data.json"
-        if not f.exists():
-            continue
-        try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except Exception as e:
-            log(f"[warn] 读 {f} 失败：{e}")
-            continue
-        for key, row in data.items():
-            if isinstance(row, dict) and row.get("name"):
-                idx[str(row.get("id", key))] = (wtype, row["name"])
-    return idx
-
-
-def load_miao_char_index() -> dict:
-    """
-    avatarId → miao 的中文角色名。
-
-    优先用 vendor/miao/resources/meta-gs/character/data.json —— 图片目录名就是按
-    **miao 的角色名**起的，这份才是权威来源。names.json（官方文案表）里没有的新角色
-    （比如 10000150 奥黛塔）会查不到，那正是之前漏图的根因。
-    """
-    idx = {}
-    f = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "character" / "data.json"
-    if not f.exists():
-        return idx
-    try:
-        data = json.loads(f.read_text(encoding="utf-8"))
-    except Exception as e:
-        log(f"[warn] 读 {f} 失败：{e}")
-        return idx
-    for key, row in data.items():
-        if isinstance(row, dict) and row.get("name"):
-            idx[str(row.get("id", key))] = row["name"]
-    return idx
-
-
-def load_miao_artifact_index() -> dict:
-    """
-    圣遗物 itemId → (套装中文名, 部位)。
-
-    一样取自 vendor/miao/resources/meta-gs/artifact/data.json：
-    顶层是套装 id，里面 idxs 是 部位 → { id, name }。
-    按 itemId 反查比拿 set_hash 去 names.json 里撞更稳 —— hash 表缺一个就整套装漏图。
-    """
-    idx = {}
-    f = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "artifact" / "data.json"
-    if not f.exists():
-        return idx
-    try:
-        data = json.loads(f.read_text(encoding="utf-8"))
-    except Exception as e:
-        log(f"[warn] 读 {f} 失败：{e}")
-        return idx
-        for set_row in data.values():
-            if not isinstance(set_row, dict):
-                continue
-            set_name = set_row.get("name")
-            if not set_name:
-                continue
-            for pos, piece in (set_row.get("idxs") or {}).items():
-                if not isinstance(piece, dict):
-                    continue
-                if piece.get("id"):
-                    idx[str(piece["id"])] = (set_name, pos)
-                # 也按「部件中文名」建一份索引。
-                # 为什么要多这一份：miao 的 idxs[].id 跟游戏实际给的 item_id 偶尔对不上
-                # （实测「炉火融炼之心」pos1 记作 48543，而 enka 给的是 48544），
-                # 光靠 id 会漏图，名字则是两边的公约数。
-                if piece.get("name"):
-                    idx[f"name:{piece['name']}"] = (set_name, pos)
-    return idx
-
-
-def build_opener():
-    """按环境变量决定要不要走代理（国内直连 GitHub raw 不通）。"""
-    proxy = os.environ.get("ASSETS_PROXY") or os.environ.get("I18N_PROXY") or \
-            os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY")
-    handlers = []
-    if proxy:
-        handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
-    return urllib.request.build_opener(*handlers)
-
-
-OPENER = build_opener()
-
-
-def fetch(url: str, dest: Path):
-    """下载一个文件到 dest。返回 True/None(404)/False。"""
+def copy_one(src_file: Path, out: Path, rel: str, stats):
+    """复制单个素材。rel 是相对 assets 根目录的路径。"""
+    dest = out / rel
+    if not src_file.exists():
+        stats["src_miss"] += 1  # 源端本来就没有（多半是上面说的可选图），正常
+        return
+    if dest.exists() and dest.stat().st_size == src_file.stat().st_size:
+        stats["skip"] += 1
+        return
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        req = urllib.request.Request(url, headers={"User-Agent": "seiten-suikyou-sync"})
-        with OPENER.open(req, timeout=60) as resp:
-            if resp.status != 200:
-                return False
-            data = resp.read()
-            if len(data) == 0:
-                return False
-            dest.write_bytes(data)
-        return True
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None  # 上游没有这张图，不是网络错
-        log(f"[err] {url} HTTP {e.code}")
-        return False
-    except Exception as e:
-        log(f"[err] {url} {e}")
-        return False
+        shutil.copyfile(src_file, dest)
+        stats["ok"] += 1
+    except OSError as e:
+        stats["fail"] += 1
+        log(f"  [fail] {rel} {e}")
 
 
-def sync_file(rel: str, out: Path, base_url: str, dest_rel: str | None = None):
+def char_dirs(res: Path):
     """
-    同步单个资源。rel 是**远端**相对路径，dest_rel 是本地落地路径（不给就同 rel）。
+    枚举角色素材目录。
 
-    为什么要分开：元素图标在 paimon-moe 那边叫 elements/pyro.png，而我们要把它
-    归到自己的目录结构下（common/elem/pyro.png），两边路径不一样。
-    中文目录名的 URL 会按段编码，本地路径保持原样。
+    为什么要单独处理旅行者：它的 imgs/icons 在 旅行者/{元素}/ 下面，
+    而 character/ 下还有个 common/ 是公用图（不是角色），都得避开。
     """
-    dest = out / (dest_rel or rel)
-    if dest.exists() and dest.stat().st_size > 0:
-        return "skip"
-    # URL 路径：段与段之间用 /，每段单独 encodeURIComponent
-    url_rel = "/".join(urllib.parse.quote(seg, safe="") for seg in Path(rel).parts)
-    url = f"{base_url}/{url_rel}"
-    ok = fetch(url, dest)
-    if ok is True:
-        return "ok"
-    if ok is None:
-        return "miss"
-    return "fail"
+    base = res / "meta-gs" / "character"
+    if not base.is_dir():
+        return
+    for d in sorted(base.iterdir()):
+        if not d.is_dir() or d.name == "common":
+            continue
+        if d.name == "旅行者":
+            # 立绘/头像在 旅行者/imgs/ 下（元素无关），
+            # 卡片/横幅/命座在 旅行者/{元素}/ 下 —— miao 的 CharImg 就是这么分的，
+            # 两份都要，缺一份旅行者就半残。
+            yield d
+            for elem in TRAVELER_ELEMS:
+                if (d / elem).is_dir():
+                    yield d / elem
+            continue
+        yield d
+
+
+def sync_common(res: Path, out: Path, stats):
+    """通用 UI 图 + 元素背景/底盘 + 天赋普攻图标。"""
+    for rel in COMMON_ASSETS + [f"common/item/atk-{t}.webp" for t in WEAPON_TYPES]:
+        copy_one(res / rel, out, rel, stats)
+    for el in ELEM_BGS:
+        for rel in (f"common/bg/bg-{el}.webp", f"common/bg/talent-{el}.webp"):
+            copy_one(res / rel, out, rel, stats)
+
+
+def sync_chars(res: Path, out: Path, stats):
+    """全角色：立绘 / 头像 / 卡片 / 横幅 + 6 个命座图标（+ 可选的 talent-e/q）。"""
+    n = 0
+    for d in char_dirs(res):
+        rel_dir = d.relative_to(res).as_posix()  # meta-gs/character/瓦雷莎 或 .../旅行者/anemo
+        for f in CHAR_IMGS:
+            copy_one(d / "imgs" / f, out, f"{rel_dir}/imgs/{f}", stats)
+        for f in CHAR_ICONS:
+            copy_one(d / "icons" / f, out, f"{rel_dir}/icons/{f}", stats)
+        n += 1
+    log(f"[info] 角色目录 {n} 个")
+
+
+def sync_weapons(res: Path, out: Path, stats):
+    """武器图标：meta-gs/weapon/{类型}/{名}/icon.webp，全量。"""
+    base = res / "meta-gs" / "weapon"
+    n = 0
+    for tdir in sorted(base.iterdir()) if base.is_dir() else []:
+        if not tdir.is_dir():
+            continue
+        for wdir in sorted(tdir.iterdir()):
+            if not wdir.is_dir():
+                continue
+            rel = f"meta-gs/weapon/{tdir.name}/{wdir.name}/icon.webp"
+            copy_one(wdir / "icon.webp", out, rel, stats)
+            n += 1
+    log(f"[info] 武器 {n} 把")
+
+
+def sync_artifacts(res: Path, out: Path, stats):
+    """圣遗物：meta-gs/artifact/imgs/{套装}/{1..5}.webp，全量。"""
+    base = res / "meta-gs" / "artifact" / "imgs"
+    n = 0
+    for sdir in sorted(base.iterdir()) if base.is_dir() else []:
+        if not sdir.is_dir():
+            continue
+        for pos in range(1, 6):
+            copy_one(sdir / f"{pos}.webp", out, f"meta-gs/artifact/imgs/{sdir.name}/{pos}.webp", stats)
+        n += 1
+    log(f"[info] 套装 {n} 个")
+
+
+def sync_elem_icons(out: Path, stats):
+    """
+    7 张元素符号，从仓库自带的种子目录 tools/assets-seed/ 复制。
+
+    为什么种子要进 git：miao 仓库没有这图，以前只能去 paimon-moe 下，
+    于是「同步素材」这件本该纯本地的事就挂上了网络 —— 国内连不上就静默缺图。
+    这 7 张一共才 45KB，直接随仓库走，谁都能离线重建。
+    """
+    missing = []
+    for el in ELEM_BGS:
+        rel = f"common/elem/{el}.png"
+        src = SEED / rel
+        if not src.exists():
+            missing.append(rel)
+            continue
+        copy_one(src, out, rel, stats)
+    if missing:
+        log(f"[warn] 种子里缺 {len(missing)} 张元素图标：{', '.join(missing)}")
+        log(f"[hint] 补到 {SEED}/common/elem/ 下即可（来源 paimon-moe 的 static/images/elements）")
+
+
+def check_against_list(out: Path, stats):
+    """
+    拿「页面真正会请求的图」的清单反查一遍落盘。
+
+    这一层防的是另一类错：shape.js 拼了个源端没有的路径（比如改了 imgs 名、
+    或某个角色 miao 侧真的没素材）。全量复制解决不了这种错，只能对账。
+    清单由 tools/list_assets.mjs 生成，不在就跳过这一步。
+    """
+    list_path = DEFAULT_LIST
+    if not list_path.exists():
+        return []
+    rels = json.loads(list_path.read_text(encoding="utf-8"))
+    missing = [r for r in rels if not (out / r).exists()]
+    if missing:
+        log(f"[warn] 页面要的图里有 {len(missing)} 个没落到盘上，页面会出现空框：")
+        for r in missing:
+            log(f"  [缺] {r}")
+        log("[hint] 先跑 node tools/list_assets.mjs 刷新清单再对一次")
+    return missing
 
 
 def main():
-    parser = argparse.ArgumentParser(description="同步 miao-plugin 图片素材")
-    parser.add_argument("--db", default=str(DEFAULT_DB), help="SQLite 数据库路径")
+    parser = argparse.ArgumentParser(description="从 miao-plugin 全量复制图片素材")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="素材输出目录")
-    parser.add_argument(
-        "--list",
-        default=str(ROOT / ".tmp" / "asset-list.json"),
-        help="素材清单（由 tools/list_assets.mjs 生成）。存在时优先按它下载",
-    )
-    parser.add_argument("--all", action="store_true", help="也下载通用占位图之外的所有内容（未实现，仅预留）")
     args = parser.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    res = resolve_miao_root()
+    log(f"[info] 素材源：{res}")
 
-    names = load_names(ROOT / "vendor" / "i18n" / "names.json")
+    stats = {"ok": 0, "skip": 0, "fail": 0, "src_miss": 0}
 
-    stats = {"ok": 0, "skip": 0, "miss": 0, "fail": 0}
-
-    # 1. 通用 UI 小图
     log("[info] 同步通用 UI 素材 ...")
-    for rel in COMMON_ASSETS:
-        res = sync_file(rel, out, REPO_RAW)
-        stats[res] += 1
-        if res in ("fail", "miss"):
-            log(f"  [{res}] {rel}")
+    sync_common(res, out, stats)
 
-    # 1b. 元素背景 + 天赋底盘：都按元素分图
-    #     bg-{元素}.webp     整张画布的底色
-    #     talent-{元素}.webp 天赋图标那个 100px 圆环底盘（miao common.css 的 .elem-x .talent-icon）
-    log("[info] 同步元素背景/天赋底盘图 ...")
-    for el in ELEM_BGS:
-        for rel in (f"common/bg/bg-{el}.webp", f"common/bg/talent-{el}.webp"):
-            res = sync_file(rel, out, REPO_RAW)
-            stats[res] += 1
-            if res in ("fail", "miss"):
-                log(f"  [{res}] {rel}")
+    log("[info] 同步元素图标（仓库种子）...")
+    sync_elem_icons(out, stats)
 
-    # 1c. 元素符号图标（首页角色卡左上角那个），来源见 ELEM_ICON_RAW
-    log("[info] 同步元素图标 ...")
-    for el in ELEM_BGS:
-        res = sync_file(f"{el}.png", out, ELEM_ICON_RAW, f"common/elem/{el}.png")
-        stats[res] += 1
-        if res in ("fail", "miss"):
-            log(f"  [{res}] {el}.png")
+    log("[info] 同步角色素材（全量）...")
+    sync_chars(res, out, stats)
 
-    # 2. 角色 / 武器 / 圣遗物素材
-    #
-    # 优先走清单：tools/list_assets.mjs 用页面同一套代码把「真正会请求的图」列出来，
-    # 和前端永远一致。下面的启发式扫描只是清单缺失时的兜底 —— 它靠几张元数据表反查
-    # 中文名，每张表都有覆盖不到的地方（新角色、id 对不上的新套装），会零星漏图。
-    list_path = Path(args.list)
-    if list_path.exists():
-        rels = json.loads(list_path.read_text(encoding="utf-8"))
-        log(f"[info] 按清单同步：{len(rels)} 个素材（{list_path.name}）")
-        for rel in rels:
-            res = sync_file(rel, out, REPO_RAW)
-            stats[res] += 1
-            if res == "fail":
-                log(f"  [fail] {rel}")
+    log("[info] 同步武器图标（全量）...")
+    sync_weapons(res, out, stats)
 
-        # 下完必须回头核对一遍落盘结果。
-        #
-        # 为什么这一步不能省：清单是「页面真正会请求的图」的全集，少一个文件页面上
-        # 就是一个空框。而下载失败在多数情况下根本不报错 —— 国内直连 raw.githubusercontent
-        # 是 SSL 连接被掐（不是 404），脚本按 404 静默跳过，跑完照样打印「成功」。
-        # 实测表现就是：不知道哪天起部分角色没图了，而同步日志看着一切正常。
-        # 所以这里以磁盘为准收一遍口，缺什么列什么，并让进程以失败退出，
-        # 免得「漏图」这种事只有靠肉眼逛页面才发现。
-        missing = [rel for rel in rels if not (out / rel).exists()]
-        if missing:
-            log(f"[warn] 以下 {len(missing)} 个素材下载后仍然缺失，页面会有空框：")
-            for rel in missing:
-                log(f"  [缺] {rel}")
-            log("[hint] 网络不通时试试挂代理：ASSETS_PROXY=socks5h://127.0.0.1:4080")
-        report(stats)
-        sys.exit(1 if missing else 0)
+    log("[info] 同步圣遗物图标（全量）...")
+    sync_artifacts(res, out, stats)
 
-    log("[warn] 没找到素材清单，退回启发式扫描（建议先跑 tools/list_assets.mjs）")
+    missing = check_against_list(out, stats)
 
-    # 1b. 天赋「普攻」图标：按武器类型的公共图
-    log("[info] 同步天赋普攻图标（按武器类型）...")
-    for wtype in WEAPON_TYPES:
-        res = sync_file(f"common/item/atk-{wtype}.webp", out, REPO_RAW)
-        stats[res] += 1
-        if res in ("fail", "miss"):
-            log(f"  [{res}] atk-{wtype}.webp")
-
-    # 2. 本地库里出现过的角色 / 武器 / 套装
-    db_path = Path(args.db)
-    if db_path.exists():
-        log("[info] 扫描本地库 ...")
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-
-        cur.execute("SELECT DISTINCT avatar_id FROM avatar")
-        avatar_ids = [r[0] for r in cur.fetchall()]
-        log(f"[info] 发现 {len(avatar_ids)} 个角色")
-
-        cur.execute("SELECT DISTINCT weapon_item_id FROM avatar WHERE weapon_item_id IS NOT NULL")
-        weapon_ids = [r[0] for r in cur.fetchall()]
-        log(f"[info] 发现 {len(weapon_ids)} 把武器")
-
-        cur.execute("SELECT DISTINCT item_id, name_hash FROM artifact")
-        arti_rows = [r for r in cur.fetchall()]
-        log(f"[info] 发现 {len(arti_rows)} 件圣遗物")
-
-        cur.execute("SELECT DISTINCT set_hash FROM artifact WHERE set_hash IS NOT NULL")
-        set_hashes = [r[0] for r in cur.fetchall()]
-        log(f"[info] 发现 {len(set_hashes)} 个套装 hash")
-
-        # 圣遗物图标：meta-gs/artifact/imgs/{套装名}/{部位}.webp
-        #
-        # 两条路都走、取并集，因为两条路各自都会漏：
-        #   set_hash → 官方文案表（names.json）：新套装可能还没收录
-        #   item_id  → miao 元数据（artifact/data.json）：只登记了 299 个 id，也有覆盖不到的
-        # 实测两条合起来才齐。done_sets 负责去重，重复的算 skip。
-        done_sets = set()
-
-        def sync_arti(set_name, pos):
-            if (set_name, pos) in done_sets:
-                stats["skip"] += 1
-                return
-            done_sets.add((set_name, pos))
-            res = sync_file(f"meta-gs/artifact/imgs/{set_name}/{pos}.webp", out, REPO_RAW)
-            stats[res] += 1
-            if res == "fail":
-                log(f"  [fail] {set_name}/{pos}.webp")
-
-        arti_idx = load_miao_artifact_index()
-        for row in arti_rows:
-            iid, nhash = row[0], row[1]
-            # 先按 item_id，查不到再按部件中文名（见 load_miao_artifact_index 里的说明）
-            hit = arti_idx.get(str(iid)) if iid is not None else None
-            if not hit and nhash:
-                pname = chs_name_by_hash(names, nhash)
-                if pname:
-                    hit = arti_idx.get(f"name:{pname}")
-            if hit:
-                sync_arti(hit[0], hit[1])
-
-        for sh in set_hashes:
-            name = chs_name_by_hash(names, sh)
-            if not name:
-                stats["miss"] += 1
-                log(f"  [miss] set_hash={sh} 找不到中文名")
-                continue
-            for pos in range(1, 6):
-                sync_arti(name, str(pos))
-
-        # 角色：官方立绘 + 6 个命座图标
-        # 注意是 meta-gs/character/{名}/ 下，不是 character-img/{名}/01.jpg ——
-        # 后者是同人插画，miao 面板用的是官方 splash（见 CharImg.getImgs）
-        char_idx = load_miao_char_index()
-        for aid in avatar_ids:
-            name = char_idx.get(str(aid)) or avatar_name(names, aid)
-            if not name:
-                stats["miss"] += 1
-                log(f"  [miss] avatar_id={aid} 找不到中文名")
-                continue
-
-            if name in ("空", "荧", "旅行者"):
-                # 旅行者按元素分目录，逐个试（命中的那个会落盘，其余是 404 静默跳过）
-                for elem in TRAVELER_ELEMS:
-                    base = f"meta-gs/character/{name}/{elem}"
-                    for rel in [f"{base}/imgs/splash.webp"] + \
-                               [f"{base}/icons/cons-{i}.webp" for i in range(1, 7)]:
-                        res = sync_file(rel, out, REPO_RAW)
-                        stats[res] += 1
-                continue
-
-            for rel in [f"meta-gs/character/{name}/imgs/splash.webp"] + \
-                       [f"meta-gs/character/{name}/icons/cons-{i}.webp" for i in range(1, 7)]:
-                res = sync_file(rel, out, REPO_RAW)
-                stats[res] += 1
-                if res == "fail":
-                    log(f"  [fail] {rel}")
-
-        # 武器图标：meta-gs/weapon/{类型}/{名}/icon.webp
-        widx = load_weapon_index()
-        for wid in weapon_ids:
-            hit = widx.get(str(wid))
-            if not hit:
-                stats["miss"] += 1
-                log(f"  [miss] weapon_item_id={wid} 在 vendor 元数据里查不到")
-                continue
-            wtype, wname = hit
-            res = sync_file(f"meta-gs/weapon/{wtype}/{wname}/icon.webp", out, REPO_RAW)
-            stats[res] += 1
-            if res == "fail":
-                log(f"  [fail] {wtype}/{wname}/icon.webp")
-
-        conn.close()
-    else:
-        log(f"[warn] 找不到数据库 {db_path}，只同步通用素材")
-
-    report(stats)
-
-
-def report(stats):
     log(
-        f"[info] 完成：成功 {stats['ok']} / 跳过 {stats['skip']} / "
-        f"缺失 {stats['miss']} / 失败 {stats['fail']}"
+        f"[info] 完成：新复制 {stats['ok']} / 已存在 {stats['skip']} / "
+        f"复制失败 {stats['fail']} / 源端本就没有（可选图）{stats['src_miss']}"
     )
+    sys.exit(1 if (missing or stats["fail"]) else 0)
 
 
 if __name__ == "__main__":
