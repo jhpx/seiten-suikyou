@@ -306,8 +306,23 @@ def main():
             stats[res] += 1
             if res == "fail":
                 log(f"  [fail] {rel}")
+
+        # 下完必须回头核对一遍落盘结果。
+        #
+        # 为什么这一步不能省：清单是「页面真正会请求的图」的全集，少一个文件页面上
+        # 就是一个空框。而下载失败在多数情况下根本不报错 —— 国内直连 raw.githubusercontent
+        # 是 SSL 连接被掐（不是 404），脚本按 404 静默跳过，跑完照样打印「成功」。
+        # 实测表现就是：不知道哪天起部分角色没图了，而同步日志看着一切正常。
+        # 所以这里以磁盘为准收一遍口，缺什么列什么，并让进程以失败退出，
+        # 免得「漏图」这种事只有靠肉眼逛页面才发现。
+        missing = [rel for rel in rels if not (out / rel).exists()]
+        if missing:
+            log(f"[warn] 以下 {len(missing)} 个素材下载后仍然缺失，页面会有空框：")
+            for rel in missing:
+                log(f"  [缺] {rel}")
+            log("[hint] 网络不通时试试挂代理：ASSETS_PROXY=socks5h://127.0.0.1:4080")
         report(stats)
-        return
+        sys.exit(1 if missing else 0)
 
     log("[warn] 没找到素材清单，退回启发式扫描（建议先跑 tools/list_assets.mjs）")
 
