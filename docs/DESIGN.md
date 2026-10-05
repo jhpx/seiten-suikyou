@@ -257,7 +257,9 @@ enka 原始响应
    缺某一版迁移函数时 `openDb` 会直接抛错拒绝启动（降级处理会静默丢数据）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
-   `src/server/public/assets/` 同理是故意忽略的（18 MB 二进制，重新下载即可）。
+   ⚠️ `src/server/public/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件），
+   并不在 `.gitignore` 里。理由是重新 `sync:assets` 依赖本地那个 miao-plugin 目录在、且版本对得上，
+   换了机器素材就全没了。这条约定写在 `.gitignore` 自己的注释里。
 10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
     （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。离库打分时 `--offline --check` 会提示做不了。
 11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。

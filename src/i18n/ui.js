@@ -34,8 +34,11 @@ const TABLE = {
     rosterTitle: '角色大全', back: '返回', tapToView: '点击查看',
     detailTitle: '角色明细', artisRank: '圣遗物评级', artisTotal: '圣遗物总分',
     rule: '评分规则', scoredAt: '数据时间',
-    artisTag: '#{name}圣遗物',
-    artisNotice: '评分为<strong>喵喵版规则</strong>，仅供参考与娱乐。可使用<strong>{tag}</strong>来查看评分详情',
+    /* 上游出图这里还有半句「可使用 #角色名圣遗物 来查看评分详情」——
+       那是 QQ 云崽的聊天指令（上游模板里写作 {{gameHash}}，渲染出来就是 #），
+       网页版根本没有这个指令，照抄只会让页面上挂一个没头没尾的 #神里绫华圣遗物。
+       所以只留「评分为喵喵版规则」这半句。 */
+    artisNotice: '评分为<strong>喵喵版规则</strong>，仅供参考与娱乐。',
     /* CLI 也用这张表 —— 命令行和网页不该各说各话 */
     account: '账号', data: '数据', weapon: '武器', sets: '套装', substat: '副',
     scene: '场景', summary: '汇总', chars: '个角色', fetched: '最后抓取',
@@ -66,8 +69,7 @@ const TABLE = {
     rosterTitle: '角色大全', back: '返回', tapToView: '點擊查看',
     detailTitle: '角色明細', artisRank: '聖遺物評級', artisTotal: '聖遺物總分',
     rule: '評分規則', scoredAt: '資料時間',
-    artisTag: '#{name}聖遺物',
-    artisNotice: '評分為<strong>喵喵版規則</strong>，僅供參考與娛樂。可使用<strong>{tag}</strong>來查看評分詳情',
+    artisNotice: '評分為<strong>喵喵版規則</strong>，僅供參考與娛樂。',
     /* CLI 也用這張表 —— 命令行和網頁不該各說各話 */
     account: '帳號', data: '資料', weapon: '武器', sets: '套裝', substat: '副',
     scene: '場景', summary: '彙總', chars: '個角色', fetched: '最後抓取',
@@ -99,8 +101,9 @@ const TABLE = {
     rosterTitle: 'Characters', back: 'Back', tapToView: 'Tap to view',
     detailTitle: 'Character Details', artisRank: 'Artifact Rank', artisTotal: 'Artifact Score',
     rule: 'Rule', scoredAt: 'Scored at',
-    artisTag: '#{name} artifacts',
-    artisNotice: 'Scores follow <strong>Miao&rsquo;s rules</strong>, for reference and fun only. Use <strong>{tag}</strong> to see the breakdown.',
+    /* 撇号直接写 ’（U+2019），别写 &rsquo; —— 这段文案走 createTextNode 渲染，HTML 实体没人解码，
+       写实体会原样显示成「Miao&rsquo;s rules」 */
+    artisNotice: 'Scores follow <strong>Miao’s rules</strong>, for reference and fun only.',
     /* CLI uses this table too — terminal and page should not disagree */
     account: 'Account', data: 'Source', weapon: 'Weapon', sets: 'Sets', substat: 'Sub',
     scene: 'Scenario', summary: 'Summary', chars: 'characters', fetched: 'last fetch',
@@ -132,8 +135,7 @@ const TABLE = {
     rosterTitle: 'キャラ一覧', back: '戻る', tapToView: 'タップで表示',
     detailTitle: 'キャラ詳細', artisRank: '聖遺物評価', artisTotal: '聖遺物スコア',
     rule: '採点ルール', scoredAt: '取得日時',
-    artisTag: '#{name}聖遺物',
-    artisNotice: 'スコアは<strong>喵喵版ルール</strong>に準拠した参考・娯楽用の値です。<strong>{tag}</strong>で内訳を確認できます。',
+    artisNotice: 'スコアは<strong>喵喵版ルール</strong>に準拠した参考・娯楽用の値です。',
     /* CLI もこのテーブルを使う —— コマンドラインとページで言い換えを増やさない */
     account: 'アカウント', data: 'ソース', weapon: '武器', sets: 'セット', substat: 'サブ',
     scene: 'シーン', summary: '集計', chars: 'キャラ', fetched: '最終取得',
@@ -165,8 +167,7 @@ const TABLE = {
     rosterTitle: '캐릭터 목록', back: '뒤로', tapToView: '탭하여 보기',
     detailTitle: '캐릭터 상세', artisRank: '성유물 등급', artisTotal: '성유물 점수',
     rule: '채점 규칙', scoredAt: '수집 시각',
-    artisTag: '#{name} 성유물',
-    artisNotice: '점수는 <strong>喵喵 규칙</strong>을 따른 참고·오락용 값입니다. <strong>{tag}</strong>로 상세 내역을 볼 수 있습니다.',
+    artisNotice: '점수는 <strong>喵喵 규칙</strong>을 따른 참고·오락용 값입니다.',
     /* CLI도 이 표를 쓴다 —— 터미널과 페이지가 서로 다르게 말하면 안 된다 */
     account: '계정', data: '출처', weapon: '무기', sets: '세트', substat: '부옵션',
     scene: '시나리오', summary: '집계', chars: '캐릭터', fetched: '마지막 수집',

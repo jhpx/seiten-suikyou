@@ -391,8 +391,9 @@ function renderDetail () {
   }
   allWrap.append(allUl)
   infoBox.append(allWrap)
-  infoBox.append(richText(el('div', 'arti-notice'),
-    T('artisNotice', { tag: T('artisTag', { name: av.name }) })))
+  /* 只传文案本身：上游那句「可使用 #角色名圣遗物 …」是 QQ 指令提示，网页版没有对应功能，
+     后端文案表里已经把它剪掉了，这里不再拼 tag 插值 */
+  infoBox.append(richText(el('div', 'arti-notice'), T('artisNotice')))
 
   const markCont = el('div', 'arti-mark-cont')
   markCont.append(statBox, infoBox)

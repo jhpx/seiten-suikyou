@@ -242,7 +242,14 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
   return { server, db, viewOf, close: () => server.close() }
 }
 
-/** 起监听。默认只绑本机 —— 这是个人工具，不该顺手暴露到局域网。 */
+/**
+ * 起监听。
+ *
+ * host 默认**回环**而不是 0.0.0.0：这个函数的调用方有两类，一类是「已经想清楚要暴露到哪」的
+ * （文件末尾的 CLI 入口，显式传 0.0.0.0），另一类是测试和脚本 —— 后者不传 host 时，
+ * 不该在不知情的情况下开着一个局域网端口（测试的内存库里有真实 UID 数据）。
+ * 对外服务是正式入口的显式决定，不是库的默认。
+ */
 export function startServer ({ port = 8787, host = '127.0.0.1', dbFile, fetchImpl } = {}) {
   const app = createApp({ dbFile, fetchImpl })
   return new Promise((resolve) => {
@@ -271,11 +278,12 @@ function parseArgs (argv) {
 /* 只有被当成脚本跑时才起服务；被 import 时（测试）什么都不做 */
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2))
-  const host = args.host || '127.0.0.1'
+  /* 正式入口默认对外（局域网服务）。要只给本机用就 --host 127.0.0.1。 */
+  const host = args.host || '0.0.0.0'
   const dbFile = args.db || path.join('data', 'gs.db')
   const app = await startServer({ port: Number(args.port || process.env.PORT || 8787), host, dbFile })
 
-  /* 绑 0.0.0.0 时把各网卡地址列出来 —— 手机要访问得知道往哪打。
+  /* 绑 0.0.0.0（默认）时把各网卡地址列出来 —— 手机要访问得知道往哪打。
      虚拟机网卡（VMware / WSL）也在里面，扫一眼就能认出哪个是 Wi-Fi 的。 */
   const lanIps = host === '0.0.0.0'
     ? [...new Set(Object.values(os.networkInterfaces()).flat()
@@ -289,7 +297,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (lanIps.length) {
     console.log('  局域网地址（手机连同一个 Wi-Fi 就能打开）')
     for (const ip of lanIps) console.log(`    http://${ip}:${app.port}`)
-    console.log('  注意    绑 0.0.0.0 等于整个局域网都能连，本服务没有登录鉴权，测完记得停掉')
+    console.log('  注意    同网段任何人可访问（本服务无登录鉴权）；只给本机用就 --host 127.0.0.1')
   }
   console.log(`  库文件  ${dbFile}`)
   if (!i18n.available()) {
