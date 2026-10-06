@@ -661,11 +661,15 @@
  * SSS<49 / ACE<56 / MAX<70。
  *
  * ⚠️ `app.js` 的 `RANK_COLOR` 是这套色的 JS 副本（首页卡片角标在 JS 里上色），改这里要同步改那边。
+ *
+ * ⚠️ SS 的紫**不能是普通紫**：四星角色卡底色（common/item/bg4.png 主色 #8a6ab0）就是紫，
+ * 首页角标压在那张图上（再垫 50% 黑 = #453558）。最早用的 #b07ae8 和它**色相只差 2°**，
+ * 字直接融进底里。现在的 #ef8ce0 是**偏粉的梅紫**：色相差拉到 42°，同底对比度 3.57 → 4.99。
  */
 .mark-MAX { color: #ec2b2b; font-weight: bold; }
 .mark-ACE { color: #ff9f2e; font-weight: bold; }
 .mark-SSS { color: #ffe066; font-weight: bold; }
-.mark-SS { color: #b07ae8; font-weight: bold; }
+.mark-SS { color: #ef8ce0; font-weight: bold; }
 .mark-S { color: #5fd48f; font-weight: bold; }
 .mark-A { color: #4fb0ee; font-weight: bold; }
 .mark-B { color: #a9d8ff; font-weight: bold; }

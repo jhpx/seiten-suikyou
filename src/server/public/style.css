@@ -11,7 +11,7 @@
        #d3bc8e 是 miao 的描边金（miao.css:158 的 box-shadow）、
        #ffe699 是卡片里「有效词条 / 高分」那层金（miao.css 的 .gold、li.great、武器副属性都在用）、
        #f6ecd2 是卡片右下角评分那层米白。
-     ⚠️ 它**不是**档位色：档位色 2026-10-06 重排过（SS 是紫 #b07ae8、SSS 是亮金 #ffe066），
+     ⚠️ 它**不是**档位色：档位色 2026-10-06 重排过（SS 是梅紫 #ef8ce0、SSS 是亮金 #ffe066），
      以前 SS/SSS 确实借过这个金，现在别再拿它当档位色用。
      顶栏要「和下侧搭」，就得从下侧已经在用的色里取 —— 另起一套必然搭不上。
      这里原来放的是 #5b8cff 蓝（--accent），只服务顶栏三处、跟下面一处都不沾，这次一起退场。 */
@@ -31,7 +31,7 @@
   --rank-max: #ec2b2b;
   --rank-ace: #ff9f2e;
   --rank-sss: #ffe066;
-  --rank-ss: #b07ae8;
+  --rank-ss: #ef8ce0;
   --rank-s: #5fd48f;
   --rank-a: #4fb0ee;
   --rank-b: #a9d8ff;
@@ -66,9 +66,21 @@ body {
   z-index: 100;
   background: rgba(10, 12, 16, .92);
   backdrop-filter: blur(12px);
-  padding: 10px 14px;
+  /* 左右内边距从 .top 挪到里面的 .brand / .query 上：顶栏**背景和底边金线仍然通栏**
+     （sticky 背景条只有 520px 宽的话，两侧会露出一条缝，比内容宽更丑），
+     限宽的只是内容 —— 内容和下面 .app / .foot 一样收在 --app-width 里居中，
+     桌面和手机看到的才是同一条 520px 的内容带。 */
+  padding: 10px 0;
   /* 底边那条线由原来的实心灰蓝 border 换成下面的金线；
      sticky + z-index 已经建了包含块，::after 才定得住 */
+}
+/* 顶栏内容限宽居中：宽度取 --app-width（和 .app 同一个数），左右 padding 也是同一个 14px，
+   于是顶栏内容的左右边缘和下面账号头、网格、页脚严格对齐（实测四条都是 l=354 / 宽 492）。 */
+.brand, .query {
+  width: 100%;
+  max-width: var(--app-width);
+  margin: 0 auto;
+  padding: 0 14px;
 }
 /* 底边金线：两头淡、中间实。和明细页卡片描边、评级胶囊是同一支金色，
    比一条从左边灌到右边的实线更像游戏里的分隔条。 */
@@ -82,7 +94,7 @@ body {
     transparent, var(--gold-line) 16%, var(--gold-line) 84%, transparent);
 }
 
-.brand { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.brand { display: flex; align-items: center; gap: 9px; margin: 0 auto 10px; }
 /* ✦ 那颗方章原来是紫蓝渐变 —— 全站唯一的紫蓝色块，下面全是金/米白/星级底，看着像别处抠来的。
    改成金色浮雕：外渐变 + 内侧顶边高光 + 一圈暖投影，深棕字压在金上（白字在这块金上只有约 1.6:1）。 */
 .brand .mark {
@@ -97,12 +109,20 @@ body {
 
 .query {
   display: grid;
-  /* 1fr → minmax(0, 1fr)：轨道才压得下去。input 的固有宽度按 size 属性算（约 20 字符），
-     光写 1fr 时它撑住的是 min-content 而不是 0 —— 360px 窄屏下新按钮宽了一点，整行就会被顶出去。 */
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  /* 三列：UID（最多 10.5em，可压）｜刷新（紧跟 UID）｜语言（右侧那列里靠右）。
+     以前是 minmax(0,1fr) auto auto —— 第一列把剩下的空间全吃掉，刷新按钮被推到
+     离 UID 框 857px 远的地方（1200px 视口实测）。现在第一列自己封顶，
+     刷新就贴在 UID 框右边缘外 8px，语言靠右端，中间空出来的那一大片才是留白。
+     下限写 0 不是 1fr：窄屏上第一列必须压得下去，否则整行会被顶出横向滚动条。 */
+  grid-template-columns: minmax(0, 10.5em) auto minmax(0, 1fr);
   gap: 8px;
   align-items: end;
 }
+/* 10.5em ≈ 147px：9 位数字连内边距实测要 89px，这是「宽裕但短」的点。
+   宽屏上到顶不再拖长，窄屏上轨道照样能压到 115.9px（320px 视口实测）。 */
+/* 语言下拉推到最右：justify-self 一改，grid item 就不再拉伸、按内容宽度收，
+   正好贴在顶栏内容带的右边缘上（实测 l=748，与账号头右边缘 846 齐平）。 */
+.query .field.locale { justify-self: end; }
 .field { display: flex; flex-direction: column; gap: 3px; }
 /* 标签改用金调暗版（游戏里属性名那种金色小字）+ 拉开字距，不用灰蓝 --ink-3 ——
    那个灰蓝和顶栏原来那套是一伙的，下面一处都没有。
@@ -179,7 +199,7 @@ body {
 /* 键盘走到按钮上要看得见；鼠标点不算，所以用 :focus-visible 而不是 :focus */
 .btn:focus-visible { outline: 2px solid rgba(211, 188, 142, .55); outline-offset: 2px; }
 
-/* 主按钮（读取）= 金色实心，和卡片上的「精1」金、评级金同族。
+/* 主按钮（刷新）= 金色实心，和卡片上的「精1」金、评级金同族。
    字用深棕：白字压在这块金上只有约 1.6:1，深棕 #3a3020 是 8.3:1，过 AA。 */
 .btn.primary {
   background: linear-gradient(180deg, #ffeec2, #e6cd92 52%, #d2b476);
@@ -206,16 +226,19 @@ body {
 
 /* 明细页的「← 返回」做成**金色实心**：顶栏在明细页整排收掉后，它是这一屏唯一的退出入口，
    原来那套「纯灰文字、无边框、14px」跟右边灰色的角色名一个分量，扫一眼根本找不到。
-   现在和顶栏「读取」用同一块金 —— 深棕字压在金上 8.3:1（白字只有 1.6:1），过 AA。
-   高度取 34 而不是跟顶栏一样的 36：这里是页面内的返回栏，不必跟控件行严格等高。 */
+   现在和顶栏「刷新」用同一块金 —— 深棕字压在金上 8.3:1（白字只有 1.6:1），过 AA。
+   右边原来那个灰色角色名删掉之后，这一行只剩它自己，尺寸顺势提一档：
+   34→40px 高、13→15px 字、内边距 15→24px，并给 112px 下限（日文「戻る」只有两个字，
+   不设下限会缩成一条细按钮，跟「唯一的退出入口」这个身份不匹配）。 */
 .btn.back {
-  height: 34px;
-  padding: 0 15px;
+  height: 40px;
+  min-width: 112px;
+  padding: 0 24px;
   background: linear-gradient(180deg, #ffeec2, #e6cd92 52%, #d2b476);
   border: 1px solid #f2e0b4;
   border-radius: 10px;
   color: #3a3020;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: .08em;
   text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
@@ -229,18 +252,18 @@ body {
 }
 .btn.back:active { transform: translateY(1px); }
 
-/* 顶栏在 ≤380px 上：四个控件挤在一行，把按钮的水平内边距收一档，宽度让回 UID 框。
-   量过（360px 视口）：按钮 62.1×2 + 下拉 98 + 间距 24 之后只剩 85.8px 给 UID，
-   而 9 位 UID「101242308」连内边距要 89px —— 尾巴会被裁掉。
-   390px 及以上不用管（UID 有 115.8px，够）。 */
-@media (max-width: 380px) {
-  .btn { padding: 0 11px; letter-spacing: .04em; }
-}
+/* 顶栏现在只有三个控件（UID + 刷新 + 语言）：360px 视口下 刷新 62.1 + 下拉 98 + 间距 16 = 176px，
+   剩下的 156px 给 UID 绰绰有余（9 位连内边距要 89px），320px 也够。
+   以前「≤380px 收按钮内边距」的 media query 是为四个控件挤一行准备的，控件减到三个后
+   它不再有任何作用，已删（2026-10-06）。 */
 
 /* ───────────────────────── 提示条 ───────────────────────── */
 
 .banner {
-  margin: 8px 14px 0;
+  /* 和顶栏/主容器同一条内容带：通栏的话桌面上一句报错会横跨整屏 */
+  width: 100%;
+  max-width: var(--app-width);
+  margin: 8px auto 0;
   padding: 8px 12px;
   border-radius: 8px;
   background: var(--bg-3);
@@ -265,9 +288,7 @@ body {
 .view.active { display: block; animation: fadeIn .18s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-.page-title {
-  font-size: 18px; font-weight: 700; margin: 4px 0 12px;
-}
+/* 首页没有标题了：原来那行「角色大全」删掉了（2026-10-07），账号头直接顶上。 */
 
 /* ───────────────────────── 首页：账号头 ───────────────────────── */
 
@@ -284,6 +305,59 @@ body {
 .acct-meta div { display: flex; flex-direction: column; }
 .acct-meta b { font-size: 15px; }
 .acct-meta span { font-size: 11px; color: var(--ink-3); }
+
+/* ───────────────────────── 首页：筛选条 ─────────────────────────
+ *
+ * 名称搜索框 + 元素 chips。视觉全部沿用顶栏控件那套（--ctrl-bg 深色玻璃 + --gold-line
+ * 金描边 + focus 金晕），一个新色都不引 —— 筛选条和顶栏在同一屏上，另起一套必然搭不上。
+ * 34px 高：比顶栏控件（36）矮 2px，它是内容区的次级控件，不该和顶栏主角一样高。
+ */
+.roster-filter {
+  display: flex; gap: 8px; align-items: center;
+  margin-bottom: 12px;
+}
+.rf-search {
+  flex: 1; min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--gold-line);
+  color: var(--cream);
+  border-radius: 10px;
+  font-size: 13px;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.rf-search::placeholder { color: rgba(240, 236, 225, .45); }
+.rf-search:hover { border-color: rgba(211, 188, 142, .5); }
+.rf-search:focus {
+  border-color: var(--gold-line-hi);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45), 0 0 0 3px rgba(211, 188, 142, .13);
+}
+.rf-elems { display: flex; gap: 6px; }
+.rf-elem {
+  width: 34px; height: 34px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease;
+}
+.rf-elem img { width: 20px; height: 20px; object-fit: contain; pointer-events: none; }
+.rf-elem:hover { border-color: rgba(211, 188, 142, .5); }
+/* 「全部」是文字 chip：日文「すべて」3 个字放不进 34px 见方，宽度交给内容撑 */
+.rf-elem.rf-all { width: auto; padding: 0 10px; letter-spacing: .04em; }
+/* 激活 = 金描边 + 金晕 + 淡金底，和顶栏按钮 hover/focus 是同一支金 */
+.rf-elem.active {
+  border-color: var(--gold-line-hi);
+  background: rgba(211, 188, 142, .16);
+  color: var(--gold-lt);
+  box-shadow: 0 0 0 3px rgba(211, 188, 142, .13);
+}
 
 /* ───────────────────────── 首页：角色卡片网格 ─────────────────────────
  *
@@ -523,7 +597,7 @@ body {
 
 /* ───────────────────────── 明细页 ───────────────────────── */
 
-/* 明细页收掉整条顶栏：UID 框/读取/抓取/语言在这里全用不上（切语言回首页做），
+/* 明细页收掉整条顶栏：UID 框/刷新/语言在这里全用不上（切语言回首页做），
    留着既把 600px 画布往下顶，又让「← 返回」这一屏唯一的退出入口显得次要。
    body 上挂 class 而不是给 #top 写 hidden —— 首页/明细页来回切只动一个类名，
    不用在两处各维护一次显隐。 */
@@ -531,12 +605,10 @@ body.on-detail .top { display: none; }
 /* 顶栏没了，main 顶到屏幕最上沿，12px 有点贴边，多给 4px 呼吸 */
 body.on-detail .app { padding-top: 16px; }
 
+/* 返回栏现在只有一个按钮（角色名已删），gap 跟着去掉 */
 .detail-bar {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center;
   margin-bottom: 12px;
-}
-.detail-title {
-  font-size: 15px; font-weight: 600; color: var(--ink-2);
 }
 
 /*

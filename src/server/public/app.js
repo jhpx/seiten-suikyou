@@ -1,7 +1,8 @@
 /*
  * 页面逻辑 —— 原生 JS，移动优先，不引框架
  *
- * 结构：首页（角色大全）→ 点击卡片 → 角色明细页。PC 上也做成手机风格：外层固定最大宽度、居中。
+ * 结构：首页（账号头 + 筛选条 + 角色网格）→ 点击卡片 → 角色明细页。
+ * PC 上也做成手机风格：顶栏/主容器/页脚都收在同一条 --app-width 内容带里居中。
  *
  * 和后端的分工：后端负责「算什么、叫什么」，前端只负责「长什么样」——
  * 所以这里一个词条名都不写死，部位名/词条名/套装名全是后端按 locale 给好的文本。
@@ -12,11 +13,13 @@ const $ = (id) => document.getElementById(id)
 const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
 /* 首页卡片角标的档位色。这是 `miao.css` 里 .mark-* 那一套的 JS 副本 ——
    那边是 CSS（明细页/圣遗物卡），这里是 JS（首页角标在渲染时上色），改一边要同步改另一边。
- * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。
+ * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 梅紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。
  * 九档要九个色，一个都不许重。
+ * ⚠️ SS 的紫偏偏要**避开普通紫**：四星角色卡底色就是紫（bg4.png 主色 #8a6ab0），角标压在它上面，
+ *   用 #b07ae8 那种正紫会和底色同色相（差 2°）糊成一片。现在这个 #ef8ce0 偏粉，色相差 42°。
  */
 const RANK_COLOR = {
-  MAX: '#ec2b2b', ACE: '#ff9f2e', SSS: '#ffe066', SS: '#b07ae8',
+  MAX: '#ec2b2b', ACE: '#ff9f2e', SSS: '#ffe066', SS: '#ef8ce0',
   S: '#5fd48f', A: '#4fb0ee', B: '#a9d8ff', C: '#ffffff', D: '#6b7280'
 }
 const SLOT_GLYPH = { 1: '花', 2: '羽', 3: '沙', 4: '杯', 5: '冠' }
@@ -34,7 +37,10 @@ const state = {
   view: null,
   selectedAvatarId: null,
   busy: false,
-  ui: {}
+  ui: {},
+  /* 首页筛选：q = 名称搜索串（大小写不敏感），elem = 元素 key（'' = 不限）。
+     不持久化 —— 筛选是「在这份名单里找人」的临时动作，下次进来还停在旧条件上反而碍事。 */
+  filter: { q: '', elem: '' }
 }
 
 const T = (key, vars) => {
@@ -136,7 +142,7 @@ function showView (name) {
   $('view-roster').classList.toggle('active', name === 'roster')
   $('view-detail').classList.toggle('active', onDetail)
   /* 明细页把整条顶栏收掉（CSS 侧：body.on-detail .top { display:none }）。
-     UID 框 / 读取 / 抓取 / 语言在这儿一个都用不上，留着只是把 600px 画布往下顶，
+     UID 框 / 刷新 / 语言在这儿一个都用不上，留着只是把 600px 画布往下顶，
      还把页面上唯一的退出入口「← 返回」压成次要信息。切回首页再放出来 ——
      语言切换只在首页做，明细页不带这一排。 */
   document.body.classList.toggle('on-detail', onDetail)
@@ -156,7 +162,7 @@ function applyView (view) {
   showView('roster')
 }
 
-/* ───────────────────────── 首页：角色大全 ───────────────────────── */
+/* ───────────────────────── 首页：账号头 + 筛选条 + 网格 ───────────────────────── */
 
 function renderAccountHeader (acct) {
   const box = el('div', 'acct-header')
@@ -253,7 +259,9 @@ function renderRoster () {
   const box = $('view-roster')
   box.innerHTML = ''
 
-  box.append(el('h2', 'page-title', T('rosterTitle')))
+  /* 原来这儿有个「角色大全」的 h2。它是账号头上面孤零零一行大字，
+     而账号头里已经有昵称/签名/等级这一整套身份信息，下面紧接着就是筛选条 ——
+     标题夹在中间既没有新增信息，又把首屏往下推了一行。删掉（2026-10-07）。 */
   box.append(renderAccountHeader(view?.account))
 
   /* 页脚只报「数据时间」。写在这里（早退之前）：没角色可评时卡片不画，
@@ -267,10 +275,111 @@ function renderRoster () {
     return
   }
 
-  const sorted = [...view.avatars].sort((a, b) => b.score.markValue - a.score.markValue)
+  box.append(renderFilterBar(view))
+  const slot = el('div', 'rf-grid')
+  box.append(slot)
+  renderRosterGrid(slot)
+}
+
+/* ───────────────────────── 首页：筛选条 ─────────────────────────
+ *
+ * 名称搜索框 + 元素 chips。两条规则：
+ * ① 筛选只重画网格那一块（refreshRosterGrid），不重建整条筛选栏 ——
+ *    重建会把搜索框的焦点和光标位置一起冲掉，每敲一个字焦点丢一次。
+ * ② 元素图标/元素名都从名单里已有角色的 elemIcon / elemText 借，
+ *    前端不自己拼 /assets 路径（和卡片一个规矩：URL 一律后端下发）。
+ */
+
+/* 筛选项的排列顺序：游戏内图鉴的元素顺序（火水风雷草冰岩），不按数据出现顺序排。
+   旅行者的 elem 是 multi，不在七元素里 —— 他不会有自己的筛选项，
+   但「不限」时照常出现在网格里。 */
+const ELEM_ORDER = ['pyro', 'hydro', 'anemo', 'electro', 'dendro', 'cryo', 'geo']
+
+function rosterElems (view) {
+  const have = new Set(view.avatars.map(a => a.elem))
+  return ELEM_ORDER.filter(e => have.has(e))
+}
+
+function renderFilterBar (view) {
+  const bar = el('div', 'roster-filter')
+
+  const search = el('input', 'rf-search')
+  search.type = 'search'
+  search.placeholder = T('filterSearch')
+  search.value = state.filter.q
+  search.addEventListener('input', () => {
+    state.filter.q = search.value
+    refreshRosterGrid()
+  })
+  bar.append(search)
+
+  const chips = el('div', 'rf-elems')
+  /* 激活态只改 class，不重建 chips —— 和搜索框同一个理由 */
+  const paint = () => {
+    for (const c of chips.children) c.classList.toggle('active', c.dataset.elem === state.filter.elem)
+  }
+  const pick = (e) => {
+    /* 再点一次已激活的 chip = 取消筛选，回到「全部」 */
+    state.filter.elem = state.filter.elem === e ? '' : e
+    paint()
+    refreshRosterGrid()
+  }
+
+  const elems = rosterElems(view)
+  /* 换了 UID 之后，旧的元素条件可能在这份名单里根本不存在 —— 那时一个 chip 都不激活、
+     网格却是空的，看着像 bug。条件不成立就地清空，回到「全部」。 */
+  if (state.filter.elem && !elems.includes(state.filter.elem)) state.filter.elem = ''
+
+  const all = el('button', 'rf-elem rf-all', T('filterAll'))
+  all.type = 'button'
+  all.dataset.elem = ''
+  all.addEventListener('click', () => pick(''))
+  chips.append(all)
+
+  for (const e of elems) {
+    const src = view.avatars.find(a => a.elem === e)
+    const c = el('button', 'rf-elem')
+    c.type = 'button'
+    c.dataset.elem = e
+    c.title = src?.elemText || e
+    const img = el('img')
+    img.src = src?.elemIcon || ''
+    img.alt = src?.elemText || e
+    img.onerror = () => imgError(img)
+    c.append(img)
+    c.addEventListener('click', () => pick(e))
+    chips.append(c)
+  }
+  paint()
+  bar.append(chips)
+  return bar
+}
+
+function filteredAvatars (view) {
+  const q = state.filter.q.trim().toLowerCase()
+  const e = state.filter.elem
+  return view.avatars
+    .filter(a => !e || a.elem === e)
+    /* name 是当前语言的，nameZh 恒为中文 —— 英文页也允许直接敲中文名找人 */
+    .filter(a => !q || (a.name || '').toLowerCase().includes(q) || (a.nameZh || '').toLowerCase().includes(q))
+}
+
+function renderRosterGrid (slot) {
+  slot.innerHTML = ''
+  const list = filteredAvatars(state.view)
+  if (!list.length) {
+    slot.append(el('div', 'placeholder', T('noMatch')))
+    return
+  }
+  const sorted = [...list].sort((a, b) => b.score.markValue - a.score.markValue)
   const grid = el('div', 'char-grid')
   for (const av of sorted) grid.append(renderCharCard(av))
-  box.append(grid)
+  slot.append(grid)
+}
+
+function refreshRosterGrid () {
+  const slot = document.querySelector('#view-roster .rf-grid')
+  if (slot) renderRosterGrid(slot)
 }
 
 /* ─────────────────────────
@@ -299,7 +408,10 @@ function renderDetail () {
   const bar = el('div', 'detail-bar')
   const back = el('button', 'btn back', '← ' + T('back'))
   back.addEventListener('click', backToRoster)
-  bar.append(back, el('span', 'detail-title', av.name))
+  /* 原来右边还挂了个角色名（.detail-title）。名字在下面 600px 画布最顶上写了更大一号，
+     这儿再来一遍是重复，而且灰色小字跟金色按钮挨着，视觉上把按钮的分量分走了一半 ——
+     删掉，让「← 返回」独占这一行（2026-10-07）。 */
+  bar.append(back)
   box.append(bar)
 
   /* 600px 画布。元素类名照 miao 的 elemLayout 挂在容器上，CSS 据此选背景图 */
@@ -629,6 +741,35 @@ function showLoading (text) {
   box.append(wrap)
 }
 
+/*
+ * UID 输入历史。原生 autocomplete 靠不住（表单 submit 被 preventDefault 后，
+ * 浏览器记不记全看心情），所以自己用 localStorage 存最近用过的 UID、
+ * 渲染成 <datalist> —— 点一下输入框就能选回上次那个，跨会话也在。
+ * 上限 8 个：再多这个下拉就变成翻名单了。
+ */
+const UID_HISTORY_KEY = 'st.uids'
+function uidHistory () {
+  try {
+    const list = JSON.parse(localStorage.getItem(UID_HISTORY_KEY) || '[]')
+    return Array.isArray(list) ? list.map(String) : []
+  } catch { return [] }
+}
+function renderUidHistory () {
+  const dl = $('uidHistory')
+  dl.innerHTML = ''
+  for (const u of uidHistory()) {
+    const o = document.createElement('option')
+    o.value = u
+    dl.append(o)
+  }
+}
+function rememberUid (uid) {
+  const s = String(uid)
+  const list = [s, ...uidHistory().filter(u => u !== s)].slice(0, 8)
+  localStorage.setItem(UID_HISTORY_KEY, JSON.stringify(list))
+  renderUidHistory()
+}
+
 async function loadUid (uid, { keepSelection = false } = {}) {
   if (!keepSelection) state.selectedAvatarId = null
   showLoading(T('reading'))
@@ -636,6 +777,7 @@ async function loadUid (uid, { keepSelection = false } = {}) {
     const view = await api(`/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`)
     state.uid = Number(uid)
     localStorage.setItem('st.uid', String(uid))
+    rememberUid(uid)
     applyView(view)
   } catch (e) {
     state.view = null
@@ -660,6 +802,7 @@ async function fetchUid (uid) {
     state.uid = Number(uid)
     state.selectedAvatarId = null
     localStorage.setItem('st.uid', String(uid))
+    rememberUid(uid)
     applyView(data)
     banner(T('fetchDone', { n: data.count }), 'ok')
   } catch (e) {
@@ -701,7 +844,6 @@ function applyStaticUi () {
   $('brandName').textContent = T('title')
   $('brandSub').textContent = `seiten-suikyou · ${T('subtitle')}`
   $('uidLabel').textContent = T('uidLabel')
-  $('load').textContent = T('load')
   $('fetch').textContent = T('fetch')
   $('fetch').title = T('fetchTip')
   $('localeLabel').textContent = T('localeLabel')
@@ -713,6 +855,7 @@ function applyStaticUi () {
 async function boot () {
   const params = new URLSearchParams(location.search)
   state.locale = params.get('locale') || localStorage.getItem('st.locale') || 'chs'
+  renderUidHistory()
 
   try {
     const meta = await loadMeta(state.locale)
