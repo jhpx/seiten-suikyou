@@ -37,7 +37,7 @@ const ArtisMarkCfg = {
       }
     }
 
-    let def = function (attrWeight, title = []) {
+    let def = function (attrWeight, title = [], isDefaultWeight = false) {
       let weight = lodash.extend({}, attrWeight || usefulAttr[char.name] || {})
       let check = (key, max = 75, maxPlus = 75, isWeapon = true) => {
         let original = weight[key] || 0
@@ -91,13 +91,18 @@ const ArtisMarkCfg = {
       title = title.length > 0 ? title.join('|') : '通用'
       return {
         title: `${char.abbr}-${title}`,
-        attrWeight: weight
+        attrWeight: weight,
+        /* 本项目加：这一份权重是「上游权重表里没有该角色、只能拿通用表兜底」吗？
+           表现层要靠它把标题从「妮莎-通用」改成「默认-通用」——
+           不然用户会以为那把权重表真的写着沃雅妮莎。isDefaultWeight 由 def 的调用方传入，
+           角色专属规则（artis.js）自己调 def 时不传，恒为 false。 */
+        isDefaultWeight
       }
     }
 
     let charRule = char.getArtisCfg() || function ({ def }) {
       let defaultAttrWeight = isGs ? { atk: 75, cpct: 100, cdmg: 100, dmg: 100, phy: 100 } : { atk: 75, cpct: 100, cdmg: 100, dmg: 100, speed: 100 }
-      return def(usefulAttr[char.name] || defaultAttrWeight)
+      return def(usefulAttr[char.name] || defaultAttrWeight, [], !usefulAttr[char.name])
     }
 
     if (charRule) {
@@ -108,7 +113,7 @@ const ArtisMarkCfg = {
   getCfg (profile) {
     let { char } = profile
     let { game } = char
-    let { attrWeight, title } = ArtisMarkCfg.getCharArtisCfg(profile)
+    let { attrWeight, title, isDefaultWeight } = ArtisMarkCfg.getCharArtisCfg(profile)
     let attrs = {}
     let baseAttr = char.baseAttr || { hp: 14000, atk: 230, def: 700 }
     let { attrMap } = Meta.getMeta(game, 'arti')
@@ -135,7 +140,9 @@ const ArtisMarkCfg = {
     return {
       attrs,
       classTitle: title,
-      posMaxMark
+      posMaxMark,
+      /* 本项目加：往上传，交给 view 层决定怎么写标题 */
+      isDefaultWeight: !!isDefaultWeight
     }
   }
 }
