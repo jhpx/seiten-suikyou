@@ -9,7 +9,10 @@
   --ink-3: #6f7a8e;
   /* 原神金 —— 顶栏控件用。三个色都不是新调的：
        #d3bc8e 是 miao 的描边金（miao.css:158 的 box-shadow）、
-       #ffe699 是 SS/SSS 档位色（--rank-sss）、#f6ecd2 是卡片右下角评分那层米白。
+       #ffe699 是卡片里「有效词条 / 高分」那层金（miao.css 的 .gold、li.great、武器副属性都在用）、
+       #f6ecd2 是卡片右下角评分那层米白。
+     ⚠️ 它**不是**档位色：档位色 2026-10-06 重排过（SS 是紫 #b07ae8、SSS 是亮金 #ffe066），
+     以前 SS/SSS 确实借过这个金，现在别再拿它当档位色用。
      顶栏要「和下侧搭」，就得从下侧已经在用的色里取 —— 另起一套必然搭不上。
      这里原来放的是 #5b8cff 蓝（--accent），只服务顶栏三处、跟下面一处都不沾，这次一起退场。 */
   --gold: #d3bc8e;
@@ -22,18 +25,18 @@
   --radius-sm: 10px;
   --app-width: 520px;
   /* 档位色。⚠️ 这组 token **目前一个 var() 引用都没有**（2026-10-06 查过：grep 'var(--rank' 零命中），
-     真正生效的是 `miao.css` 的 `.mark-*` 和 `app.js` 的 `RANK_COLOR` 两处 —— 它们才是真值，
-     这里的注释「与 miao 完全一致」也是错的：我们已经在 SSS/SS、S/A 上分了色（见 miao.css 那条注释）。
-     留着它当一份可查的色表；想改档位色请改那两处，别只改这里。 */
-  --rank-max: #e85656;
-  --rank-ace: #e85656;
-  --rank-sss: #ffe699;
-  --rank-ss: #e0a03c;
-  --rank-s: #d699ff;
-  --rank-a: #a97fd6;
-  --rank-b: #e8edf4;
-  --rank-c: #e8edf4;
-  --rank-d: #e8edf4;
+     真正生效的是 `miao.css` 的 `.mark-*` 和 `app.js` 的 `RANK_COLOR` 两处 —— 它们才是真值。
+     留着它当一份可查的色表；想改档位色请改那两处，别只改这里。
+     九档九色（温度带：无彩 → 冷 → 紫 → 暖 → 红），任意两档 RGB 直线距离 ≥ 82。 */
+  --rank-max: #ec2b2b;
+  --rank-ace: #ff9f2e;
+  --rank-sss: #ffe066;
+  --rank-ss: #b07ae8;
+  --rank-s: #5fd48f;
+  --rank-a: #4fb0ee;
+  --rank-b: #a9d8ff;
+  --rank-c: #ffffff;
+  --rank-d: #6b7280;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }

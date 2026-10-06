@@ -210,6 +210,25 @@
   background-size: auto 16px;
   background-repeat: no-repeat;
 }
+/* 物伤加成：雪碧图里**没有**这个图标（上游 profile-detail.css 也没有 .i-phy，
+   整张 icon.png 500×40 共 25 格、只画到第 17 格且第 10~17 格全是元素伤害那批）。
+   miao 那边物伤一样是空图标 —— 我们不跟着空，用内联 SVG 补一个。
+   画的是游戏里物伤符文的轮廓：上宽下窄的箭头 + 中间一道竖杠，和雪碧图那批
+   元素图标的笔画粗细、留白一致（都在 16×16 的框里居中）。
+   ⚠️ 别改回 background-position —— 那样会切到元素图标上，物理角色会看到火/冰/水。 */
+.i-phy {
+  width: 16px; height: 16px;
+  background: none;
+  vertical-align: -3px;
+}
+.i-phy::before {
+  content: '';
+  display: block;
+  width: 16px; height: 16px;
+  background: no-repeat center / 16px 16px
+    url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M8 1.2 13.4 6.6h-3.1v3.2H9.6v2.4H6.4V9.8H5.7V6.6H2.6z'/%3E%3C/svg%3E");
+}
+
 .char-attr li .title {
   width: 75px;
   text-shadow: 0 0 1px rgba(0, 0, 0, .8), 1px 1px 3px rgba(0, 0, 0, .5);
@@ -253,7 +272,12 @@
 .char-attr li .value2 .base.zero { color: #aaa; }
 .char-attr li .value2 .plus { color: #90e800; }
 
-/* 属性图标精灵图：一张横图靠 background-position 切 */
+/* 属性图标精灵图：一张横图（500×40，25 格 × 20px）靠 background-position 切。
+   ⚠️ 别以为「格序 = 词条顺序」—— 雪碧图只画到第 9 格，后面全空。
+   原先抄到 .i-dmg（第 8 格）就断了，.i-heal 没抄 → 治疗加成那行图标是空的
+   （实测七七那页）。.i-heal 的 -144px 是**上游 profile-detail.css:179** 给的值。
+   ⚠️ .i-phy（物伤）**上游根本没有**：全仓 grep 无 i-phy，雪碧图也没有对应格位
+      —— miao 那边物伤一样是空图标。我们给它补了一个内联 SVG（见下方 .i-phy 规则）。 */
 .i-hp { background-position: -16px 0; }
 .i-atk { background-position: -32px 0; }
 .i-def { background-position: -48px 0; }
@@ -262,6 +286,7 @@
 .i-cdmg { background-position: -96px 0; }
 .i-recharge { background-position: -112px 0; }
 .i-dmg { background-position: -128px 0; }
+.i-heal { background-position: -144px 0; }
 
 /* ── 命座 6 格（左下角一排） ── */
 .char-cons {
@@ -628,23 +653,24 @@
 .artis .head span.mark { font-size: 16px; font-weight: bold; }
 
 /*
- * 档位配色：红(MAX/ACE) → 金(SSS) → 琥珀(SS) → 紫(S) → 暗紫(A) → 白(B/C/D)。
+ * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。
  *
- * 上游 miao 是**两档并一条规则**（profile-detail.css:495-509：`.mark-SSS, .mark-SS` 同金、
- * `.mark-S, .mark-A` 同紫），照抄的结果是**相邻档位看不出高低** —— 同一个黄，分不出 SSS 和 SS。
- * 这里改成在**同一色族里压低一档**：SS 比 SSS 暗、A 比 S 暗，族的归属不变但明度拉开了。
+ * 九档要九个色，一个都不许重。
  *
- * 为什么 MAX/ACE 仍同色：红色在深底上没有这个明度空间。ACE #e85656 压在半透黑上只有 3.31:1
- * （大字 AA 的底线是 3.0），再压暗就真的看不见了；而且现存数据里根本没出现过 MAX 档。
+ * 档位从哪来：miao 的 `ArtisMark.getMarkClass`，D<7 / C<14 / B<21 / A<28 / S<35 / SS<42 /
+ * SSS<49 / ACE<56 / MAX<70。
  *
  * ⚠️ `app.js` 的 `RANK_COLOR` 是这套色的 JS 副本（首页卡片角标在 JS 里上色），改这里要同步改那边。
  */
-.mark-ACE, .mark-MAX { color: #e85656; font-weight: bold; }
-.mark-SSS { color: #ffe699; font-weight: bold; }
-.mark-SS { color: #e0a03c; font-weight: bold; }
-.mark-S { color: #d699ff; font-weight: bold; }
-.mark-A { color: #a97fd6; font-weight: bold; }
-.mark-B, .mark-C, .mark-D { color: #fff; font-weight: bold; }
+.mark-MAX { color: #ec2b2b; font-weight: bold; }
+.mark-ACE { color: #ff9f2e; font-weight: bold; }
+.mark-SSS { color: #ffe066; font-weight: bold; }
+.mark-SS { color: #b07ae8; font-weight: bold; }
+.mark-S { color: #5fd48f; font-weight: bold; }
+.mark-A { color: #4fb0ee; font-weight: bold; }
+.mark-B { color: #a9d8ff; font-weight: bold; }
+.mark-C { color: #ffffff; font-weight: bold; }
+.mark-D { color: #6b7280; font-weight: bold; }
 
 /* 词条表：主词条一行 + 副词条若干行 */
 .artis ul.detail {

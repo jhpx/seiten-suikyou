@@ -12,10 +12,13 @@ const $ = (id) => document.getElementById(id)
 const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
 /* 首页卡片角标的档位色。这是 `miao.css` 里 .mark-* 那一套的 JS 副本 ——
    那边是 CSS（明细页/圣遗物卡），这里是 JS（首页角标在渲染时上色），改一边要同步改另一边。
-   档位之间**不同色**：SSS 亮金 / SS 琥珀 / S 亮紫 / A 暗紫，同族里压低一档，别照上游那样两档合并
-   （上游 .mark-SSS, .mark-SS 是同一个黄，页面上分不出高低）。
-   MAX/ACE 例外：红色在深底上没有明度空间，且现存数据里没有 MAX 档。 */
-const RANK_COLOR = { MAX: '#e85656', ACE: '#e85656', SSS: '#ffe699', SS: '#e0a03c', S: '#d699ff', A: '#a97fd6' }
+ * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。
+ * 九档要九个色，一个都不许重。
+ */
+const RANK_COLOR = {
+  MAX: '#ec2b2b', ACE: '#ff9f2e', SSS: '#ffe066', SS: '#b07ae8',
+  S: '#5fd48f', A: '#4fb0ee', B: '#a9d8ff', C: '#ffffff', D: '#6b7280'
+}
 const SLOT_GLYPH = { 1: '花', 2: '羽', 3: '沙', 4: '杯', 5: '冠' }
 
 /* 武器副属性在卡片上的短名，照抄 miao 模板里的 titleMap（profile-detail.html:233） */
