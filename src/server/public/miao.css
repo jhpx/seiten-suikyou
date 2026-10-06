@@ -216,7 +216,8 @@
 }
 
 .char-attr li .title {
-  /* 90px：最长的名字是元素伤害那行的「火元素伤害」5 个字 × 17px = 85px，
+  /* 90px：最长的名字是 5 个字 × 17px = 85px —— 元素伤加成那行在有元素时写「火伤加成」（4 字），
+     但拿不到元素（旅行者）时退回通名「元素伤加成」，仍是 5 字，所以这条宽度没变。
      旧值 75px 只装得下 4 个字，「害」会被裁掉。多出的 15px 从 .value（100→85）挪来，
      总宽 300 不变 —— 数值列最长「158.0%」≈70px，85 装得下。 */
   width: 90px;
@@ -237,7 +238,7 @@
 }
 .char-attr li .weight span.gold { color: #ffe699; }
 .char-attr li .value {
-  width: 85px;   /* 100 → 85：让 15px 给 .title 放「火元素伤害」五个字，总宽不变 */
+  width: 85px;   /* 100 → 85：让 15px 给 .title 放五个字的属性名，总宽不变 */
   padding-right: 10px;
   text-align: right;
   font-weight: normal;
