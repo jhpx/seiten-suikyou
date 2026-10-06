@@ -464,5 +464,101 @@ ok(classTitleOf({ classTitle: '', isDefaultWeight: true }) === '',
 ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默认',
   '标题里没有连字符时退化成「默认」，不吞掉整串')
 
+/* ---------------- 12. 面板属性表：三种加成必须分得开 ----------------
+ * 来历：面板原本只有 8 行、且把 dmg 的名字写死成「伤害加成」，于是
+ *   ① 治疗角色面板上的治疗加成显示成「伤害加成」（实测芭芭拉 65.9% 显示成「伤害增加」）
+ *   ② 物理伤害加成那一行**根本不存在**（上游模板的 attrMap 也只有 dmg）
+ * 上游权重表里 dmg / phy / heal 是三项独立权重（沃雅妮莎 heal:75、甘雨 dmg:100、
+ * 芭芭拉 heal:100），面板把它们合并成一个名字就是误导 —— 看不出该刷什么。
+ * ⚠️ 名字必须逐个断言：三个 key 都存在 ≠ 三个名字不同（合并成一个照样「都在」）。 */
+console.log('\n=== 12. 面板属性表：三种加成只按权重表出行 ===')
+
+const { attrTableOf } = await import('../src/view/shape.js')
+const panelOfFake = (attr, w = {}) => attrTableOf({ attr, base: {} }, 'chs', w)
+const DMG3 = ['dmg', 'phy', 'heal']
+const baseLen = 7   /* ATTR_TABLE 的固定行数 */
+const dmgRowsOf = (rows) => rows.filter((r) => DMG3.includes(r.key))
+
+/* 1. 判据只有一条：权重 > 0。面板上的实际值一律不参与。 */
+{
+  const rows = panelOfFake({ dmg: 46.6 }, { dmg: 100 })
+  const d = dmgRowsOf(rows)
+  ok(d.length === 1 && d[0].key === 'dmg', '权重表要元素伤害 → 只出元素伤害一行', `实际 ${d.map((r) => r.key)}`)
+}
+{
+  /* ⚠️ 这一条是本节的核心：迪奥娜权重 heal=100/dmg=0，但她身上带元素增伤圣遗物（面板 18.0%）。
+     面板该显示的是「这个角色该关注什么」——多出元素伤害那行是圣遗物的信息，不是她的。 */
+  const rows = panelOfFake({ hp: 27655, dmg: 18, heal: 0 }, { hp: 100, dmg: 0, heal: 100, recharge: 100 })
+  const d = dmgRowsOf(rows)
+  ok(d.length === 1 && d[0].key === 'heal',
+    '权重表只有治疗（身上有元素伤害圣遗物也不显示元素伤害）',
+    `实际 ${d.map((r) => r.key)}`)
+  ok(!rows.some((r) => r.key === 'dmg'), '面板值 18.0% 的元素伤害不占行（判据只看权重）')
+}
+{
+  const rows = panelOfFake({ phy: 40 }, {})
+  ok(dmgRowsOf(rows).length === 0, '面板值有但权重全 0 → 三种加成一行都不出')
+}
+{
+  const rows = panelOfFake({ heal: 0 }, { heal: 75 })
+  ok(dmgRowsOf(rows).length === 1,
+    '权重>0 但面板值=0 → 照样出行（治疗角色看不到自己该刷治疗就白改了）')
+}
+{
+  const rows = panelOfFake({ hp: 17876, cpct: 48.9 }, {})
+  ok(rows.length === baseLen, `三项权重全 0 → 只有固定 ${baseLen} 行，不补空行`, `实际 ${rows.length} 行`)
+}
+
+/* 2. 权重表真有两项时出两行（雷泽/优菈/心海…那 8 个），不是三行、也不是一行 */
+{
+  const rows = panelOfFake({ dmg: 100, phy: 100 }, { dmg: 100, phy: 100 })
+  const d = dmgRowsOf(rows)
+  ok(d.length === 2, `权重表两项都要 → 出两行（${d.map((r) => r.key).join('+')}）`, `实际 ${d.length} 行`)
+  ok(d.length < 3, '永远不超过三行')
+}
+
+/* 3. 名字：三种加成必须三个不同名（别又合并成「伤害加成」） */
+{
+  const rows = panelOfFake({}, { dmg: 100, phy: 100, heal: 100 })
+  const nameOf = (k) => rows.find((r) => r.key === k)?.label
+  const [d, p, h] = DMG3.map(nameOf)
+  ok(d && p && h && new Set([d, p, h]).size === 3,
+    `三种加成三个名字：${d} / ${p} / ${h}`, `得到 ${JSON.stringify([d, p, h])}`)
+  ok(d === '元素伤害' && p === '物伤加成' && h === '治疗加成',
+    '中文用 miao KEY_TITLE 的用字（元素伤害/物伤加成/治疗加成）')
+}
+
+/* 4. 面板名字不带「大」字 —— 那是圣遗物卡片的用字（大生命/小生命） */
+{
+  const rows = panelOfFake({ hp: 17876, atk: 2215, def: 961, recharge: 122.7 }, {})
+  const nameOf = (k) => rows.find((r) => r.key === k)?.label
+  ok(nameOf('hp') === '生命值' && nameOf('atk') === '攻击力' && nameOf('def') === '防御力',
+    `面板用总值口径的生命/攻击/防御（${nameOf('hp')}/${nameOf('atk')}/${nameOf('def')}）`,
+    `得到 ${JSON.stringify([nameOf('hp'), nameOf('atk'), nameOf('def')])}`)
+  ok(!/^大(生命|攻击|防御)$/.test(nameOf('hp') || ''), '面板不带「大」字')
+  ok(nameOf('recharge') === '元素充能', '元素充能用 miao 的用字，不是 i18n 的「充能效率」')
+}
+
+/* 5. 固定七项恒为满行（0.0% 也出行），行高才稳定 */
+{
+  const rows = panelOfFake({ hp: 17876, cpct: 48.9 }, {})
+  ok(rows.slice(0, baseLen).map((r) => r.key).join(',') === 'hp,atk,def,mastery,cpct,cdmg,recharge',
+    '固定七项顺序与数量不变')
+  ok(rows.slice(0, baseLen).every((r) => r.value !== undefined && r.value !== null),
+    '固定项缺值时也出格式化后的值（不 continue）')
+  ok(new Set(rows.map((r) => r.key)).size === rows.length, '各行 key 互不重复')
+}
+
+/* 6. 权重要能对上：charWeight 的 key 与面板 key 同一套 */
+{
+  const w = { hp: 100, heal: 100, recharge: 55 }
+  const rows = attrTableOf({ attr: { hp: 31046, heal: 65.9, recharge: 168.6 }, base: {} }, 'chs', w)
+  const weightOf = (k) => rows.find((r) => r.key === k)?.weight
+  ok(weightOf('hp') === 100 && weightOf('heal') === 100 && weightOf('recharge') === 55,
+    `面板权重取自 charWeight（hp=${weightOf('hp')} heal=${weightOf('heal')} recharge=${weightOf('recharge')}）`,
+    `得到 ${JSON.stringify([weightOf('hp'), weightOf('heal'), weightOf('recharge')])}`)
+  ok(weightOf('atk') === 0, 'charWeight 里没有的项，权重是 0（不硬造）')
+}
+
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

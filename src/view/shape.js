@@ -163,29 +163,60 @@ const elemOf = (elem) => (ELEM_BG.has(elem) ? elem : 'hydro')
    每一项三列（总值 / 基础值 / 绿字），权重另起一列高亮，base 来自 Attr 的 isBase 累计值。 */
 const ATTR_TABLE = [
   ['hp', 'int'], ['atk', 'int'], ['def', 'int'], ['mastery', 'int'],
-  ['cpct', 'pct'], ['cdmg', 'pct'], ['recharge', 'pct'], ['dmg', 'pct']
+  ['cpct', 'pct'], ['cdmg', 'pct'], ['recharge', 'pct']
 ]
 
-/* miao 模板里写死的属性名，跟 i18n 表的用字不完全一样（「元素充能」vs「元素充能效率」），
-   中文下按 miao 来才谈得上 1:1；其它语言仍走 i18n。 */
+/*
+ * 三种加成单列：元素伤害 / 物伤加成 / 治疗加成。**按角色挑，不是三个都出。**
+ *
+ * 为什么它们要分开：三者互斥，且在游戏里各占一个位置 ——
+ *   dmg  是 4 号杯主词条之一、phy 只能当副词条（`extra.js` 的 mainAttr：4 号含 dmg/phy，
+ *   5 号含 heal/cpct/cdmg，subAttr 干脆不含 phy）、heal 是 5 号杯主词条之一。
+ *   一个人身上不会同时堆三种，面板出三行有两行永远是 0.0%（实测七七那页）。
+ *
+ * 挑哪几行**只看权重表**：权重 > 0 的才出。**面板上的实际值不参与判断。**
+ * ⚠️ 别把「面板值 > 0」也加进判据（我第一版就错了）：迪奥娜权重表 heal=100、dmg=0，
+ *   她身上碰巧带了个元素增伤圣遗物（面板 18.0%），按「或」的判据会多出一行元素伤害 ——
+ *   可权重表明确说了她只吃治疗加成。多出来那行不是「她的面板」，是「圣遗物的面板」：
+ *   面板这个模块存在的意义是回答「这个角色该关注什么」，混进无关的加成反而看不清主次。
+ *
+ * ⚠️ 也别改成「只挑一个」：权重表实测 121 个角色里，8 个**真的两项都要** ——
+ *   物理主 C 兼顾元素伤（优菈 phy100/dmg40、雷泽 dmg100/phy100、辛焱、菲米尼）、
+ *   奶妈兼顾治疗（珊瑚宫心海 dmg100/heal100、芙宁娜、希格雯、爱可菲）。
+ *   雷泽那两项权重还是**完全相等**的（100/100），根本没有「谁更大」可依；
+ *   硬压成一行等于藏掉他真正需要的词条。
+ */
+const DMG_ATTRS = [['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']]
+
+/* 面板属性名 —— 中文下跟 miao 出图用字对齐。
+   ⚠️ 别改用 KEY_TITLE / artiLabel 那两张表：它们给的是「大生命 / 大攻击 / 充能效率」
+     （圣遗物卡片要区分大小词条，所以带「大」字；面板是属性总值，不需要区分）。
+     上游模板 profile-detail.html:45 也是自己写死的一张：`hp:'生命值' … recharge:'元素充能', dmg:'伤害加成'`。
+   ⚠️ 但**不能照抄上游那张表**：它只有 dmg、没有 phy/heal。我们补齐了三项加成，
+     若沿用 `dmg:'伤害加成'` 这个名字，元素/物理/治疗三种加成就被合并成同一个名字 ——
+     治疗角色的治疗加成在面板上会显示成「伤害加成」（实测芭芭拉 65.9% 显示成「伤害增加」）。
+     miao 自己的 KEY_TITLE 三个名字本来分得开：元素伤害 / 物伤加成 / 治疗加成，取用它的用字。 */
 const ATTR_TITLE_ZH = {
   hp: '生命值', atk: '攻击力', def: '防御力', mastery: '元素精通',
-  cpct: '暴击率', cdmg: '暴击伤害', recharge: '元素充能', dmg: '伤害加成'
+  cpct: '暴击率', cdmg: '暴击伤害', recharge: '元素充能',
+  dmg: '元素伤害', phy: '物伤加成', heal: '治疗加成'
 }
 
-function attrTableOf (profile, locale, charWeight = {}) {
+/* 导出供测试断言用：属性名的三套用字（面板 / 圣遗物卡 / 汇总短标题）很容易改串，
+   钉在测试里比钉在页面截图里靠谱。 */
+export function attrTableOf (profile, locale, charWeight = {}) {
   const a = profile.attr || {}
   const b = profile.base || {}
   const zh = locale === 'chs' || locale === 'cht'
-  /* 恒为 8 行：miao 的模板是死循环那张表，缺项的属性（比如没有伤害加成的角色）
-     也照样出一行 0.0%，行高和对齐才稳定。别在这里 continue。 */
-  return ATTR_TABLE.map(([key, kind]) => {
+  /* 属性名：中文用上面那张表（miao 出图用字），其它语言走 i18n 表 */
+  const labelOf = (key) => (zh && ATTR_TITLE_ZH[key]) || statLabel(key, locale)
+  const makeRow = ([key, kind]) => {
     const total = a[key] ?? 0
     const base = b[key] ?? 0
     const fmt = (v) => (kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1))
     return {
       key,
-      label: (zh && ATTR_TITLE_ZH[key]) || statLabel(key, locale),
+      label: labelOf(key),
       value: fmt(total),
       /* 基础值那一列为 0 时 miao 会把它置灰（CSS .base.zero） */
       base: fmt(base),
@@ -193,7 +224,16 @@ function attrTableOf (profile, locale, charWeight = {}) {
       plus: fmt(total - base),
       weight: charWeight[key] || 0
     }
-  })
+  }
+  /* 前七项恒为满行：miao 的模板是死循环那张表，缺项的属性（比如没有元素充能的）
+     也照样出一行 0.0%，行高和对齐才稳定。别在这里 continue。 */
+  const rows = ATTR_TABLE.map(makeRow)
+  /* 末尾三种加成**只按权重表出行**（理由见 DMG_ATTRS 的注释）：权重 > 0 才出这一行。
+     面板实际值**不参与**判断 —— 迪奥娜权重 heal=100/dmg=0，她身上带元素增伤圣遗物
+     （面板 18.0%）也不该多出元素伤害那行：面板是回答「这个角色该关注什么」，
+     混进无关加成反而看不清主次。 */
+  const dmgRows = DMG_ATTRS.filter(([key]) => (charWeight[key] || 0) > 0)
+  return [...rows, ...dmgRows.map(makeRow)]
 }
 
 /* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字） */
@@ -280,6 +320,12 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   const char = profile.char
   const dbArtis = new Map((row.artifacts || []).map(a => [a.pos, a]))
   const talent = deriveTalent(char, row.skill_level_map || {})
+  /* 生效权重：ArtisMark.getMarkDetail(profile, **true**) 的 charWeight。
+     ⚠️ 第二个参数必须是 true —— charWeight 只在 withDetail 分支里挂上
+     （vendor ArtisMark.js:231 `if (withDetail) ret.charWeight = …`），
+     传 false 会静默少一个键，面板权重整列 0、词条全被判成「无效」。
+     里面的值是**算完之后的最终权重**，含武器特判（护摩/绝缘4/西风）与角色专属规则的修正，
+     不是权重表的原始值 —— 面板要的就是这个。 */
   const cw = result.charWeight || {}
 
   /* 套装：miao 的 sets 键是**官方中文全名**（不是 hash），只能拿中文名反查 */

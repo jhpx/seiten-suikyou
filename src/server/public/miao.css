@@ -43,6 +43,17 @@
 /* ───────────────────────── .basic：立绘 + 角色信息 ───────────────────────── */
 
 .basic { position: relative; margin: 0 -15px 15px -10px; }
+/*
+ * 面板 9 行时的底部补偿（app.js 给 .char-attr 加 `attr-tall` 时生效）。
+ *
+ * 面板的 7 个固定项之外，dmg/phy/heal 是**按需出行**的（见 shape.js 的 DMG_ATTRS），
+ * 所以行数在 8~9 之间浮动。`.main-pic`（立绘）固定 500px，而右侧信息列
+ * （`.detail`，绝对定位）是内容撑高的 → 9 行时会顶进下方评分卡（实测压 1px）。
+ *
+ * ⚠️ 别改回 min-height / 无条件 padding：那会给只有 8 行的角色凭空多留 30~96px 空白
+ * （8 行内容只到 546px，而 basic 被撑到 596）。按需补偿，8 行的角色一点空白都不多。
+ */
+.basic:has(.char-attr.attr-tall) { padding-bottom: 34px; }
 /* 立绘下方那圈白色描边圆角框（miao 用它把上下两块视觉断开） */
 .basic::after {
   content: "";

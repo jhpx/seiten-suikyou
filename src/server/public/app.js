@@ -334,7 +334,13 @@ function renderDetail () {
 
   /* 面板属性表：图标 + 名称 + 权重胶囊 + 总值 +（基础值 / 绿字） */
   if (av.attrTable?.length) {
-    const ul = el('ul', 'char-attr')
+    /* attr-tall：面板超过 8 行时给 .basic 加一条 class 撑开底部空间。
+       面板的 7 个固定项之外，dmg/phy/heal 是**按需出行**的（见 shape.js 的 DMG_ATTRS），
+       所以行数在 8~9 之间浮动。9 行时右侧信息列会顶进下方评分卡（实测压 1px）。
+       以前用 CSS 的 min-height 解决，那会给只有 8 行的角色凭空多留一块空白 ——
+       改成「按需」：只有真的多出一行时才撑。 */
+    const tall = av.attrTable.length > 8 ? ' attr-tall' : ''
+    const ul = el('ul', 'char-attr' + tall)
     for (const r of av.attrTable) {
       const li = el('li')
       const ic = el('div', 'icon')
