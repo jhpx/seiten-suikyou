@@ -464,6 +464,55 @@ ok(classTitleOf({ classTitle: '', isDefaultWeight: true }) === '',
 ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默认',
   '标题里没有连字符时退化成「默认」，不吞掉整串')
 
+/* 「通用」要拆成三类：内核只区分「命中特判没有」，分不出「查表」与「专属规则手写」。 */
+{
+  ok(classTitleOf({ classTitle: '迪希雅-通用', isCustomWeight: true }) === '自定义-通用',
+    '专属规则默认分支手写了权重 → 前缀「自定义」（迪希雅 recharge 75≠表里 55）')
+  ok(classTitleOf({ classTitle: '七七-通用', isCustomWeight: false }) === '七七-通用',
+    '默认分支照抄权重表 → 前缀保持角色缩写（七七那 68 个）')
+  ok(classTitleOf({ classTitle: '妮莎-通用', isDefaultWeight: true }) === '默认-通用',
+    '权重表里没这个角色 → 前缀「默认」')
+  /* 特判分支标题已自带场景名，再加「自定义」是重复信息 —— 内核侧就不该标 */
+  ok(classTitleOf({ classTitle: '可莉-纯火', isCustomWeight: true }) === '可莉-纯火',
+    '标题已带场景名时不改前缀（classTitleOf 层是防御性兜底）')
+  /* ⚠️ 兜底 + 场景词：两个标记回答不同问题，不能因为标题带了场景就吞掉「默认」 */
+  ok(classTitleOf({ classTitle: '假角色-绝缘4', isDefaultWeight: true }) === '默认-绝缘4',
+    '兜底角色命中绝缘4 → 「默认-绝缘4」（不因标题已有场景词就漏掉「默认」）')
+  ok(classTitleOf({ classTitle: '假角色-绝缘4', isCustomWeight: true }) === '假角色-绝缘4',
+    '非兜底 + 标题带场景词 → 前缀不动')
+}
+
+/* 真实角色：内核标记与页面标题必须一致（用真元数据跑，不用构造对象） */
+{
+  const ATTR = { hp: 20000, atk: 2000, def: 1000, cpct: 20, cdmg: 50, mastery: 20, recharge: 100 }
+  const cfgOf = (name) => {
+    const char = Character.get(name)
+    return char
+      ? ArtisMarkCfg.getCfg({ char, game: 'gs', weapon: { name: '', affix: 1 }, elem: char.elem, attr: { ...ATTR }, cons: 0, artis: { is: () => false } })
+      : null
+  }
+  const d = cfgOf('迪希雅')
+  ok(d?.isCustomWeight === true && d?.isDefaultWeight === false,
+    '迪希雅：内核标出 isCustomWeight（专属规则默认分支手写了权重）')
+  ok(classTitleOf(d) === '自定义-通用', `迪希雅页面显示「${classTitleOf(d)}」`)
+  ok(d && d.charWeightDiff === undefined, '内核不额外暴露 diff 字段（只给布尔标记）')
+
+  for (const n of ['七七', '神里绫华', '迪卢克', '砂糖', '温迪']) {
+    const c = cfgOf(n)
+    ok(c && c.isCustomWeight === false && c.isDefaultWeight === false,
+      `${n}：两个标记都为 false（默认分支照抄权重表）`)
+    ok(classTitleOf(c) === c.classTitle, `${n}：标题原样透传（${c?.classTitle}）`)
+  }
+  /* 特判分支：内核就不该标 isCustomWeight（标题已自带场景名） */
+  const klee = Character.get('可莉') && ArtisMarkCfg.getCfg({
+    char: Character.get('可莉'), game: 'gs', weapon: { name: '', affix: 1 },
+    elem: Character.get('可莉').elem,
+    attr: { ...ATTR, cpct: 40, cdmg: 180 }, cons: 0, artis: { is: () => false }
+  })
+  ok(klee?.classTitle === '可莉-纯火' && klee?.isCustomWeight === false,
+    `可莉命中特判 → 标题自带「纯火」且不标 isCustomWeight（实际 ${klee?.classTitle}）`)
+}
+
 /* ---------------- 12. 面板属性表：三种加成必须分得开 ----------------
  * 来历：面板原本只有 8 行、且把 dmg 的名字写死成「伤害加成」，于是
  *   ① 治疗角色面板上的治疗加成显示成「伤害加成」（实测芭芭拉 65.9% 显示成「伤害增加」）

@@ -307,14 +307,46 @@ function artifactOf (pos, marked, dbRow, locale) {
  * 上游表里有这个角色、或者角色自带 artis.js 专属规则时，一律原样透传内核的标题。
  */
 const DEFAULT_WEIGHT_LABEL = '默认'
+const CUSTOM_WEIGHT_LABEL = '自定义'
 
+/*
+ * 场景名（classTitle）里那个「角色缩写-」前缀怎么写。三种权重来源要分得开：
+ *
+ *   权重来源                          内核给的标记         页面上显示
+ *   ───────────────────────────────  ──────────────────  ──────────────
+ *   权重表那一行（artis-mark.js）      无                  角色缩写-通用
+ *   专属规则**特判分支**              无                  角色缩写-纯火 / -精通 …
+ *   专属规则**默认分支、权重与表一致**  无                  角色缩写-通用（与第一行同形，正确）
+ *   专属规则**默认分支、手写了权重**    isCustomWeight    角色缩写-自定义
+ *   权重表里没这个角色（内核兜底）      isDefaultWeight   默认-通用
+ *
+ * 为什么要把第四行单独标出来：miao 只在「命中特判分支」时给自定义名字，
+ * 于是迪希雅那种 `def({hp:75,…,recharge:75})` 手写一整套、却也叫「迪希雅-通用」的情况，
+ * 看着像查表来的 —— 实际 recharge 是 55→75、mastery 被整个去掉。
+ * 实测 69 个有专属规则的角色里只有他一个（见 .tmp/calc-custom-weight.mjs 的算法）。
+ *
+ * 语义分工：「通用」回答**命中哪个场景**，前缀回答**用的哪套权重**。
+ * 所以只换前缀、保留后半段（通用/绝缘4/西风/护摩 这些场景词照旧）——
+ * 「用哪套权重」和「命中哪个场景」是���件事，不能混成一个词。
+ */
 export function classTitleOf (result) {
   const title = result?.classTitle || ''
-  if (!result?.isDefaultWeight || !title) return title
+  if (!title) return title
   const i = title.indexOf('-')
-  return i < 0 ? DEFAULT_WEIGHT_LABEL : DEFAULT_WEIGHT_LABEL + title.slice(i)
+  /* isDefaultWeight：无论标题带什么场景词都要改前缀 —— 兜底角色带绝缘4/西风时
+     内核标题是「xxx-绝缘4」，那说的是「命中了哪个场景」，而权重是兜底的这件事
+     同样得说出来 → 「默认-绝缘4」。两个标记回答的是不同问题，不能因为其中一个
+     已有信息就把另一个也吞掉。 */
+  if (result?.isDefaultWeight) {
+    return i < 0 ? DEFAULT_WEIGHT_LABEL : DEFAULT_WEIGHT_LABEL + title.slice(i)
+  }
+  /* isCustomWeight：只在标题就是「通用」时改。标题已自带场景名（「可莉-纯火」）
+     再改前缀是重复信息 —— 内核侧已保证不会这么传，这里再挡一道脏数据。 */
+  if (result?.isCustomWeight && title.slice(i + 1) === '通用') {
+    return CUSTOM_WEIGHT_LABEL + title.slice(i)
+  }
+  return title
 }
-
 export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCALE) {
   const loc = i18n.resolveLocale(locale)
   const char = profile.char
@@ -444,10 +476,12 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       markValue: result._mark,
       markClass: result.markClass || 'D',
       classTitle: classTitleOf(result),
-      /* 权重是不是「上游表里没有该角色、拿通用表兜底」来的。
-         表现层要靠它区分「上游真写了这套权重」和「我们拿通用模板凑的」——
-         前者可信，后者只是没有任何针对性数据。true 时 classTitle 已经是「默认-通用」。 */
-      isDefaultWeight: !!result.isDefaultWeight
+      /* 权重来源的两个标记，表现层靠它们区分「用的哪套权重」：
+         isDefaultWeight —— 上游表里没这个角色、拿内核通用表凑的，前缀显示「默认」；
+         isCustomWeight  —— 专属规则的默认分支手写了权重（≠ 表里那一行），前缀显示「自定义」。
+         两者都为 false 时前缀就是角色缩写（权重表那一行，或专属规则的默认分支且与表一致）。 */
+      isDefaultWeight: !!result.isDefaultWeight,
+      isCustomWeight: !!result.isCustomWeight
     },
     charWeight: cw,
     sets,

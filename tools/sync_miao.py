@@ -437,13 +437,31 @@ const rootPath = miaoPath""",
     # ---------------------------------------------------------------- 默认兜底标记
     {
         "file": "models/artis/ArtisMarkCfg.js",
-        "desc": "def/getCfg 透出 isDefaultWeight（上游权重表没这个角色、只能拿通用表兜底时为 true）",
+        "desc": "def/getCfg 透出 isDefaultWeight（表里没这个角色、走通用兜底）与 isCustomWeight（专属规则默认分支手写了权重）",
         "ops": [
             # def 多收一个参数：这份权重是不是兜底来的
             (
                 "replace",
                 "    let def = function (attrWeight, title = []) {",
-                "    let def = function (attrWeight, title = [], isDefaultWeight = false) {",
+                """    let def = function (attrWeight, title = [], isDefaultWeight = false) {
+      /* 本项目加：这一份权重是**专属规则自己手写的**吗（而不是照抄权重表那一行）？
+         两者都叫「通用」（title 为空 → 通用），页面上分不出来：
+         内核只在「命中特判分支」时才给自定义名字，迪希雅这种
+         `def({hp:75,...,recharge:75})` 手写一整套却也叫「迪希雅-通用」——
+         看着像查表来的，实际 recharge 是 55→75、mastery 被整个去掉。
+         判据：attrWeight 是**显式传入**的（专属规则自己写的），且与权重表那一行不等。
+         无专属规则时内核走的是 def(usefulAttr[char.name] || default)，
+         传进来的就是表里那一行引用 → 恒等，不算手写。 */
+      let isCustomWeight = false
+      if (attrWeight && !isDefaultWeight) {
+        let table = usefulAttr[char.name] || {}
+        /* 缺失的键与 0 视为等价：专属规则常写 def({hp:50,...}) 不写满 10 个键，
+           而总表写满（不要的项显式给 0）。语义上「没给」=「给 0」。
+           逐键比而不是 JSON.stringify —— 后者会把「缺 4 个 0」判成不一致。 */
+        let diff = [...new Set([...Object.keys(attrWeight), ...Object.keys(table)])]
+          .some(k => (attrWeight[k] || 0) !== (table[k] || 0))
+        isCustomWeight = diff
+      }""",
             ),
             # 返回值带上标记
             (
@@ -458,8 +476,12 @@ const rootPath = miaoPath""",
         /* 本项目加：这一份权重是「上游权重表里没有该角色、只能拿通用表兜底」吗？
            表现层要靠它把标题从「妮莎-通用」改成「默认-通用」——
            不然用户会以为那把权重表真的写着沃雅妮莎。isDefaultWeight 由 def 的调用方传入，
-           角色专属规则（artis.js）自己调 def 时不传，恒为 false。 */
-        isDefaultWeight
+           角色专属规则（artis.js）自己调 def 时不传，恒为 false。
+           isCustomWeight 见 def() 里的注释：专属规则默认分支手写了权重。
+           ⚠️ 只在「通用」时为 true：命中特判分支的角色标题已经自带场景名
+             （「可莉-纯火」），再改前缀成「自定义-纯火」是重复信息。 */
+        isDefaultWeight,
+        isCustomWeight: title === '通用' && isCustomWeight
       }""",
             ),
             # 唯一会走兜底的调用点：把「表里有没有这个角色」传下去
@@ -472,7 +494,7 @@ const rootPath = miaoPath""",
             (
                 "replace",
                 "    let { attrWeight, title } = ArtisMarkCfg.getCharArtisCfg(profile)",
-                "    let { attrWeight, title, isDefaultWeight } = ArtisMarkCfg.getCharArtisCfg(profile)",
+                "    let { attrWeight, title, isDefaultWeight, isCustomWeight } = ArtisMarkCfg.getCharArtisCfg(profile)",
             ),
             (
                 "replace",
@@ -486,7 +508,8 @@ const rootPath = miaoPath""",
       classTitle: title,
       posMaxMark,
       /* 本项目加：往上传，交给 view 层决定怎么写标题 */
-      isDefaultWeight: !!isDefaultWeight
+      isDefaultWeight: !!isDefaultWeight,
+      isCustomWeight: !!isCustomWeight
     }""",
             ),
         ],
