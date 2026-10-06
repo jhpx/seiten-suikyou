@@ -10,7 +10,12 @@
 const $ = (id) => document.getElementById(id)
 
 const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
-const RANK_COLOR = { MAX: '#e85656', ACE: '#e85656', SSS: '#ffe699', SS: '#ffe699', S: '#d699ff', A: '#d699ff' }
+/* 首页卡片角标的档位色。这是 `miao.css` 里 .mark-* 那一套的 JS 副本 ——
+   那边是 CSS（明细页/圣遗物卡），这里是 JS（首页角标在渲染时上色），改一边要同步改另一边。
+   档位之间**不同色**：SSS 亮金 / SS 琥珀 / S 亮紫 / A 暗紫，同族里压低一档，别照上游那样两档合并
+   （上游 .mark-SSS, .mark-SS 是同一个黄，页面上分不出高低）。
+   MAX/ACE 例外：红色在深底上没有明度空间，且现存数据里没有 MAX 档。 */
+const RANK_COLOR = { MAX: '#e85656', ACE: '#e85656', SSS: '#ffe699', SS: '#e0a03c', S: '#d699ff', A: '#a97fd6' }
 const SLOT_GLYPH = { 1: '花', 2: '羽', 3: '沙', 4: '杯', 5: '冠' }
 
 /* 武器副属性在卡片上的短名，照抄 miao 模板里的 titleMap（profile-detail.html:233） */
@@ -124,8 +129,14 @@ function imgError (img) { img.style.display = 'none' }
 /* ───────────────────────── 视图切换 ───────────────────────── */
 
 function showView (name) {
+  const onDetail = name === 'detail'
   $('view-roster').classList.toggle('active', name === 'roster')
-  $('view-detail').classList.toggle('active', name === 'detail')
+  $('view-detail').classList.toggle('active', onDetail)
+  /* 明细页把整条顶栏收掉（CSS 侧：body.on-detail .top { display:none }）。
+     UID 框 / 读取 / 抓取 / 语言在这儿一个都用不上，留着只是把 600px 画布往下顶，
+     还把页面上唯一的退出入口「← 返回」压成次要信息。切回首页再放出来 ——
+     语言切换只在首页做，明细页不带这一排。 */
+  document.body.classList.toggle('on-detail', onDetail)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 

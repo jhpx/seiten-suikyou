@@ -616,10 +616,23 @@
    这条管字号，合并后调字号会连带动层级（踩过一次就分着放）。 */
 .artis .head span.mark { font-size: 16px; font-weight: bold; }
 
-/* 档位配色：红 / 黄 / 紫（照 miao 的 .mark-*） */
+/*
+ * 档位配色：红(MAX/ACE) → 金(SSS) → 琥珀(SS) → 紫(S) → 暗紫(A) → 白(B/C/D)。
+ *
+ * 上游 miao 是**两档并一条规则**（profile-detail.css:495-509：`.mark-SSS, .mark-SS` 同金、
+ * `.mark-S, .mark-A` 同紫），照抄的结果是**相邻档位看不出高低** —— 同一个黄，分不出 SSS 和 SS。
+ * 这里改成在**同一色族里压低一档**：SS 比 SSS 暗、A 比 S 暗，族的归属不变但明度拉开了。
+ *
+ * 为什么 MAX/ACE 仍同色：红色在深底上没有这个明度空间。ACE #e85656 压在半透黑上只有 3.31:1
+ * （大字 AA 的底线是 3.0），再压暗就真的看不见了；而且现存数据里根本没出现过 MAX 档。
+ *
+ * ⚠️ `app.js` 的 `RANK_COLOR` 是这套色的 JS 副本（首页卡片角标在 JS 里上色），改这里要同步改那边。
+ */
 .mark-ACE, .mark-MAX { color: #e85656; font-weight: bold; }
-.mark-SSS, .mark-SS { color: #ffe699; font-weight: bold; }
-.mark-S, .mark-A { color: #d699ff; font-weight: bold; }
+.mark-SSS { color: #ffe699; font-weight: bold; }
+.mark-SS { color: #e0a03c; font-weight: bold; }
+.mark-S { color: #d699ff; font-weight: bold; }
+.mark-A { color: #a97fd6; font-weight: bold; }
 .mark-B, .mark-C, .mark-D { color: #fff; font-weight: bold; }
 
 /* 词条表：主词条一行 + 副词条若干行 */
