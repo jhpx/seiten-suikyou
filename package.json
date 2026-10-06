@@ -16,9 +16,11 @@
     "lodash": "^4.18.1"
   },
   "scripts": {
-    "sync": "python tools/sync_miao.py",
-    "sync:i18n": "python tools/sync_i18n.py",
-    "sync:assets": "python tools/sync_assets.py",
+    "sync": "python tools/sync.py",
+    "sync:check": "python tools/sync.py --check",
+    "sync:miao": "python tools/sync.py miao",
+    "sync:i18n": "python tools/sync.py i18n",
+    "sync:assets": "python tools/sync.py assets",
     "list:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.mjs",
     "check:docs": "python tools/check_docs.py",
     "score": "node --disable-warning=ExperimentalWarning src/cli/score.js",

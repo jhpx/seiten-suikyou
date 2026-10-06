@@ -60,9 +60,11 @@ npm run regression   # 只跑回归断言
 npm run verify       # 只跑评分验证
 
 # 同步（只在要更新数据时跑）
-npm run sync         # 从 miao-plugin 重新同步内核（需 MIAO_PLUGIN_PATH）
-npm run sync:i18n    # 从官方数据重新提取多语言表
-npm run sync:assets  # 全量复制页面图片素材（从 miao-plugin/resources）
+npm run sync          # ★ 同步上游的唯一入口：内核+权重表+多语言表+图片素材，一条命令全跑
+npm run sync:check    # 只体检不落盘：先看跟上游差多少，再决定要不要跑
+npm run sync:miao     # 只同步内核 / 权重表 / 角色武器数据（tools/sync_miao.py）
+npm run sync:i18n     # 只重新提取多语言表
+npm run sync:assets   # 只全量复制页面图片素材
 
 # 文档
 npm run check:docs   # 校验 README / docs 里的相对链接没写歪（搬过家就跑一遍）
@@ -171,9 +173,12 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 ```bash
 npm run score -- --uid 101242308 --locale ja   # chs / cht / en / ja / ko
 npm run sync:i18n                              # 重新提取官方文案表（默认 chs,cht,en,ja,ko）
-npm run sync:i18n -- --locales chs,en
+I18N_LOCALES=chs,en npm run sync:i18n          # 只提两种语言（编排器不转发子命令参数，用环境变量）
 I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
 ```
+
+> `npm run sync:i18n` 走的是统一入口，**不转发子命令参数**（编排器已经解析过一遍了，
+> 再传一遍会让子脚本的 argparse 报「未知参数」）。要带参数就调子脚本本身，或用 `I18N_LOCALES`。
 
 文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
 （`src/i18n/ui.js`，手写 68 条 × 5 种语言）两张表 —— 官方表里没有「读取」「圣遗物」这类
@@ -279,6 +284,7 @@ seiten-suikyou/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
 ├── tools/                    # 同步 / 验收工具（开发期用，不参与运行时）
+│   ├── sync.py               # ★ 同步上游的唯一入口（编排下面三个，按依赖顺序跑）
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
 │   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）

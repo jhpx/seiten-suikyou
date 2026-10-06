@@ -434,6 +434,63 @@ const rootPath = miaoPath""",
             ),
         ],
     },
+    # ---------------------------------------------------------------- 默认兜底标记
+    {
+        "file": "models/artis/ArtisMarkCfg.js",
+        "desc": "def/getCfg 透出 isDefaultWeight（上游权重表没这个角色、只能拿通用表兜底时为 true）",
+        "ops": [
+            # def 多收一个参数：这份权重是不是兜底来的
+            (
+                "replace",
+                "    let def = function (attrWeight, title = []) {",
+                "    let def = function (attrWeight, title = [], isDefaultWeight = false) {",
+            ),
+            # 返回值带上标记
+            (
+                "replace",
+                """      return {
+        title: `${char.abbr}-${title}`,
+        attrWeight: weight
+      }""",
+                """      return {
+        title: `${char.abbr}-${title}`,
+        attrWeight: weight,
+        /* 本项目加：这一份权重是「上游权重表里没有该角色、只能拿通用表兜底」吗？
+           表现层要靠它把标题从「妮莎-通用」改成「默认-通用」——
+           不然用户会以为那把权重表真的写着沃雅妮莎。isDefaultWeight 由 def 的调用方传入，
+           角色专属规则（artis.js）自己调 def 时不传，恒为 false。 */
+        isDefaultWeight
+      }""",
+            ),
+            # 唯一会走兜底的调用点：把「表里有没有这个角色」传下去
+            (
+                "replace",
+                "      return def(usefulAttr[char.name] || defaultAttrWeight)",
+                "      return def(usefulAttr[char.name] || defaultAttrWeight, [], !usefulAttr[char.name])",
+            ),
+            # getCfg 解构并往上传
+            (
+                "replace",
+                "    let { attrWeight, title } = ArtisMarkCfg.getCharArtisCfg(profile)",
+                "    let { attrWeight, title, isDefaultWeight } = ArtisMarkCfg.getCharArtisCfg(profile)",
+            ),
+            (
+                "replace",
+                """    return {
+      attrs,
+      classTitle: title,
+      posMaxMark
+    }""",
+                """    return {
+      attrs,
+      classTitle: title,
+      posMaxMark,
+      /* 本项目加：往上传，交给 view 层决定怎么写标题 */
+      isDefaultWeight: !!isDefaultWeight
+    }""",
+            ),
+        ],
+    },
     # ---------------------------------------------------------------- 渲染层
     {
         "file": "models/character/CharImg.js",

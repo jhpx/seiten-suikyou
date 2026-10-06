@@ -14,7 +14,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { ArtisMark, Meta } from '../src/index.js'
+import { ArtisMark, Meta, Character, ArtisMarkCfg } from '../src/index.js'
 import { openDb, SCHEMA_VERSION } from '../src/store/db.js'
 import * as repo from '../src/store/repo.js'
 import { ingestPayload } from '../src/adapter/ingest.js'
@@ -344,6 +344,125 @@ ok(dilucMark?.artis['5']?.main?.value === '62.2%',
 
 const realKeys = repo.listTextKeys(realDb)
 ok(realKeys.hash.length > 10, `真实数据带下来 ${realKeys.hash.length} 个官方文案 key`)
+
+/* ---------------- 11. 默认兜底必须在表现层可见 ----------------
+ * 背景：上游权重表 artis-mark.js 不是每个角色都有。查不到时内核拿通用表兜底，
+ * 但标题照旧拼 `${char.abbr}-通用` —— 于是「沃雅妮莎」显示成「妮莎-通用」，
+ * 看着像上游真给她定过一套权重，实际那张表根本没这一行。
+ * 这里钉住两件事：内核要标出 isDefaultWeight，view 层要把它换成「默认-通用」。
+ * ⚠️ 两侧都要有对照组：只测兜底角色的话，哪天内核改成永远返回 true 也会全绿。 */
+console.log('\n=== 11. 默认兜底在表现层可见 ===')
+
+const { usefulAttr } = await import('../vendor/miao/resources/meta-gs/artifact/artis-mark.js')
+const { classTitleOf } = await import('../src/view/shape.js')
+
+/* ⚠️ 必须用 getCfg（不是 getCharArtisCfg）：classTitleOf 读的是 getCfg 的 `classTitle` 字段，
+   而 getCharArtisCfg 的字段叫 `title`。生产链路上 shapeCharacter 拿到的就是 getCfg 的结果。
+   顺带这一步把 attrs 那些计算也跑完了，跟真实链路一致。 */
+const cfgOf = (name) => {
+  const char = Character.get(name)
+  if (!char) return null
+  const profile = {
+    char, game: 'gs', weapon: { name: '', affix: 1 }, elem: char.elem,
+    attr: {}, cons: 0, artis: { is: () => false }
+  }
+  return ArtisMarkCfg.getCfg(profile)
+}
+
+/* 兜底组的找法：**角色名单减去权重表里的键**。
+   ⚠️ 不是「表里值为空的键」—— 那张表每个键都有值，兜底角色是**整行不存在**
+   （`usefulAttr[char.name]` 返回 undefined）。两个查法看起来像，含义完全不同。
+   名单直接读 character/data.json（Meta.getMeta('gs','char') 只有 wifeData，取不到名单）。 */
+const charData = JSON.parse(fs.readFileSync(
+  path.resolve(import.meta.dirname, '..', 'vendor/miao/resources/meta-gs/character/data.json'), 'utf8'))
+const allNames = Object.values(charData).map((c) => c.name).filter(Boolean)
+
+/* 剔掉两类「本来就不该进这张表」的角色，否则测试的对照组是假的：
+   ① 主角（空/荧）—— Character.get 认得它们，但内核按 isTraveler 走另一条分支，
+      标题前缀是「风主/岩主」而不是查表得来的，abbr 也不来自这张表；
+   ② 奇偶·男性/奇偶·女性 —— 主角的「双性别」占位，data.json 里有、元数据里没有对应项。 */
+const isTravelerOrAlias = (n) => /旅行者|主角|^[空荧]$/.test(n) || n.startsWith('奇偶·')
+const charNames = allNames.filter((n) => !isTravelerOrAlias(n))
+const fallbackChars = charNames.filter((n) => !usefulAttr[n])
+const knownChars = charNames.filter((n) => usefulAttr[n])
+
+ok(charNames.length > 0, `角色名单取到 ${charNames.length} 个`)
+/* 这条是**哨兵**，不是「必须为 0」：上游权重表 artis-mark.js 还没收录沃雅妮莎、薇斯纳
+   （同步时间差），所以这两个角色确实在走通用兜底。
+   它每次同步都会自动收敛：上游补上那两行 → fallbackChars 变空 → 本条转绿。
+   在那之前，页面上这两个角色显示「默认-通用」，不假装上游有专属权重。 */
+ok(charNames.length - fallbackChars.length === knownChars.length,
+  `权重表覆盖 ${knownChars.length}/${charNames.length} 个角色，${fallbackChars.length} 个走兜底`,
+  `走兜底的角色：${fallbackChars.join(' ') || '（无）'}`)
+ok(knownChars.length > 100, `对照组：权重表里有 ${knownChars.length} 个角色可对照`)
+
+for (const name of fallbackChars.slice(0, 3)) {
+  const cfg = cfgOf(name)
+  ok(cfg?.isDefaultWeight === true, `${name}：内核标出 isDefaultWeight=true`)
+  const shown = classTitleOf(cfg)
+  ok(shown.startsWith('默认-'),
+    `${name}：表现层标题是「${shown}」（不误导成上游有专属权重）`,
+    `得到 ${shown}`)
+}
+
+/* ⚠️ 兜底分支不能只靠「真实存在但没被收录的角色」来测 ——
+   2026-10-06 同步补进沃雅妮莎/薇斯纳之后，fallbackChars 就空了，上面那个循环
+   一次都不跑，兜底分支从此无人看守（哪天内核把 isDefaultWeight 传错也全绿）。
+   所以这里**构造**一个表里查不到的角色，把这条分支钉死。 */
+const fakeName = '__不存在的角色__'
+ok(!usefulAttr[fakeName], `构造：${fakeName} 确实不在权重表里（兜底前提）`)
+{
+  /* 抄一个真实角色，只把 name 换成表里没有的 —— 内核只拿 char.name 去查表，
+     这样 usefulAttr[char.name] 就是 undefined，稳定落到通用兜底。
+     ⚠️ 不能用 Object.assign 覆盖：Character 的 id/name/abbr 都是**只读 getter**
+     （定义在 metaKey 生成的属性上），assign 会抛 TypeError。 */
+  const real = Character.get(knownChars[0])
+  const fakeChar = Object.create(Object.getPrototypeOf(real))
+  Object.assign(fakeChar, real)
+  for (const [k, v] of Object.entries({ id: real.id, name: fakeName, abbr: '假角色' })) {
+    Object.defineProperty(fakeChar, k, { value: v, writable: true, configurable: true })
+  }
+  const cfg = ArtisMarkCfg.getCfg({
+    char: fakeChar, game: 'gs', weapon: { name: '', affix: 1 }, elem: fakeChar.elem,
+    attr: {}, cons: 0, artis: { is: () => false }
+  })
+  ok(cfg.isDefaultWeight === true, '兜底时内核标出 isDefaultWeight=true')
+  ok(cfg.classTitle === '假角色-通用', `兜底时内核标题照旧是「${cfg.classTitle}」`)
+  ok(classTitleOf(cfg) === '默认-通用',
+    `兜底时表现层标题是「${classTitleOf(cfg)}」而不是「假角色-通用」`,
+    `得到 ${classTitleOf(cfg)}`)
+  const atk = cfg.attrs?.atk?.weight ?? cfg.attrs?.atkPlus?.weight
+  ok(atk !== undefined, `兜底仍算出权重（atk 系 ${atk}）—— 兜底不等于不算分`)
+}
+
+/* 对照组：权重表里有这个角色 → 标记不为 true、标题原样透传。
+   只挑**没有专属规则 artis.js** 的角色：专属规则会读 profile.artis.names 这类字段，
+   我们这个最小 profile 喂不进去（会抛 TypeError），跑不到「原样透传」那一步。
+   判据用文件存在性，不写死名字。 */
+const hasOwnRule = (n) => fs.existsSync(path.resolve(import.meta.dirname, '..',
+  'vendor/miao/resources/meta-gs/character', n, 'artis.js'))
+let passthroughChecked = 0
+for (const name of knownChars.filter((n) => !hasOwnRule(n))) {
+  const cfg = cfgOf(name)
+  if (!cfg?.classTitle) continue
+  ok(cfg.isDefaultWeight === false, `${name}：在权重表里 → isDefaultWeight 不为 true`)
+  ok(classTitleOf(cfg) === cfg.classTitle,
+    `${name}：标题原样透传（${cfg.classTitle}）`,
+    `被改成了 ${classTitleOf(cfg)}`)
+  if (++passthroughChecked >= 3) break
+}
+ok(passthroughChecked > 0, '对照组里至少验到了 3 个「原样透传」的角色',
+  `实际验到 ${passthroughChecked} 个`)
+ok(classTitleOf({ classTitle: '胡桃-护摩', isDefaultWeight: false }) === '胡桃-护摩',
+  '场景词保留：护摩 不被改写')
+ok(classTitleOf({ classTitle: '胡桃-绝缘4', isDefaultWeight: false }) === '胡桃-绝缘4',
+  '场景词保留：绝缘4 不被改写')
+ok(classTitleOf({ classTitle: '妮莎-通用', isDefaultWeight: true }) === '默认-通用',
+  '只换前缀、后半段场景词不动（妮莎-通用 → 默认-通用）')
+ok(classTitleOf({ classTitle: '', isDefaultWeight: true }) === '',
+  '空标题原样返回，不硬造出「默认」')
+ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默认',
+  '标题里没有连字符时退化成「默认」，不吞掉整串')
 
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

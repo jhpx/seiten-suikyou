@@ -252,6 +252,29 @@ function artifactOf (pos, marked, dbRow, locale) {
  * @param {object} result   ArtisMark.getMarkDetail(profile, true) 的结果
  * @param {string} locale   语言代码（认不出会退回默认语言）
  */
+/*
+ * 场景名（classTitle）里那个「角色缩写-」前缀怎么写。
+ *
+ * miao 那边固定拼 `${char.abbr}-${title}`（ArtisMarkCfg.js:93），abbr 取自角色表，
+ * 于是「沃雅妮莎」这种**上游权重表里还没有的角色**会显示成「妮莎-通用」——
+ * 看着像上游真给沃雅妮莎定过一套「通用」权重，实际上那张表根本没这一行，
+ * 内核是拿 `defaultAttrWeight`（atk75/cpct100/cdmg100/dmg100/phy100）凑的。
+ *
+ * 兜底时把前缀换成「默认」：默认-通用。语义是「这是通用模板，不是这个角色的专属权重」。
+ * 只换前缀、保留后半段（通用 / 绝缘4 / 西风 / 护摩 这些场景词照旧），
+ * 这样「用的是哪套权重」和「命中了哪个场景」两件事仍然分得开。
+ *
+ * 上游表里有这个角色、或者角色自带 artis.js 专属规则时，一律原样透传内核的标题。
+ */
+const DEFAULT_WEIGHT_LABEL = '默认'
+
+export function classTitleOf (result) {
+  const title = result?.classTitle || ''
+  if (!result?.isDefaultWeight || !title) return title
+  const i = title.indexOf('-')
+  return i < 0 ? DEFAULT_WEIGHT_LABEL : DEFAULT_WEIGHT_LABEL + title.slice(i)
+}
+
 export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCALE) {
   const loc = i18n.resolveLocale(locale)
   const char = profile.char
@@ -374,7 +397,11 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       mark: result.mark,
       markValue: result._mark,
       markClass: result.markClass || 'D',
-      classTitle: result.classTitle
+      classTitle: classTitleOf(result),
+      /* 权重是不是「上游表里没有该角色、拿通用表兜底」来的。
+         表现层要靠它区分「上游真写了这套权重」和「我们拿通用模板凑的」——
+         前者可信，后者只是没有任何针对性数据。true 时 classTitle 已经是「默认-通用」。 */
+      isDefaultWeight: !!result.isDefaultWeight
     },
     charWeight: cw,
     sets,
