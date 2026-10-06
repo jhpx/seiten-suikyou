@@ -347,7 +347,9 @@ function renderDetail () {
     for (const r of av.attrTable) {
       const li = el('li')
       const ic = el('div', 'icon')
-      ic.append(el('i', 'i-' + r.key))
+      /* 图标类名默认就是属性 key，只有元素伤害那行会被后端换成具体元素（.i-pyro / .i-cryo …）
+         —— 因为雪碧图里没有「通用元素伤害」这一格，只有七元素各自的图标。 */
+      ic.append(el('i', 'i-' + (r.iconKey || r.key)))
       li.append(ic, el('div', 'title', r.label))
       const wt = el('div', 'weight')
       /* 权重 0 的项 miao 也留空位，保持列对齐 */

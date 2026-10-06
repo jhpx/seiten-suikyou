@@ -202,35 +202,24 @@
 .char-attr li:nth-child(odd) { background: rgba(50, 50, 50, .4); }
 
 .char-attr li .icon { width: 26px; padding: 2px 5px; }
+/* 属性图标：一张横图 icon-new.png（680×40，17 格 × 40px）靠 background-position 切。
+   background-size: auto 16px = 整图高 40 → 16，缩放 0.4，每格正好 16px 宽 → **步进就是 16px**。
+   ⚠️ 旧图 icon.png 是 25 格 × 20px，同样的 background-size 下每格只有 8px 宽，
+      拿 -16px 步进去切它会**隔一格取图**，图标全串位（之前「暴伤图标看着像充能」就是这个原因）。 */
 .char-attr li .icon i {
   display: inline-block;
   width: 16px; height: 16px;
   vertical-align: -3px;
-  background-image: url("/assets/character/imgs/icon.png");
+  background-image: url("/assets/character/imgs/icon-new.png");
   background-size: auto 16px;
   background-repeat: no-repeat;
 }
-/* 物伤加成：雪碧图里**没有**这个图标（上游 profile-detail.css 也没有 .i-phy，
-   整张 icon.png 500×40 共 25 格、只画到第 17 格且第 10~17 格全是元素伤害那批）。
-   miao 那边物伤一样是空图标 —— 我们不跟着空，用内联 SVG 补一个。
-   画的是游戏里物伤符文的轮廓：上宽下窄的箭头 + 中间一道竖杠，和雪碧图那批
-   元素图标的笔画粗细、留白一致（都在 16×16 的框里居中）。
-   ⚠️ 别改回 background-position —— 那样会切到元素图标上，物理角色会看到火/冰/水。 */
-.i-phy {
-  width: 16px; height: 16px;
-  background: none;
-  vertical-align: -3px;
-}
-.i-phy::before {
-  content: '';
-  display: block;
-  width: 16px; height: 16px;
-  background: no-repeat center / 16px 16px
-    url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M8 1.2 13.4 6.6h-3.1v3.2H9.6v2.4H6.4V9.8H5.7V6.6H2.6z'/%3E%3C/svg%3E");
-}
 
 .char-attr li .title {
-  width: 75px;
+  /* 90px：最长的名字是元素伤害那行的「火元素伤害」5 个字 × 17px = 85px，
+     旧值 75px 只装得下 4 个字，「害」会被裁掉。多出的 15px 从 .value（100→85）挪来，
+     总宽 300 不变 —— 数值列最长「158.0%」≈70px，85 装得下。 */
+  width: 90px;
   text-shadow: 0 0 1px rgba(0, 0, 0, .8), 1px 1px 3px rgba(0, 0, 0, .5);
 }
 /* 权重：黑底小胶囊，≥80 金色 */
@@ -248,7 +237,7 @@
 }
 .char-attr li .weight span.gold { color: #ffe699; }
 .char-attr li .value {
-  width: 100px;
+  width: 85px;   /* 100 → 85：让 15px 给 .title 放「火元素伤害」五个字，总宽不变 */
   padding-right: 10px;
   text-align: right;
   font-weight: normal;
@@ -272,21 +261,32 @@
 .char-attr li .value2 .base.zero { color: #aaa; }
 .char-attr li .value2 .plus { color: #90e800; }
 
-/* 属性图标精灵图：一张横图（500×40，25 格 × 20px）靠 background-position 切。
-   ⚠️ 别以为「格序 = 词条顺序」—— 雪碧图只画到第 9 格，后面全空。
-   原先抄到 .i-dmg（第 8 格）就断了，.i-heal 没抄 → 治疗加成那行图标是空的
-   （实测七七那页）。.i-heal 的 -144px 是**上游 profile-detail.css:179** 给的值。
-   ⚠️ .i-phy（物伤）**上游根本没有**：全仓 grep 无 i-phy，雪碧图也没有对应格位
-      —— miao 那边物伤一样是空图标。我们给它补了一个内联 SVG（见下方 .i-phy 规则）。 */
-.i-hp { background-position: -16px 0; }
-.i-atk { background-position: -32px 0; }
-.i-def { background-position: -48px 0; }
-.i-mastery { background-position: -64px 0; }
-.i-cpct { background-position: -80px 0; }
-.i-cdmg { background-position: -96px 0; }
-.i-recharge { background-position: -112px 0; }
-.i-dmg { background-position: -128px 0; }
+/* 格位表（icon-new.png，17 格 × 40px，缩到 16px 后**步进 16px**）：
+     0 生命值 / 1 攻击力 / 2 防御力 / 3 元素精通 / 4 暴击率 / 5 元素充能 / 6 元素抗性 /
+     7 物伤加成 / 8 暴击伤害 / 9 治疗加成 / 10~16 火·雷·冰·水·风·岩·草 元素伤害加成。
+   ⚠️ **没有「通用元素伤害」这一格**：所以元素伤害那行由后端按角色元素换 iconKey
+     （shape.js 的 ELEM_DMG_ZH），这里只留七个 `.i-<元素>`，没有 `.i-dmg` 的格位。
+   ⚠️ `.i-dmg` 是「拿不到元素」时的兜底（旅行者 elem=multi）：**故意不画图**，
+     不指向任何一格 —— 随便指一格等于替玩家编了一个元素。
+   ⚠️ 顺序别照旧图的印象写：旧图是 25 格 × 20px，格序和这张完全不同。 */
+.i-hp { background-position: 0 0; }
+.i-atk { background-position: -16px 0; }
+.i-def { background-position: -32px 0; }
+.i-mastery { background-position: -48px 0; }
+.i-cpct { background-position: -64px 0; }
+.i-recharge { background-position: -80px 0; }
+.i-res { background-position: -96px 0; }
+.i-phy { background-position: -112px 0; }
+.i-cdmg { background-position: -128px 0; }
 .i-heal { background-position: -144px 0; }
+.i-pyro { background-position: -160px 0; }
+.i-electro { background-position: -176px 0; }
+.i-cryo { background-position: -192px 0; }
+.i-hydro { background-position: -208px 0; }
+.i-anemo { background-position: -224px 0; }
+.i-geo { background-position: -240px 0; }
+.i-dendro { background-position: -256px 0; }
+.i-dmg { background-image: none; }
 
 /* ── 命座 6 格（左下角一排） ── */
 .char-cons {

@@ -523,7 +523,7 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
 console.log('\n=== 12. 面板属性表：三种加成只按权重表出行 ===')
 
 const { attrTableOf } = await import('../src/view/shape.js')
-const panelOfFake = (attr, w = {}) => attrTableOf({ attr, base: {} }, 'chs', w)
+const panelOfFake = (attr, w = {}, elem = '') => attrTableOf({ attr, base: {} }, 'chs', w, elem)
 const DMG3 = ['dmg', 'phy', 'heal']
 const baseLen = 7   /* ATTR_TABLE 的固定行数 */
 const dmgRowsOf = (rows) => rows.filter((r) => DMG3.includes(r.key))
@@ -575,6 +575,35 @@ const dmgRowsOf = (rows) => rows.filter((r) => DMG3.includes(r.key))
     `三种加成三个名字：${d} / ${p} / ${h}`, `得到 ${JSON.stringify([d, p, h])}`)
   ok(d === '元素伤害' && p === '物伤加成' && h === '治疗加成',
     '中文用 miao KEY_TITLE 的用字（元素伤害/物伤加成/治疗加成）')
+}
+
+/* 3b. 元素伤害那行要带上**具体元素**：名字和 iconKey 一起换。
+ * 来历：新雪碧图 icon-new.png 里七元素各占一格、**没有「通用元素伤害」这一格**，
+ *   所以这行必须按角色元素走（火元素伤害 + .i-pyro）。
+ * ⚠️ 这两条必须构造输入钉死：真实数据里 elem 永远有值，「拿不到元素」那条分支
+ *   平时一次都不会跑，等它真跑起来（旅行者 elem=multi）没人看着。 */
+{
+  const rows = panelOfFake({ dmg: 46.6 }, { dmg: 100 }, 'pyro')
+  const d = rows.find((r) => r.key === 'dmg')
+  ok(d?.label === '火元素伤害', `火系角色：写成「火元素伤害」（实际 ${d?.label}）`)
+  ok(d?.iconKey === 'pyro', `图标 key 换成元素名（.i-pyro）（实际 ${d?.iconKey}）`)
+
+  const dendro = panelOfFake({ dmg: 46.6 }, { dmg: 100 }, 'dendro').find((r) => r.key === 'dmg')
+  ok(dendro?.label === '草元素伤害' && dendro?.iconKey === 'dendro',
+    `草系同理（实际 ${dendro?.label} / ${dendro?.iconKey}）`)
+}
+{
+  /* elem 拿不到时（旅行者是 multi，不在七元素里）：名字退回通名、图标留空。
+     ⚠️ 不许兜底成某个具体元素 —— 那是替玩家编了一个元素。 */
+  const d = panelOfFake({ dmg: 46.6 }, { dmg: 100 }, 'multi').find((r) => r.key === 'dmg')
+  ok(d?.label === '元素伤害' && d?.iconKey === 'dmg',
+    `拿不到元素 → 通名「元素伤害」+ iconKey 留 dmg（实际 ${d?.label} / ${d?.iconKey}）`)
+}
+{
+  /* 其余属性行的 iconKey 就是自己的 key（前端默认按 key 拼 .i-<key>） */
+  const rows = panelOfFake({ hp: 17876 }, { heal: 100 })
+  ok(rows.every((r) => r.iconKey === r.key || r.key === 'dmg'),
+    '非元素伤害行的 iconKey 与 key 一致', `得到 ${JSON.stringify(rows.map((r) => [r.key, r.iconKey]))}`)
 }
 
 /* 4. 面板名字不带「大」字 —— 那是圣遗物卡片的用字（大生命/小生命） */

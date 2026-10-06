@@ -202,21 +202,47 @@ const ATTR_TITLE_ZH = {
   dmg: '元素伤害', phy: '物伤加成', heal: '治疗加成'
 }
 
+/*
+ * 元素伤害那一行：名字和图标都要带上**具体元素**。
+ *
+ * 为什么必须带：新雪碧图 `icon-new.png` 里七元素各占一格（第 11~17 格），
+ * **根本没有「通用元素伤害」这一格** —— 沿用「元素伤害」这个通名就没有图标可用，
+ * 硬指到某一格则等于替玩家编了个元素。所以名字跟着角色元素走：火元素伤害 / 雷元素伤害 …
+ *
+ * 元素拿不到时怎么办（旅行者 elem 是 `multi`，不在七元素里）：名字退回「元素伤害」、
+ * 图标留空（`.i-dmg` 不画图）。⚠️ 别兜底成 hydro —— 那是背景图的兜底策略（总得画一张），
+ * 属性行这么干就是**把错误信息当成界面**了。
+ */
+const ELEM_DMG_ZH = {
+  pyro: '火元素伤害', electro: '雷元素伤害', cryo: '冰元素伤害', hydro: '水元素伤害',
+  anemo: '风元素伤害', geo: '岩元素伤害', dendro: '草元素伤害'
+}
+
 /* 导出供测试断言用：属性名的三套用字（面板 / 圣遗物卡 / 汇总短标题）很容易改串，
    钉在测试里比钉在页面截图里靠谱。 */
-export function attrTableOf (profile, locale, charWeight = {}) {
+export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
   const a = profile.attr || {}
   const b = profile.base || {}
   const zh = locale === 'chs' || locale === 'cht'
-  /* 属性名：中文用上面那张表（miao 出图用字），其它语言走 i18n 表 */
-  const labelOf = (key) => (zh && ATTR_TITLE_ZH[key]) || statLabel(key, locale)
+  /* dmg 行换成具体元素的图标；拿不到元素就留 'dmg'（CSS 里不画） */
+  const dmgIcon = ELEM_BG.has(elem) ? elem : 'dmg'
+  /* 属性名：中文用上面那张表（miao 出图用字），其它语言走 i18n 表。
+     dmg 行换成具体元素；拿不到元素（iconKey 还是 'dmg'）就退回通名「元素伤害」，
+     别掉到 statLabel 去 —— 那边给的是「伤害增加」，跟物伤/治疗两项的用字对不齐。 */
+  const labelOf = (key, iconKey) => {
+    if (zh) return key === 'dmg' ? (ELEM_DMG_ZH[iconKey] || ATTR_TITLE_ZH.dmg) : ATTR_TITLE_ZH[key]
+    return statLabel(key, locale)
+  }
   const makeRow = ([key, kind]) => {
     const total = a[key] ?? 0
     const base = b[key] ?? 0
     const fmt = (v) => (kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1))
+    const iconKey = key === 'dmg' ? dmgIcon : key
     return {
       key,
-      label: labelOf(key),
+      /* 前端拿这个拼 CSS 类名 `.i-<iconKey>`；多数属性和 key 同名，只有 dmg 会换成元素名 */
+      iconKey,
+      label: labelOf(key, iconKey),
       value: fmt(total),
       /* 基础值那一列为 0 时 miao 会把它置灰（CSS .base.zero） */
       base: fmt(base),
@@ -486,7 +512,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     charWeight: cw,
     sets,
     panel,
-    attrTable: attrTableOf(profile, loc, cw),
+    attrTable: attrTableOf(profile, loc, cw, elem),
     allAttr,
     consList,
     artifacts: [1, 2, 3, 4, 5].map(pos => artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc))
