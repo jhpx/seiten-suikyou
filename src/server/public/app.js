@@ -460,7 +460,7 @@ function renderDetail () {
       const li = el('li')
       const ic = el('div', 'icon')
       /* 图标类名默认就是属性 key，只有元素伤害那行会被后端换成具体元素（.i-pyro / .i-cryo …）
-         —— 因为雪碧图里没有「通用元素伤害」这一格，只有七元素各自的图标。 */
+         —— 因为图标是一属性一张独立 SVG，没有「通用元素伤害」那张，只有七元素各自的。 */
       ic.append(el('i', 'i-' + (r.iconKey || r.key)))
       li.append(ic, el('div', 'title', r.label))
       const wt = el('div', 'weight')

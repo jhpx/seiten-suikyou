@@ -201,18 +201,33 @@
 .char-attr li:nth-child(even) { background: rgba(0, 0, 0, .4); }
 .char-attr li:nth-child(odd) { background: rgba(50, 50, 50, .4); }
 
-.char-attr li .icon { width: 26px; padding: 2px 5px; }
-/* 属性图标：一张横图 icon-new.png（680×40，17 格 × 40px）靠 background-position 切。
-   background-size: auto 16px = 整图高 40 → 16，缩放 0.4，每格正好 16px 宽 → **步进就是 16px**。
-   ⚠️ 旧图 icon.png 是 25 格 × 20px，同样的 background-size 下每格只有 8px 宽，
-      拿 -16px 步进去切它会**隔一格取图**，图标全串位（之前「暴伤图标看着像充能」就是这个原因）。 */
+/* 属性图标：每个属性一张独立 SVG（assets/character/svgs/），用 **mask** 上色，不是 background-image。
+   ⚠️ 为什么必须是 mask：这批 SVG 全部走 `fill="currentColor"`，另有几层半透明叠色
+     （hp 的第二层 fill-opacity .497、暴击伤害的 opacity .5、充能的 fill-opacity .5）。
+     当 SVG 被当作**外部图片**（background-image / <img>）加载时，它是独立文档、
+     拿不到页面的 CSS 继承上下文 —— `currentColor` 会解析成初始值黑，深色面板上等于隐形。
+     mask 只取 alpha 通道：形状来自 SVG，颜色来自下面的 background-color，
+     半透明层次也照样保留（fill-opacity / opacity 就是 alpha）。
+   ⚠️ 旧方案是一张横图 icon-new.png（680×40，17 格 × 40px）靠 background-position 切 ——
+     已于 2026-10-07 换成独立 SVG，那两张 png（icon.png / icon-new.png）与生成脚本一并删掉。
+   ⚠️ 十六张图**一律白色**（2026-10-07）。原先七张元素图标带自己的彩色 fill，
+     在 CSS 里另配了一组 .i-pyro{background-color:#f95} 之类 —— 一行属性换一种颜色，
+     和其余九个（跟文字同色）不是一套语言，看着像「这几个是另一类数据」。删掉更一致。 */
+.char-attr li .icon {
+  width: 26px; padding: 2px 5px;
+  /* 图标在 32px 高的行里**居中**，不用 vertical-align 去凑基线。
+     原来那条 vertical-align:-3px 是按「16px 图标 + 17px 文字」估的，
+     实测图标中线在行内 +20px、文字 +16px —— 整整低 4px，一眼能看出图标坠着。
+     改成 flex 居中后与行高解耦：以后改字号或行高都不会再飘。 */
+  display: flex; align-items: center; justify-content: center;
+}
 .char-attr li .icon i {
-  display: inline-block;
+  display: block;
   width: 16px; height: 16px;
-  vertical-align: -3px;
-  background-image: url("/assets/character/imgs/icon-new.png");
-  background-size: auto 16px;
-  background-repeat: no-repeat;
+  /* 十六张全部跟文字同色（.pd-canvas 是 color:#fff） */
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+          mask: var(--icon) center / contain no-repeat;
 }
 
 .char-attr li .title {
@@ -262,32 +277,40 @@
 .char-attr li .value2 .base.zero { color: #aaa; }
 .char-attr li .value2 .plus { color: #90e800; }
 
-/* 格位表（icon-new.png，17 格 × 40px，缩到 16px 后**步进 16px**）：
-     0 生命值 / 1 攻击力 / 2 防御力 / 3 元素精通 / 4 暴击率 / 5 元素充能 / 6 元素抗性 /
-     7 物伤加成 / 8 暴击伤害 / 9 治疗加成 / 10~16 火·雷·冰·水·风·岩·草 元素伤害加成。
-   ⚠️ **没有「通用元素伤害」这一格**：所以元素伤害那行由后端按角色元素换 iconKey
-     （shape.js 的 ELEM_DMG_ZH），这里只留七个 `.i-<元素>`，没有 `.i-dmg` 的格位。
+/* 格位表：类名 = 后端给的 iconKey（多数与属性 key 同名），值 = 对应那张 SVG。
+   九个 currentColor 图标走 background-color: currentColor（继承 .pd-canvas 的白）；
+   七个元素图标另给元素色 —— mask 只取 alpha，SVG 自带的 fill 在这里看不到，
+   颜色得由 CSS 声明（这些值与 SVG 里的 fill 一致，火 #f95 / 雷 #b380ff / 冰 #5df …）。
+   ⚠️ **没有「通用元素伤害」这张图**：所以元素伤害那行由后端按角色元素换 iconKey
+     （shape.js 的 ELEM_DMG_ZH），这里只有七个 `.i-<元素>`，没有 `.i-dmg` 的图。
    ⚠️ `.i-dmg` 是「拿不到元素」时的兜底（旅行者 elem=multi）：**故意不画图**，
-     不指向任何一格 —— 随便指一格等于替玩家编了一个元素。
-   ⚠️ 顺序别照旧图的印象写：旧图是 25 格 × 20px，格序和这张完全不同。 */
-.i-hp { background-position: 0 0; }
-.i-atk { background-position: -16px 0; }
-.i-def { background-position: -32px 0; }
-.i-mastery { background-position: -48px 0; }
-.i-cpct { background-position: -64px 0; }
-.i-recharge { background-position: -80px 0; }
-.i-res { background-position: -96px 0; }
-.i-phy { background-position: -112px 0; }
-.i-cdmg { background-position: -128px 0; }
-.i-heal { background-position: -144px 0; }
-.i-pyro { background-position: -160px 0; }
-.i-electro { background-position: -176px 0; }
-.i-cryo { background-position: -192px 0; }
-.i-hydro { background-position: -208px 0; }
-.i-anemo { background-position: -224px 0; }
-.i-geo { background-position: -240px 0; }
-.i-dendro { background-position: -256px 0; }
-.i-dmg { background-image: none; }
+     不指向任何一张 —— 随便指一张等于替玩家编了一个元素。
+   ⚠️ 旧的 `.i-res`（元素抗性）已删：面板固定七项 + 按权重出的三种加成都没有 res，
+     那条规则从来没被命中过（雪碧图时代留的）。 */
+.i-hp { --icon: url("/assets/character/svgs/icon_hp.svg"); }
+.i-atk { --icon: url("/assets/character/svgs/icon_attack.svg"); }
+.i-def { --icon: url("/assets/character/svgs/icon_defence.svg"); }
+.i-mastery { --icon: url("/assets/character/svgs/icon_element_mastery.svg"); }
+.i-cpct { --icon: url("/assets/character/svgs/icon_critical.svg"); }
+.i-cdmg { --icon: url("/assets/character/svgs/icon_critical_hurt.svg"); }
+.i-recharge { --icon: url("/assets/character/svgs/icon_charge_efficiency.svg"); }
+.i-phy { --icon: url("/assets/character/svgs/icon_physical_add_hurt.svg"); }
+.i-heal { --icon: url("/assets/character/svgs/icon_heal_add.svg"); }
+
+/* 元素图标：只给 --icon（mask 图），不给颜色 —— 十六张一律跟文字同色。
+   曾经这里还有一组 .char-attr li .icon .i-pyro { background-color:#f95 } 之类，
+   已删（2026-10-07）：一行属性一种颜色，和其余九个不是一套语言。 */
+.i-pyro { --icon: url("/assets/character/svgs/icon_fire_add_hurt.svg"); }
+.i-electro { --icon: url("/assets/character/svgs/icon_elec_add_hurt.svg"); }
+.i-cryo { --icon: url("/assets/character/svgs/icon_ice_add_hurt.svg"); }
+.i-hydro { --icon: url("/assets/character/svgs/icon_water_add_hurt.svg"); }
+.i-anemo { --icon: url("/assets/character/svgs/icon_wind_add_hurt.svg"); }
+.i-geo { --icon: url("/assets/character/svgs/icon_rock_add_hurt.svg"); }
+.i-dendro { --icon: url("/assets/character/svgs/icon_grass_add_hurt.svg"); }
+
+/* 兜底：拿不到元素（旅行者）时 --icon 没被定义，上面那条 mask 声明整条失效，
+   mask 回到初始值 none → 不画图。这里显式写一遍，把「故意留空」这件事钉在样式里。 */
+.i-dmg { -webkit-mask: none; mask: none; }
 
 /* ── 命座 6 格（左下角一排） ── */
 .char-cons {

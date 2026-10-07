@@ -47,8 +47,8 @@ MIAO = Path(_env).resolve() if _env else (ROOT.parent / "miao-plugin").resolve()
 """
 COMMON_ASSETS = [
     "common/cont/card-bg.png",
-    # 属性表那一行的小图标是**一张横向精灵图**，靠 background-position 切
-    "character/imgs/icon.png",
+    # 属性表那一行的小图标 2026-10-07 起改用仓库自带的 assets/character/svgs/*.svg（CSS mask 上色），
+    # miao 侧的 character/imgs/icon.png / icon-new.png 已不再需要，别再列进来（会把这张死资源拷回去）。
     "character/imgs/star.png",
     "character/imgs/up-num-icon0.png",
     "character/imgs/up-num-icon1.png",

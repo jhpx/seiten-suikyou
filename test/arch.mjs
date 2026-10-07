@@ -167,5 +167,53 @@ for (const file of FILES) {
 ok(leftovers.length === 0, '未残留云崽注入的全局（redis / logger / Bot / segment / Renderer / Yunzai）')
 for (const o of leftovers.slice(0, 20)) console.log('        ' + o)
 
+// ─────────────────────────────────── 6. 属性图标 SVG 的洁净度与单一配色
+console.log('\n=== 6. 属性图标 SVG（assets/character/svgs/）===')
+
+const SVG_DIR = path.join(ROOT, 'src/server/public/assets/character/svgs')
+const svgs = fs.readdirSync(SVG_DIR).filter(f => f.endsWith('.svg')).sort()
+ok(svgs.length === 16, `16 张属性图标齐（实际 ${svgs.length}）`)
+
+/* 这批 SVG 是从 FIGHT_PROP_* 官方资源导出的，第一版带着一堆导出残留：
+ * `class="SvgIcon FIGHT_PROP_*"`、`style="undefined"`、`id="svg-…__path6"`、
+ * `data-name="Livello 2"`、Inkscape 的 `<defs><style>.cls-1{fill:…}</style></defs>`
+ * 和 `-inkscape-stroke:none;paint-order:…`（那些图根本没有 stroke，全是废话）。
+ * 2026-10-07 一次性清干净了，这里钉住 —— **手改 SVG 时最容易漏的就是 style**，
+ * 而在 mask 下颜色类属性对渲染**没有任何影响**（只取 alpha），漏了肉眼根本看不出来。
+ */
+const JUNK = [
+  [/class="SvgIcon/, '导出残留 class="SvgIcon …"'],
+  [/style="undefined"/, '导出残留 style="undefined"'],
+  [/\sid="svg-/, '导出残留 id="svg-…"'],
+  [/data-name=/, '导出残留 data-name="Livello N"'],
+  [/<defs/, 'Inkscape <defs> 块（.cls-1 配色）'],
+  [/-inkscape-stroke/, 'Inkscape 私有属性 -inkscape-stroke'],
+  [/paint-order:/, 'Inkscape 私有属性 paint-order'],
+  [/<style/, '<style> 块'],
+]
+for (const f of svgs) {
+  const txt = fs.readFileSync(path.join(SVG_DIR, f), 'utf8')
+  const bad = JUNK.filter(([re]) => re.test(txt)).map(([, why]) => why)
+  ok(bad.length === 0, `${f} 无导出残留${bad.length ? '（' + bad.join('、') + '）' : ''}`)
+}
+
+/* 十六张一律白色：形状走 mask，颜色由 CSS 的 background-color 给（= currentColor = 白）。
+ * 元素图标曾各自带彩色 fill（#f95 / #b380ff / #5df …），在 CSS 里另配一组 background-color ——
+ * 一行属性一种颜色，和其余九个不是一套语言。已统一成 currentColor。 */
+const colored = svgs.filter(f => /fill="(?!currentColor|none)[#a-zA-Z]/.test(
+  fs.readFileSync(path.join(SVG_DIR, f), 'utf8')))
+ok(colored.length === 0, `16 张都不带自己的颜色（实际有色的：${colored.join(', ') || '无'}）`)
+
+/* mask 只取 alpha —— 半透明层次全靠 fill-opacity / opacity撑着，清理时不能一起删。
+ * 少了它们，充能那圈淡环、暴击伤害的半透明星、生命值的高光都会变成实心。 */
+for (const f of ['icon_charge_efficiency.svg', 'icon_critical_hurt.svg', 'icon_hp.svg']) {
+  const txt = fs.readFileSync(path.join(SVG_DIR, f), 'utf8')
+  ok(/fill-opacity="\.5"|opacity="\.5"|fill-opacity="\.496933"/.test(txt),
+    `${f} 保留半透明层次（fill-opacity / opacity）`)
+}
+/* 冰是唯一带 stroke 的一张，stroke-width 决定雪花枝的粗细，删了形状会变。 */
+ok(/stroke-width="\.3"/.test(fs.readFileSync(path.join(SVG_DIR, 'icon_ice_add_hurt.svg'), 'utf8')),
+  'icon_ice_add_hurt.svg 保留 stroke-width（冰花枝的粗细靠它）')
+
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)
