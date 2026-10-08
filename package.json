@@ -13,6 +13,7 @@
     "#miao.path": "./vendor/miao/tools/path.js"
   },
   "dependencies": {
+    "limiter": "^4.1.0",
     "lodash": "^4.18.1"
   },
   "scripts": {

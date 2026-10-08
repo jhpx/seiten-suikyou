@@ -18,6 +18,7 @@ import * as repo from '../store/repo.js'
 import { fetchEnka } from '../adapter/enka.js'
 import { ingestPayload } from '../adapter/ingest.js'
 import { buildAccountView, fmtTime } from '../view/shape.js'
+import { createRateGate } from './rate-limit.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC = path.join(HERE, 'public')
@@ -53,19 +54,20 @@ const BODY_LIMIT = 64 * 1024
 
 /* ---------------- 小工具 ---------------- */
 
-function sendJson (res, status, obj) {
+function sendJson (res, status, obj, headers) {
   const body = JSON.stringify(obj)
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
-    'Cache-Control': 'no-store'
+    'Cache-Control': 'no-store',
+    ...(headers || {})
   })
   res.end(body)
 }
 
 /* 失败一律走这个形状：{ ok:false, error:{ code, message } } */
-function sendError (res, status, code, message) {
-  sendJson(res, status, { ok: false, error: { code, message } })
+function sendError (res, status, code, message, headers) {
+  sendJson(res, status, { ok: false, error: { code, message } }, headers)
 }
 
 function sendFile (res, file, { cache = 'no-cache' } = {}) {
@@ -122,11 +124,20 @@ function serveAsset (res, pathname) {
  * 组装一个服务实例（不开监听），方便测试直接拿来做内存请求。
  * @param {string} opts.dbFile      SQLite 文件，默认 data/gs.db
  * @param {Function} opts.fetchImpl 允许替换 enka 抓取（测试用）
+ * @param {boolean} opts.trustProxy 认不认转发头（挂在反向代理后面时开），默认 false
+ * @param {object|false} opts.rateLimit 覆盖限流档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流
  */
-export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fetchEnka } = {}) {
+export function createApp ({
+  dbFile = path.join('data', 'gs.db'),
+  fetchImpl = fetchEnka,
+  trustProxy = false,
+  rateLimit
+} = {}) {
   const db = openDb(dbFile)
   /* 同一个 uid 同时来两次抓取请求时共用一个 promise，别把 enka 打两遍 */
   const inflight = new Map()
+  /* 限流闸门。rateLimit 传 false 就没有闸门（本地调试用），后面判一下 null 即可 */
+  const gate = createRateGate({ trustProxy, rules: rateLimit })
 
   /* 库里的行 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
   function viewOf (uid, locale) {
@@ -150,6 +161,15 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
   async function route (req, res, url) {
     const { pathname } = url
     const isGet = req.method === 'GET'
+
+    /* 限流卡在所有业务之前 —— 坏请求也得占配额，否则刷 400 比刷 200 还省 */
+    if (gate) {
+      const wait = gate.check(req, pathname)
+      if (wait) {
+        return sendError(res, 429, 'rate_limited', '请求太频繁了，过一会儿再试',
+          { 'Retry-After': String(wait) })
+      }
+    }
 
     if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
     if (isGet && STATIC[pathname]) return sendFile(res, path.join(PUBLIC, STATIC[pathname]))
@@ -239,19 +259,20 @@ export function createApp ({ dbFile = path.join('data', 'gs.db'), fetchImpl = fe
     })
   })
 
-  return { server, db, viewOf, close: () => server.close() }
+  return { server, db, viewOf, rules: gate?.rules ?? null, close: () => server.close() }
 }
 
 /**
- * 起监听。
+ * 起监听。其余选项（dbFile / fetchImpl / trustProxy / rateLimit）原样转给 createApp，
+ * 加选项时不用在两处签名里同时改。
  *
  * host 默认**回环**而不是 0.0.0.0：这个函数的调用方有两类，一类是「已经想清楚要暴露到哪」的
  * （文件末尾的 CLI 入口，显式传 0.0.0.0），另一类是测试和脚本 —— 后者不传 host 时，
  * 不该在不知情的情况下开着一个局域网端口（测试的内存库里有真实 UID 数据）。
  * 对外服务是正式入口的显式决定，不是库的默认。
  */
-export function startServer ({ port = 8787, host = '127.0.0.1', dbFile, fetchImpl } = {}) {
-  const app = createApp({ dbFile, fetchImpl })
+export function startServer ({ port = 8787, host = '127.0.0.1', ...appOpts } = {}) {
+  const app = createApp(appOpts)
   return new Promise((resolve) => {
     /* port 传 0 = 让系统随便挑一个空闲端口，测试里就这么用 */
     app.server.listen(port, host, () => {
@@ -281,7 +302,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   /* 正式入口默认对外（局域网服务）。要只给本机用就 --host 127.0.0.1。 */
   const host = args.host || '0.0.0.0'
   const dbFile = args.db || path.join('data', 'gs.db')
-  const app = await startServer({ port: Number(args.port || process.env.PORT || 8787), host, dbFile })
+  /* 挂在反向代理后面（Cloudflare Tunnel、nginx）时必须开：那种拓扑下 TCP 对端永远是代理自己
+     （走 Tunnel 时全是 127.0.0.1），不认转发头的话限流会把所有访客当成一个人。 */
+  const trustProxy = args['trust-proxy'] === true || process.env.TRUST_PROXY === '1'
+  /* 本地调试想完全不管限流就加 --no-rate-limit */
+  const noLimit = args['no-rate-limit'] === true || process.env.NO_RATE_LIMIT === '1'
+
+  const app = await startServer({
+    port: Number(args.port || process.env.PORT || 8787),
+    host, dbFile, trustProxy,
+    rateLimit: noLimit ? false : undefined
+  })
 
   /* 绑 0.0.0.0（默认）时把各网卡地址列出来 —— 手机要访问得知道往哪打。
      虚拟机网卡（VMware / WSL）也在里面，扫一眼就能认出哪个是 Wi-Fi 的。 */
@@ -300,6 +331,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log('  注意    同网段任何人可访问（本服务无登录鉴权）；只给本机用就 --host 127.0.0.1')
   }
   console.log(`  库文件  ${dbFile}`)
+  console.log(app.rules
+    ? `  限流    抓取 ${app.rules.fetch.limit} 次/分（每 IP）· 全局 ${app.rules.fetchAll.limit} 次/分 · 读 ${app.rules.read.limit} 次/分`
+    : '  限流    已关闭（--no-rate-limit）')
+  console.log(`  客户端  ${trustProxy
+    ? '按转发头认（CF-Connecting-IP / X-Forwarded-For）'
+    : '按 TCP 对端地址认（挂代理后面要加 --trust-proxy，否则限流形同虚设）'}`)
   if (!i18n.available()) {
     console.log('  提示    多语言表还没同步（只有中文）。跑一次：I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py')
   } else {

@@ -22,7 +22,7 @@
 ## 快速开始
 
 ```bash
-npm install                        # 只有一个运行时依赖：lodash
+npm install                        # 两个运行时依赖：lodash + limiter
 npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
 npm run sync:assets                # 从 miao-plugin 全量复制图片素材（可选，不跑则用 CSS 色块占位）
 npm run server                     # 打开 http://127.0.0.1:8787
@@ -42,7 +42,7 @@ npm run server                     # 打开 http://127.0.0.1:8787
 ## 运行
 
 ```bash
-npm install          # 只需 lodash
+npm install          # 只需 lodash + limiter
 
 # 跑起来
 npm run server       # http://127.0.0.1:8787
@@ -163,8 +163,34 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 静态页走**白名单**（`/`、`/index.html`、`/app.js`、`/style.css`、`/miao.css`），不做通用静态服务。
 失败一律同一个形状：`{ ok:false, error:{ code, message } }`。
 
-**零新依赖**，用 `node:http` 手写 —— `test/arch.mjs` 锁死了「运行时依赖只有 lodash」，
-不为一个个人工具破这个例子。
+### 限流
+
+公网一开放，`POST /api/fetch` 就是个「拿你的服务去打 enka」的口子 —— 上游一限流就是全站 502，
+所以自带三档闸：
+
+| 档位 | 默认 | 挡的是 |
+|---|---|---|
+| 抓取 · 每 IP | 20 次/分 | 单个访客连着刷 |
+| 抓取 · 全局 | 30 次/分 | 换 IP 也绕不过去，这一档是替 enka 上游挡的 |
+| 读接口 · 每 IP | 300 次/分 | 脚本把 uid 扫一遍 |
+
+超了回 `429` + `rate_limited`，并带 `Retry-After` 头。
+`/api/health`、静态页、图片素材**故意不限** —— 探活被拦会误报故障。
+
+```bash
+RATE_FETCH=5 RATE_FETCH_ALL=10 npm run server     # 调档（填每分钟几次）
+npm run server -- --no-rate-limit                  # 本地调试时整个关掉
+```
+
+⚠️ **挂在反向代理后面必须加 `--trust-proxy`**（Cloudflare Tunnel、nginx 都算）：
+那种拓扑下 TCP 对端永远是代理自己（走 Tunnel 时全是 `127.0.0.1`），不认转发头的话
+限流会把所有访客当成同一个 IP。开了才按 `CF-Connecting-IP` / `X-Forwarded-For` 分桶。
+反过来，**直接暴露时不要开**：那只是个请求头，谁都能伪造，认了等于没限。
+
+用 `node:http` 手写，不引框架 —— 这里要的东西很薄（几个 JSON 接口 + 几个静态文件），
+不值得为省一张路由表把依赖撑大。运行时依赖只有两个：`lodash`（miao 内核本来就要）和
+`limiter`（限流的令牌桶，零传递依赖）。`test/arch.mjs` 盯着这个清单 —— 加依赖前先算账：
+省下的行数配不配得上它的体积。
 
 ## 多语言
 
@@ -221,7 +247,7 @@ npm test
 | 套 | 项数 | 管什么 |
 |---|---|---|
 | `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
-| `arch` | 21 | 架构契约：别名可解析、依赖只有 lodash、vendor 自包含、云崽全局零残留 |
+| `arch` | 21 | 架构契约：别名可解析、依赖清单（lodash + limiter）、vendor 自包含、云崽全局零残留 |
 | `pipeline` | 58 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、迁移、合并抓取、真实数据 + 面板对拍 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
 | `server` | 58 | 真起监听打真 HTTP：路由、静态与素材、错误形状、多语言出口、POST 抓取（用假 enka，不联网） |

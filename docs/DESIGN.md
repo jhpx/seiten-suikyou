@@ -39,7 +39,10 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 | `image-size` | 只有 `CharImg` 用 | CharImg 已置空，故不引入 |
 
 `components/_local/` 下两个文件是本项目手写的（不是上游内容），同步时自动生成。
-`test/arch.mjs` 盯着这条线：`dependencies` 必须**恰好**是 `['lodash']`。
+（上表说的是**内核**的依赖怎么处置。**本项目自己**的依赖另有一套口径：
+`test/arch.mjs` 盯着 `dependencies` 清单，当前两项 —— `lodash`（内核要的）与
+`limiter`（限流的令牌桶，零传递依赖）。原则是**代码最精简 + 依赖量最小**，
+允许加轻量第三方库，但加之前先算账：省下的行数配不配得上它的体积。）
 
 ### 搬运范围（为什么是 505 个文件 / 3.5 MB）
 

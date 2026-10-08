@@ -107,7 +107,13 @@ eq(path.resolve(comp.Data.getRoot('miao')), VENDOR, 'Data.getRoot("miao") → ve
 // ─────────────────────────────────────────────────────────── 3. 依赖策略
 console.log('\n=== 3. 依赖策略（公共依赖用真的，云崽专属才做替身）===')
 
-eq(Object.keys(pkg.dependencies || {}), ['lodash'], 'dependencies 只有 lodash')
+/* 依赖策略（2026-10-08 用户校准）：核心是「代码最精简 + 依赖量最小」，
+   **允许加轻量第三方库**，所以这里盯的是「清单里都有谁」，而不是「只能有一个」。
+   - lodash：miao 内核本来就要，公共依赖用真的，不自造替代
+   - limiter：限流的令牌桶，零传递依赖、103KB、原生 ESM
+   新加依赖时想清楚：省下的行数配不配得上这个体积。 */
+eq(Object.keys(pkg.dependencies || {}).sort(), ['limiter', 'lodash'],
+  'dependencies 只有 lodash 与 limiter')
 eq(Object.keys(pkg.devDependencies || {}), [], '无 devDependencies')
 
 const lodash = (await import('lodash')).default

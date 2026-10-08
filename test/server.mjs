@@ -308,6 +308,102 @@ console.log('\n=== 9. 武器三态 ===')
   }
 }
 
+/* ---------------- 10. 限流 ---------------- */
+/*
+ * 公网一开放，/api/fetch 就是个「拿你的服务去打 enka」的口子，上游一限流全站 502，
+ * 所以必须有闸。这里钉死三件事：
+ *   ① 限的是**每个 IP**，不是一个 IP 超了就全站锁死；
+ *   ② 还有一档**全局**的（换 IP 绕不过去），那是替 enka 上游挡的；
+ *   ③ 默认**不认转发头** —— 那只是个请求头，谁都能伪造，认了等于没限。
+ *
+ * 测试一律注入假 enka（fetchImpl），不联网；档位用小数字，不真等一分钟。
+ */
+console.log('\n=== 10. 限流 ===')
+{
+  const fakeFetch = async (uid) => ({ ...REAL, uid })
+  const post = (url, uid, headers = {}) => fetch(url + '/api/fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ uid })
+  })
+
+  /* ① 每 IP 一档 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', fetchImpl: fakeFetch, trustProxy: true,
+      rateLimit: { fetch: { limit: 2, windowMs: 60_000 }, fetchAll: { limit: 100, windowMs: 60_000 } }
+    })
+    const ip1 = { 'X-Forwarded-For': '203.0.113.7' }
+    eq((await post(a.url, UID, ip1)).status, 200, '  每 IP：第 1 次放行')
+    eq((await post(a.url, UID, ip1)).status, 200, '  第 2 次放行')
+    const r3 = await post(a.url, UID, ip1)
+    eq(r3.status, 429, '  第 3 次被拦（上限 2）')
+    eq((await r3.json()).error.code, 'rate_limited', '  错误码 rate_limited')
+    ok(Number(r3.headers.get('retry-after')) >= 1,
+      `  带 Retry-After 头（${r3.headers.get('retry-after')} 秒）`)
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.8' })).status, 200,
+      '  换个 IP 不受牵连（不是一超全站锁死）')
+    a.server.close()
+  }
+
+  /* ② 全局一档：换 IP 也绕不过去 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', fetchImpl: fakeFetch, trustProxy: true,
+      rateLimit: { fetch: { limit: 10, windowMs: 60_000 }, fetchAll: { limit: 2, windowMs: 60_000 } }
+    })
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.11' })).status, 200, '  全局：IP A 放行')
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.12' })).status, 200, '  IP B 放行')
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.13' })).status, 429,
+      '  IP C 被拦（全局上限 2，换 IP 绕不开）')
+    a.server.close()
+  }
+
+  /* ③ 默认不认转发头：伪造 IP 无效 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', fetchImpl: fakeFetch,
+      rateLimit: { fetch: { limit: 1, windowMs: 60_000 }, fetchAll: { limit: 100, windowMs: 60_000 } }
+    })
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.20' })).status, 200,
+      '  不认转发头：第 1 次放行')
+    eq((await post(a.url, UID, { 'X-Forwarded-For': '203.0.113.21' })).status, 429,
+      '  换个伪造 IP 照样被拦（只认 TCP 对端）')
+    a.server.close()
+  }
+
+  /* ④ 读接口另有一档；health 和静态页故意不限 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', trustProxy: true,
+      rateLimit: { read: { limit: 2, windowMs: 60_000 } }
+    })
+    repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
+    const g = (p) => fetch(a.url + p, { headers: { 'X-Forwarded-For': '203.0.113.30' } })
+    eq((await g(`/api/uid/${UID}`)).status, 200, '  读接口：第 1 次放行')
+    eq((await g(`/api/uid/${UID}`)).status, 200, '  第 2 次放行')
+    eq((await g(`/api/uid/${UID}`)).status, 429, '  第 3 次被拦（读上限 2）')
+    eq((await g('/api/health')).status, 200, '  /api/health 不限（探活被拦会误报故障）')
+    eq((await g('/')).status, 200, '  静态页不限')
+    a.server.close()
+  }
+
+  /* ⑤ 窗口过了要能自己恢复 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', trustProxy: true,
+      rateLimit: { read: { limit: 1, windowMs: 300 } }
+    })
+    repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
+    const g = () => fetch(a.url + `/api/uid/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.40' } })
+    eq((await g()).status, 200, '  短窗口：第 1 次放行')
+    eq((await g()).status, 429, '  紧接着再来 → 429')
+    await new Promise(r => setTimeout(r, 400))
+    eq((await g()).status, 200, '  等过窗口 → 恢复（令牌桶在补）')
+    a.server.close()
+  }
+}
+
 /* ---------------- 收尾 ---------------- */
 
 app.server.close()
