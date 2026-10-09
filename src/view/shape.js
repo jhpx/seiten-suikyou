@@ -75,7 +75,7 @@ const INT_ATTR_KEYS = new Set(['mastery', 'atkPlus', 'defPlus', 'hpPlus'])
 
 export function attrValueText (key, value) {
   if (value == null || value === '') return value
-  if (!INT_ATTR_KEYS.has(key)) return value      /* 百分比词条原样透传 */
+  if (!INT_ATTR_KEYS.has(key)) return value
   return Format.comma(Number(String(value).replace(/,/g, '')), 0)
 }
 
@@ -109,7 +109,6 @@ function panelOf (attr, locale) {
   return out
 }
 
-/* 同一份面板的一行文本（命令行用；页面要的是结构化数据，走 panelOf） */
 export function panelText (attr, locale) {
   return panelOf(attr, locale).map(p => `${p.label} ${p.text}`).join('  ')
 }
@@ -248,7 +247,6 @@ export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
     const iconKey = key === 'dmg' ? dmgIcon : key
     return {
       key,
-      /* 前端拿这个拼 CSS 类名 `.i-<iconKey>`；多数属性和 key 同名，只有 dmg 会换成元素名 */
       iconKey,
       label: labelOf(key, iconKey),
       value: fmt(total),
@@ -326,25 +324,15 @@ function artifactOf (pos, marked, dbRow, locale) {
  * @param {object} result   ArtisMark.getMarkDetail(profile, true) 的结果
  * @param {string} locale   语言代码（认不出会退回默认语言）
  */
-/*
- * 场景名（classTitle）里那个「角色缩写-」前缀怎么写。
- *
- * miao 那边固定拼 `${char.abbr}-${title}`（ArtisMarkCfg.js:93），abbr 取自角色表，
- * 于是「沃雅妮莎」这种**上游权重表里还没有的角色**会显示成「妮莎-通用」——
- * 看着像上游真给沃雅妮莎定过一套「通用」权重，实际上那张表根本没这一行，
- * 内核是拿 `defaultAttrWeight`（atk75/cpct100/cdmg100/dmg100/phy100）凑的。
- *
- * 兜底时把前缀换成「默认」：默认-通用。语义是「这是通用模板，不是这个角色的专属权重」。
- * 只换前缀、保留后半段（通用 / 绝缘4 / 西风 / 护摩 这些场景词照旧），
- * 这样「用的是哪套权重」和「命中了哪个场景」两件事仍然分得开。
- *
- * 上游表里有这个角色、或者角色自带 artis.js 专属规则时，一律原样透传内核的标题。
- */
 const DEFAULT_WEIGHT_LABEL = '默认'
 const CUSTOM_WEIGHT_LABEL = '自定义'
 
 /*
  * 场景名（classTitle）里那个「角色缩写-」前缀怎么写。三种权重来源要分得开：
+ *
+ *   miao 固定拼 `${char.abbr}-${title}`（ArtisMarkCfg.js:93），于是「沃雅妮莎」这种
+ *   上游权重表里还没有的角色会显示成「妮莎-通用」——看着像上游真给它定过一套
+ *   「通用」权重，实际内核是拿 defaultAttrWeight 凑的。兜底时把前缀换成「默认」：默认-通用。
  *
  *   权重来源                          内核给的标记         页面上显示
  *   ───────────────────────────────  ──────────────────  ──────────────
@@ -354,14 +342,12 @@ const CUSTOM_WEIGHT_LABEL = '自定义'
  *   专属规则**默认分支、手写了权重**    isCustomWeight    角色缩写-自定义
  *   权重表里没这个角色（内核兜底）      isDefaultWeight   默认-通用
  *
- * 为什么要把第四行单独标出来：miao 只在「命中特判分支」时给自定义名字，
- * 于是迪希雅那种 `def({hp:75,…,recharge:75})` 手写一整套、却也叫「迪希雅-通用」的情况，
- * 看着像查表来的 —— 实际 recharge 是 55→75、mastery 被整个去掉。
- * 实测 69 个有专属规则的角色里只有他一个（见 .tmp/calc-custom-weight.mjs 的算法）。
+ *   为什么把第四行单独标出来：miao 只在「命中特判分支」时给自定义名字，于是迪希雅那种
+ *   `def({hp:75,…,recharge:75})` 手写一整套、却也叫「迪希雅-通用」的情况，看着像查表来的——
+ *   实际 recharge 是 55→75、mastery 被整个去掉。实测 69 个专属规则角色里只有他一个。
  *
- * 语义分工：「通用」回答**命中哪个场景**，前缀回答**用的哪套权重**。
- * 所以只换前缀、保留后半段（通用/绝缘4/西风/护摩 这些场景词照旧）——
- * 「用哪套权重」和「命中哪个场景」是���件事，不能混成一个词。
+ *   语义分工：「通用」回答**命中哪个场景**，前缀回答**用的哪套权重**。所以只换前缀、
+ *   保留后半段（通用/绝缘4/西风/护摩 这些场景词照旧）——两件事不能混成一个词。
  */
 export function classTitleOf (result) {
   const title = result?.classTitle || ''

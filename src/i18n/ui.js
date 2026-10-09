@@ -189,20 +189,15 @@ const TABLE = {
   }
 }
 
-/* 回落顺序：要的语言 → 英文 → 中文。界面上出现英文好过出现空白。 */
-function tableFor (locale) {
-  return TABLE[locale] || TABLE.en || TABLE.chs
-}
-
 /**
- * 取一条界面文字，并把 {占位符} 换掉
+ * 取一条界面文字，并把 {占位符} 换掉。
+ * 查表顺序：要的语言 → 英文 → 中文，界面上出现英文好过出现空白。
  * @param {string} key
  * @param {string} locale 语言代码（已解析过或未解析都行，这里只做查表）
  * @param {object} vars    形如 { n: 3 }；值一律原样塞进去
  */
 export function t (key, locale = DEFAULT_LOCALE, vars = null) {
-  const row = tableFor(locale)
-  let s = row[key] ?? TABLE.en?.[key] ?? TABLE.chs[key] ?? key
+  let s = TABLE[locale]?.[key] ?? TABLE.en?.[key] ?? TABLE.chs[key] ?? key
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
       s = s.split(`{${k}}`).join(String(v ?? ''))
@@ -213,7 +208,7 @@ export function t (key, locale = DEFAULT_LOCALE, vars = null) {
 
 /** 整张表给前端（前端一次拿全，切语言不用再问后端） */
 export function all (locale = DEFAULT_LOCALE) {
-  return { ...tableFor(locale) }
+  return { ...(TABLE[locale] || TABLE.en) }
 }
 
 export default { t, all }

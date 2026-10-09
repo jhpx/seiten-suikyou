@@ -69,6 +69,8 @@ const padW = (s, n) => {
 
 /* 名字一律从库行的 id/hash 查 i18n 表，不拿 miao 给的中文名反查（它只有中文，
    只能当查不到时的兜底）。用 hash 查还有个好处：miao 哪天改了译名也不影响我们。 */
+const charName = (profile, locale) => i18n.avatarName(profile.id, locale) || profile.char.name
+
 function renderCharacter (row, profile, result, locale) {
   const char = profile.char
   const out = []
@@ -77,7 +79,7 @@ function renderCharacter (row, profile, result, locale) {
 
   const talent = deriveTalent(char, row.skill_level_map || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
-  const name = i18n.avatarName(profile.id, locale) || char.name
+  const name = charName(profile, locale)
   /* 和网页一个口径（shape.js 的 weapon.state）：装备了但元数据不认识这把 → 「未知武器」，
      真没装备才是「无武器」。别再写成「（未识别）」—— 那是角色行的词，用在这里会让人
      以为角色没认出来。 */
@@ -225,7 +227,7 @@ async function main () {
   const sorted = [...wanted].sort((a, b) => b.result._mark - a.result._mark)
   console.log(`${uiText('summary', locale)}（按总分降序，共 ${sorted.length} ${uiText('chars', locale)}）`)
   for (const r of sorted) {
-    const cname = i18n.avatarName(r.profile.id, locale) || r.profile.char.name
+    const cname = charName(r.profile, locale)
     console.log(`  ${pad(r.result.mark, 6)}  ${String(r.result.markClass).padEnd(4)} ${String(cname).padEnd(10)} ${r.result.classTitle}`)
   }
   console.log(line())

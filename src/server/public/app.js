@@ -11,13 +11,8 @@
 const $ = (id) => document.getElementById(id)
 
 const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
-/* 首页卡片角标的档位色。这是 `miao.css` 里 .mark-* 那一套的 JS 副本 ——
-   那边是 CSS（明细页/圣遗物卡），这里是 JS（首页角标在渲染时上色），改一边要同步改另一边。
- * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 梅紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。
- * 九档要九个色，一个都不许重。
- * ⚠️ SS 的紫偏偏要**避开普通紫**：四星角色卡底色就是紫（bg4.png 主色 #8a6ab0），角标压在它上面，
- *   用 #b07ae8 那种正紫会和底色同色相（差 2°）糊成一片。现在这个 #ef8ce0 偏粉，色相差 42°。
- */
+/* 首页角标档位色 —— miao.css 里 .mark-* 的 JS 副本，改一边要同步改另一边。
+ * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 梅紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。*/
 const RANK_COLOR = {
   MAX: '#ec2b2b', ACE: '#ff9f2e', SSS: '#ffe066', SS: '#ef8ce0',
   S: '#5fd48f', A: '#4fb0ee', B: '#a9d8ff', C: '#ffffff', D: '#6b7280'
@@ -54,10 +49,8 @@ const T = (key, vars) => {
  * 只认这一种标签、且手工拼节点 —— 不走 innerHTML，省得给文案开注入的口子。
  */
 function richText (parent, text) {
-  const re = /<strong>([\s\S]*?)<\/strong>/g
   let last = 0
-  let m
-  while ((m = re.exec(text)) !== null) {
+  for (const m of text.matchAll(/<strong>([\s\S]*?)<\/strong>/g)) {
     if (m.index > last) parent.append(document.createTextNode(text.slice(last, m.index)))
     parent.append(el('strong', '', m[1]))
     last = m.index + m[0].length
@@ -76,6 +69,11 @@ async function api (path, opts) {
     throw new Error(body?.error?.message || `HTTP ${res.status}`)
   }
   return body.data
+}
+
+/* 按当前语言取某个账号的接口地址（locale 一律跟 state.locale 走） */
+function uidApiUrl (uid) {
+  return `/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`
 }
 
 /* ───────────────────────── 提示条 ───────────────────────── */
@@ -758,7 +756,7 @@ function renderUidHistory () {
   const dl = $('uidHistory')
   dl.innerHTML = ''
   for (const u of uidHistory()) {
-    const o = document.createElement('option')
+    const o = el('option', '', u)
     o.value = u
     dl.append(o)
   }
@@ -770,14 +768,19 @@ function rememberUid (uid) {
   renderUidHistory()
 }
 
+/* 这个 uid 成了「当前」：写进内存、存会话、进历史下拉 */
+function persistUid (uid) {
+  state.uid = Number(uid)
+  localStorage.setItem('st.uid', String(uid))
+  rememberUid(uid)
+}
+
 async function loadUid (uid, { keepSelection = false } = {}) {
   if (!keepSelection) state.selectedAvatarId = null
   showLoading(T('reading'))
   try {
-    const view = await api(`/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`)
-    state.uid = Number(uid)
-    localStorage.setItem('st.uid', String(uid))
-    rememberUid(uid)
+    const view = await api(uidApiUrl(uid))
+    persistUid(uid)
     applyView(view)
   } catch (e) {
     state.view = null
@@ -799,10 +802,8 @@ async function fetchUid (uid) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uid: Number(uid), locale: state.locale })
     })
-    state.uid = Number(uid)
     state.selectedAvatarId = null
-    localStorage.setItem('st.uid', String(uid))
-    rememberUid(uid)
+    persistUid(uid)
     applyView(data)
     banner(T('fetchDone', { n: data.count }), 'ok')
   } catch (e) {
@@ -831,7 +832,7 @@ async function changeLocale (locale) {
   if (!state.uid) { renderAll(); return }
   showLoading(T('switching'))
   try {
-    state.view = await api(`/api/uid/${state.uid}?locale=${encodeURIComponent(locale)}`)
+    state.view = await api(uidApiUrl(state.uid))
     renderAll()
   } catch (e) {
     banner(e.message, 'err')
@@ -862,9 +863,8 @@ async function boot () {
     const sel = $('locale')
     sel.innerHTML = ''
     for (const l of meta.locales) {
-      const o = document.createElement('option')
+      const o = el('option', '', l.label)
       o.value = l.code
-      o.textContent = l.label
       sel.append(o)
     }
     state.locale = meta.locales.some(l => l.code === state.locale) ? state.locale : meta.defaultLocale
