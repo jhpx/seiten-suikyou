@@ -35,6 +35,7 @@ const TABLE = {
        back / tapToView 是在同一行里被一起带走的，这里补回来 —— 键按用途分行放，别再挤一行。 */
     back: '返回', tapToView: '点击查看',
     filterAll: '全部', filterSearch: '搜索角色', noMatch: '没有符合筛选条件的角色。',
+    filterElem: '元素', filterRank: '等级', filterWeight: '权重',
     detailTitle: '角色明细', artisRank: '圣遗物评级', artisTotal: '圣遗物总分',
     rule: '评分规则', scoredAt: '数据时间',
     /* 上游出图这里还有半句「可使用 #角色名圣遗物 来查看评分详情」——
@@ -71,6 +72,7 @@ const TABLE = {
     mainStat: '主詞條', notEquipped: '未裝備',
     back: '返回', tapToView: '點擊查看',
     filterAll: '全部', filterSearch: '搜尋角色', noMatch: '沒有符合篩選條件的角色。',
+    filterElem: '元素', filterRank: '等級', filterWeight: '權重',
     detailTitle: '角色明細', artisRank: '聖遺物評級', artisTotal: '聖遺物總分',
     rule: '評分規則', scoredAt: '資料時間',
     artisNotice: '評分為<strong>喵喵版規則</strong>，僅供參考與娛樂。',
@@ -104,6 +106,7 @@ const TABLE = {
     mainStat: 'Main', notEquipped: 'Not equipped',
     back: 'Back', tapToView: 'Tap to view',
     filterAll: 'All', filterSearch: 'Search characters', noMatch: 'No characters match the filter.',
+    filterElem: 'Element', filterRank: 'Tier', filterWeight: 'Weight',
     detailTitle: 'Character Details', artisRank: 'Artifact Rank', artisTotal: 'Artifact Score',
     rule: 'Rule', scoredAt: 'Scored at',
     /* 撇号直接写 ’（U+2019），别写 &rsquo; —— 这段文案走 createTextNode 渲染，HTML 实体没人解码，
@@ -139,6 +142,7 @@ const TABLE = {
     mainStat: 'メイン', notEquipped: '未装備',
     back: '戻る', tapToView: 'タップで表示',
     filterAll: 'すべて', filterSearch: 'キャラを検索', noMatch: '条件に合うキャラがいません。',
+    filterElem: '元素', filterRank: '評価', filterWeight: '重み',
     detailTitle: 'キャラ詳細', artisRank: '聖遺物評価', artisTotal: '聖遺物スコア',
     rule: '採点ルール', scoredAt: '取得日時',
     artisNotice: 'スコアは<strong>喵喵版ルール</strong>に準拠した参考・娯楽用の値です。',
@@ -172,6 +176,7 @@ const TABLE = {
     mainStat: '주 옵션', notEquipped: '미장착',
     back: '뒤로', tapToView: '탭하여 보기',
     filterAll: '전체', filterSearch: '캐릭터 검색', noMatch: '조건에 맞는 캐릭터가 없습니다.',
+    filterElem: '원소', filterRank: '등급', filterWeight: '가중치',
     detailTitle: '캐릭터 상세', artisRank: '성유물 등급', artisTotal: '성유물 점수',
     rule: '채점 규칙', scoredAt: '수집 시각',
     artisNotice: '점수는 <strong>喵喵 규칙</strong>을 따른 참고·오락용 값입니다.',

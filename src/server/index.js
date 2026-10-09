@@ -17,7 +17,7 @@ import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { fetchEnka } from '../adapter/enka.js'
 import { ingestPayload } from '../adapter/ingest.js'
-import { buildAccountView, fmtTime } from '../view/shape.js'
+import { buildAccountView, fmtTime, weightFilterOptions } from '../view/shape.js'
 import { createRateGate } from './rate-limit.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -176,6 +176,7 @@ export function createApp ({
 
     /* ---- 元信息：有哪些语言、表在不在 ---- */
     if (isGet && pathname === '/api/meta') {
+      const loc = i18n.resolveLocale(url.searchParams.get('locale'))
       sendJson(res, 200, {
         ok: true,
         data: {
@@ -184,7 +185,9 @@ export function createApp ({
           /* 表还没同步时为 false —— 页面据此提示「只有中文」 */
           i18nReady: i18n.available(),
           /* 界面文字也一并返回（切语言不用再问后端一次）；归一化过一遍，'zh-cn' 也能落到 chs */
-          ui: i18n.uiTable(i18n.resolveLocale(url.searchParams.get('locale')))
+          ui: i18n.uiTable(loc),
+          /* 首页「按属性权重筛选」的四个选项名，跟着语言一起给 —— 前端不写死词条名 */
+          weightOptions: weightFilterOptions(loc)
         }
       })
       return

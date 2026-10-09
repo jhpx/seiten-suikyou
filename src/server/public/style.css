@@ -288,18 +288,23 @@ body {
 
 /* ───────────────────────── 首页：筛选条 ─────────────────────────
  *
- * 名称搜索框 + 元素 chips。视觉全部沿用顶栏控件那套（--ctrl-bg 深色玻璃 + --gold-line
- * 金描边 + focus 金晕），一个新色都不引 —— 筛选条和顶栏在同一屏上，另起一套必然搭不上。
+ * 搜索框 + 三排 chips（元素 / 评分等级 / 属性权重）。视觉全部沿用顶栏控件那套
+ * （--ctrl-bg 深色玻璃 + --gold-line 金描边 + focus 金晕），一个新色都不引 ——
+ * 筛选条和顶栏在同一屏上，另起一套必然搭不上。
  * 34px 高：比顶栏控件（36）矮 2px，它是内容区的次级控件，不该和顶栏主角一样高。
  */
+/* 竖排：三组 chips 横着塞不进 520px，而且三排「全部」并排时看不出哪排管哪种筛选 */
 .roster-filter {
-  display: flex; gap: 8px; align-items: center;
+  display: flex; flex-direction: column; gap: 8px;
   margin-bottom: 12px;
 }
-.rf-search { flex: 1; min-width: 0; height: 34px; }
+.rf-search { min-width: 0; height: 34px; }
 .rf-search::placeholder { color: rgba(240, 236, 225, .45); }
-.rf-elems { display: flex; gap: 6px; }
-.rf-elem {
+.rf-row { display: flex; gap: 8px; align-items: center; }
+/* 标签定宽（按最长的英文 Element 给到 48px），三排 chips 的左边缘才对得齐 */
+.rf-label { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); letter-spacing: .04em; }
+.rf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rf-chip {
   width: 34px; height: 34px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--ctrl-bg);
@@ -310,12 +315,13 @@ body {
   cursor: pointer;
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease;
 }
-.rf-elem img { width: 20px; height: 20px; object-fit: contain; pointer-events: none; }
-.rf-elem:hover { border-color: rgba(211, 188, 142, .5); }
-/* 「全部」是文字 chip：日文「すべて」3 个字放不进 34px 见方，宽度交给内容撑 */
-.rf-elem.rf-all { width: auto; padding: 0 10px; letter-spacing: .04em; }
+.rf-chip img { width: 20px; height: 20px; object-fit: contain; pointer-events: none; }
+.rf-chip:hover { border-color: rgba(211, 188, 142, .5); }
+/* 文字 chip（「全部」/ 等级 / 属性）：日文「すべて」、中文「元素精通」都塞不进 34px 见方，
+   宽度交给内容撑 */
+.rf-chip.rf-all, .rf-chip.rf-text { width: auto; padding: 0 10px; letter-spacing: .04em; }
 /* 激活 = 金描边 + 金晕 + 淡金底，和顶栏按钮 hover/focus 是同一支金 */
-.rf-elem.active {
+.rf-chip.active {
   border-color: var(--gold-line-hi);
   background: rgba(211, 188, 142, .16);
   color: var(--gold-lt);

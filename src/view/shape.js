@@ -58,6 +58,14 @@ export function statLabel (key, locale) {
   return i18n.statName(key, locale) || KEY_TITLE[key] || key
 }
 
+/* 首页「按属性权重筛选」的四个选项：命中判据是这一项权重不为 0。顺序按攻/防/生/精排 */
+export const WEIGHT_FILTER_KEYS = ['atk', 'def', 'hp', 'mastery']
+
+/* 选项名走 i18n（与明细页属性名同源），前端不写死词条名 */
+export function weightFilterOptions (locale) {
+  return WEIGHT_FILTER_KEYS.map(key => ({ key, label: statLabel(key, locale) }))
+}
+
 /*
  * 词条数值 → 给人看的串。
  *

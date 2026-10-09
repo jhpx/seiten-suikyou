@@ -33,9 +33,12 @@ const state = {
   selectedAvatarId: null,
   busy: false,
   ui: {},
-  /* 首页筛选：q = 名称搜索串（大小写不敏感），elem = 元素 key（'' = 不限）。
+  /* 首页「按属性权重筛选」的四个选项（{ key, label }），随语言从 /api/meta 拿 */
+  weightOptions: [],
+  /* 首页筛选：q = 名称搜索串（大小写不敏感）；elem = 元素 key、rank = 评分档位、
+     weight = 属性 key，'' = 不限。
      不持久化 —— 筛选是「在这份名单里找人」的临时动作，下次进来还停在旧条件上反而碍事。 */
-  filter: { q: '', elem: '' }
+  filter: { q: '', elem: '', rank: '', weight: '' }
 }
 
 const T = (key, vars) => {
@@ -281,11 +284,11 @@ function renderRoster () {
 
 /* ───────────────────────── 首页：筛选条 ─────────────────────────
  *
- * 名称搜索框 + 元素 chips。两条规则：
+ * 搜索框 + 三排 chips（元素 / 评分等级 / 属性权重）。两条规则：
  * ① 筛选只重画网格那一块（refreshRosterGrid），不重建整条筛选栏 ——
  *    重建会把搜索框的焦点和光标位置一起冲掉，每敲一个字焦点丢一次。
- * ② 元素图标/元素名都从名单里已有角色的 elemIcon / elemText 借，
- *    前端不自己拼 /assets 路径（和卡片一个规矩：URL 一律后端下发）。
+ * ② 元素图标从名单里已有角色借、属性名由 /api/meta 下发 ——
+ *    和卡片一个规矩：URL 和文案一律后端给，前端不拼路径、不写死词条名。
  */
 
 /* 筛选项的排列顺序：游戏内图鉴的元素顺序（火水风雷草冰岩），不按数据出现顺序排。
@@ -296,6 +299,59 @@ const ELEM_ORDER = ['pyro', 'hydro', 'anemo', 'electro', 'dendro', 'cryo', 'geo'
 function rosterElems (view) {
   const have = new Set(view.avatars.map(a => a.elem))
   return ELEM_ORDER.filter(e => have.has(e))
+}
+
+/* 等级只列名单里真有人拿到过的档位 —— 摆一排点了也是空的档位没有意义 */
+function rosterRanks (view) {
+  return RANK_ORDER.filter(r => view.avatars.some(a => a.score.markClass === r))
+}
+
+/* 换了 UID 之后，旧条件可能在这份名单里根本不存在 —— 那时一个 chip 都不激活、
+   网格却是空的，看着像 bug。条件不成立就地清空，回到「全部」。 */
+function dropStaleFilter (key, values) {
+  if (state.filter[key] && !values.includes(state.filter[key])) state.filter[key] = ''
+}
+
+/* 元素图标/名字从名单里已有角色身上借（URL 一律后端下发） */
+function elemChip (view, e) {
+  const src = view.avatars.find(a => a.elem === e)
+  const img = el('img')
+  img.src = src?.elemIcon || ''
+  img.alt = src?.elemText || e
+  img.onerror = () => imgError(img)
+  return { node: img, title: src?.elemText || e }
+}
+
+/*
+ * 一排筛选：标签 + chips。点一下选中，再点一下取消（回到「全部」）。
+ * 激活态只切 class、不重建节点 —— 和搜索框同一个理由。
+ * items 是 [{ value, node, title }]，node 可以是节点也可以是字符串。
+ */
+function filterRow (labelKey, key, items, isText) {
+  const row = el('div', 'rf-row')
+  row.append(el('span', 'rf-label', T(labelKey)))
+  const box = el('div', 'rf-chips')
+  const paint = () => {
+    for (const c of box.children) c.classList.toggle('active', c.dataset.val === state.filter[key])
+  }
+  const chip = (value, node, cls, title) => {
+    const c = el('button', cls)
+    c.type = 'button'
+    c.dataset.val = value
+    if (title) c.title = title
+    c.append(node)
+    c.addEventListener('click', () => {
+      state.filter[key] = state.filter[key] === value ? '' : value
+      paint()
+      refreshRosterGrid()
+    })
+    box.append(c)
+  }
+  chip('', T('filterAll'), 'rf-chip rf-all')
+  for (const { value, node, title } of items) chip(value, node, `rf-chip${isText ? ' rf-text' : ''}`, title)
+  paint()
+  row.append(box)
+  return row
 }
 
 function renderFilterBar (view) {
@@ -311,53 +367,30 @@ function renderFilterBar (view) {
   })
   bar.append(search)
 
-  const chips = el('div', 'rf-elems')
-  /* 激活态只改 class，不重建 chips —— 和搜索框同一个理由 */
-  const paint = () => {
-    for (const c of chips.children) c.classList.toggle('active', c.dataset.elem === state.filter.elem)
-  }
-  const pick = (e) => {
-    /* 再点一次已激活的 chip = 取消筛选，回到「全部」 */
-    state.filter.elem = state.filter.elem === e ? '' : e
-    paint()
-    refreshRosterGrid()
-  }
-
   const elems = rosterElems(view)
-  /* 换了 UID 之后，旧的元素条件可能在这份名单里根本不存在 —— 那时一个 chip 都不激活、
-     网格却是空的，看着像 bug。条件不成立就地清空，回到「全部」。 */
-  if (state.filter.elem && !elems.includes(state.filter.elem)) state.filter.elem = ''
+  dropStaleFilter('elem', elems)
+  bar.append(filterRow('filterElem', 'elem', elems.map(e => ({ value: e, ...elemChip(view, e) })), false))
 
-  const all = el('button', 'rf-elem rf-all', T('filterAll'))
-  all.type = 'button'
-  all.dataset.elem = ''
-  all.addEventListener('click', () => pick(''))
-  chips.append(all)
+  const ranks = rosterRanks(view)
+  dropStaleFilter('rank', ranks)
+  bar.append(filterRow('filterRank', 'rank', ranks.map(r => ({ value: r, node: r })), true))
 
-  for (const e of elems) {
-    const src = view.avatars.find(a => a.elem === e)
-    const c = el('button', 'rf-elem')
-    c.type = 'button'
-    c.dataset.elem = e
-    c.title = src?.elemText || e
-    const img = el('img')
-    img.src = src?.elemIcon || ''
-    img.alt = src?.elemText || e
-    img.onerror = () => imgError(img)
-    c.append(img)
-    c.addEventListener('click', () => pick(e))
-    chips.append(c)
-  }
-  paint()
-  bar.append(chips)
+  /* 权重那四个选项是固定的 taxonomy，不按名单裁剪 —— 点出空结果也是有效信息
+     （「我这号里没人吃防御」），裁剪掉反而看不出来 */
+  bar.append(filterRow('filterWeight', 'weight',
+    state.weightOptions.map(o => ({ value: o.key, node: o.label })), true))
+
   return bar
 }
 
 function filteredAvatars (view) {
-  const q = state.filter.q.trim().toLowerCase()
-  const e = state.filter.elem
+  const f = state.filter
+  const q = f.q.trim().toLowerCase()
   return view.avatars
-    .filter(a => !e || a.elem === e)
+    .filter(a => !f.elem || a.elem === f.elem)
+    .filter(a => !f.rank || a.score.markClass === f.rank)
+    /* 权重筛选：这一项权重不为 0 就算命中 —— 表里给 0 的，就是这个角色不吃这条属性 */
+    .filter(a => !f.weight || (a.charWeight?.[f.weight] || 0) !== 0)
     /* name 是当前语言的，nameZh 恒为中文 —— 英文页也允许直接敲中文名找人 */
     .filter(a => !q || (a.name || '').toLowerCase().includes(q) || (a.nameZh || '').toLowerCase().includes(q))
 }
@@ -820,6 +853,7 @@ async function fetchUid (uid) {
 async function loadMeta (locale) {
   const meta = await api(`/api/meta?locale=${encodeURIComponent(locale)}`)
   state.ui = meta.ui || {}
+  state.weightOptions = meta.weightOptions || []
   return meta
 }
 

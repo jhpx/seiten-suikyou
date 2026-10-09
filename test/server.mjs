@@ -62,6 +62,11 @@ console.log('=== 1. 元信息与健康检查 ===')
   eq(en.data.ui.panelSection, 'Stats', 'locale=en 时界面文字跟着变')
   ok(en.data.ui.fetchDone.includes('{n}'), '英文版的占位符还在')
 
+  /* 首页「按属性权重筛选」的四个选项：顺序固定，名字随语言变（前端不写死词条名） */
+  eq(m.data.weightOptions.map(o => o.key).join(','), 'atk,def,hp,mastery', '权重筛选四项按攻/防/生/精排')
+  eq(m.data.weightOptions[0].label, '攻击力', 'chs 的属性名是中文')
+  eq(en.data.weightOptions[0].label, 'ATK', '英文下属性名跟着变')
+
   /* 认不出的语言要落回默认语言，不能给个空表让页面全是 key */
   const bogus = await json('/api/meta?locale=xx')
   eq(bogus.data.ui.panelSection, '面板属性', '未知语言回落到默认语言')
