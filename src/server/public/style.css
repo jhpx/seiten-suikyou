@@ -601,6 +601,10 @@ body {
 body.on-detail .top { display: none; }
 /* 顶栏没了，main 顶到屏幕最上沿，12px 有点贴边，多给 4px 呼吸 */
 body.on-detail .app { padding-top: 16px; }
+/* 明细页卡片最底下已经有一句「数据时间」了，页脚这句不再重复。
+   只藏文字、不藏 .foot 盒子：那圈 padding 还留着，明细页底边高度和以前一样，
+   来回切页时下面的留白不会跳。JS 该写还写（列表页要用），靠类名决定显不显示。 */
+body.on-detail #footmeta { display: none; }
 
 /* 返回栏现在只有一个按钮（角色名已删），gap 跟着去掉 */
 .detail-bar {

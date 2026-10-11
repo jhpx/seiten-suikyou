@@ -266,7 +266,10 @@ function renderRoster () {
   box.append(renderAccountHeader(view?.account))
 
   /* 页脚只报「数据时间」。写在这里（早退之前）：没角色可评时卡片不画，
-     但时间得跟着当前这份数据走，不能停在上一个 UID 的时刻上。 */
+     但时间得跟着当前这份数据走，不能停在上一个 UID 的时刻上。
+     这里报的是 **UID 级**时间（= 上次抓 enka 的时刻，view.fetchedAt 来自 fetch_log）；
+     某个角色自己的时间在明细页看（av.fetchedAt）。两个粒度不许混 —— 展柜分批攒，
+     用 UID 级时间去说单个角色有多新，会把 10 月 6 号的老数据说成刚抓的。 */
   $('footmeta').textContent = `${T('scoredAt')} ${view?.fetchedAt || '—'}`
 
   if (!view || !view.avatars.length) {
@@ -556,7 +559,9 @@ function renderDetail () {
   basic.append(cons)
 
   const info = el('div', 'data-info')
-  if (state.view?.fetchedAt) info.append(el('span', 'time', `${T('scoredAt')} ${state.view.fetchedAt}`))
+  /* 明细页报**这个角色**的上次同步时间（av.fetchedAt），不是整个 UID 的 ——
+     展柜分批攒，角色之间能差好几天，报 UID 级会把老角色说成刚抓过。 */
+  if (av.fetchedAt) info.append(el('span', 'time', `${T('scoredAt')} ${av.fetchedAt}`))
   basic.append(info)
   cont.append(basic)
 
@@ -610,9 +615,11 @@ function renderDetail () {
 
   cont.append(pd)
 
-  const copy = el('div', 'pd-copyright')
-  copy.textContent = `miao-plugin · ${T('artisRank')} ${av.score.markClass} · ${av.score.classTitle || ''}`
-  cont.append(copy)
+  /* 画布最底下这行原来写的是出处「miao-plugin · 圣遗物评级 SS · 梦见月-星扩散」——
+     评级和评分规则在 .arti-stat / .arti-class-title 里各占一块，这行只是把同样的字
+     又抄了一遍，等于白占一行。改成数据时间（和首页页脚同一个键、同一句话）。 */
+  /* 同上：报这个角色自己的同步时间 */
+  cont.append(el('div', 'pd-scored-at', `${T('scoredAt')} ${av.fetchedAt || '—'}`))
 
   fitDetailZoom()
 }

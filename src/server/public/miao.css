@@ -843,8 +843,8 @@
   text-align: center;
 }
 
-/* 底部版权行 */
-.pd-copyright {
+/* 底部数据时间行（原来是 miao-plugin 出处那半句） */
+.pd-scored-at {
   padding: 6px 5px 10px;
   font-size: 11px;
   color: rgba(255, 255, 255, .55);

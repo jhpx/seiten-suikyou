@@ -9,9 +9,9 @@
  *   2. 圣遗物名字用库里存的 hash 查（enka 白给的官方文案主键，见 docs/DESIGN-DATA-MODEL.md），
  *      比拿中文名对字符串稳，也不受 miao 改名影响。
  *   3. 词条数值一律用 miao 格式化好的字符串（`main.value` / `attrs[].value`）——
- *      自己重算就可能和内核不一致，那条「逐字一致」的底线不能破。只有面板（attr）是裸数字。
- *      唯一的例外是整数词条（精通 / 小攻击 / 小生命 / 小防御）：miao 给 1 位小数，游戏显整数，
- *      到出口按 attrValueText 收整 —— 为什么不算「重算」，看那个函数的注释。
+ *      自己重算就可能和内核不一致。只有面板（attr）是裸数字。
+ *      例外只有一处：**怎么显示**（不是算多少）—— 整数词条要收整、百分比词条要按十进制舍，
+ *      miao 的 `Format.comma` / `Format.pct` 这两个口径都和游戏对不上，理由见 attrValueText。
  */
 import { ArtisMark, Artifact, Format, i18n, Weapon } from '../index.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
@@ -69,22 +69,61 @@ export function weightFilterOptions (locale) {
 /*
  * 词条数值 → 给人看的串。
  *
- * miao 的 ArtisMark.formatArti 对每条词条一律 `Format.comma(val, 1)`，于是元素精通 /
- * 小攻击 / 小生命 / 小防御（含生之花、死之羽那两个固定值主词条）到了页面就成了
- * 「209.1」「16.3」「13.6」这种**游戏里根本不存在的值** —— 游戏这四类一律显整数，
- * 它的强化档位本来就是整数累加出来的。
+ * 数值仍然来自 miao 内核（`main.value` / `attrs[].value` 是内核算好并格式化过的串），
+ * 这里只改「怎么显示」。两处都是内核的显示口径和游戏对不上：
  *
- * 所以到出口把它们收回整数：数值还是 miao 给的那个数，这里只改「怎么显示」，
- * 没重算、没碰内核，评分（mark）链路一个字没动。
+ * ① 整数词条（精通 / 小攻击 / 小生命 / 小防御，含花、羽那两个固定值主词条）：
+ *    miao 一律 `Format.comma(val, 1)`，于是到了页面成了「209.1」「16.3」这种
+ *    **游戏里根本不存在的值** —— 游戏这四类一律显整数，它的强化档位本来就是整数累加出来的。
+ * ② 百分比词条：miao 的 `Format.pct` 是 `(v*1).toFixed(1)`，**分不清 5.25 和 5.2499998**。
+ *    而副词条表把倍率存成了 float32 精度的十进制：5★ 大生命第 3 档真值 0.0525，表里是
+ *    0.05249999836087227 → 乘 100 = 5.249999836，落在 5.25 这个半分界**下面**，
+ *    于是显示 5.2%，而游戏按十进制四舍五入显示 5.3%。所以要拿内核的裸数字自己舍一次。
+ *    裸数字内核就留着（`profile.artis.artis[pos].main` / `.attrs`），由调用方传进来。
+ *
  * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num * 1).toFixed(fix)`，
  *    Number('1,015.8') 是 NaN，会原样吐出 'NaN'。先剥逗号再进。
  */
 const INT_ATTR_KEYS = new Set(['mastery', 'atkPlus', 'defPlus', 'hpPlus'])
 
-export function attrValueText (key, value) {
+/* 十进制四舍五入前「推一把」的量，为什么需要见 decRound */
+const ROUND_NUDGE = 1e-9
+
+/*
+ * 按十进制四舍五入到 fix 位（half-up，也就是游戏的口径）。
+ *
+ * 两步：
+ *   1. 先收敛到 6 位小数 —— 把 1e-8 量级的 float32 噪声吸掉（5.249999836 → 5.25）；
+ *   2. 再加 1e-9 之后 toFixed —— double 在 x.x5 上可能落在半分界**下方**
+ *      （0.0315*100 = 3.1499999999999995），不推这一把 toFixed 会舍成 3.1 而不是 3.2。
+ * 收敛到 6 位小数之后，1e-9 只动得了「正好落在半分界上」的值（往该去的那边推），
+ * 其余值离边界至少 1e-6，推不动 —— 所以这一步不会碰到真实精度。
+ */
+function decRound (num, fix = 1) {
+  const n = Number(num)
+  return (Number(n.toFixed(6)) + ROUND_NUDGE * Math.sign(n)).toFixed(fix)
+}
+
+/* 百分比统一走这里，别再用 Format.pct —— 理由见上面 ② */
+const pctText = (num) => decRound(num) + '%'
+
+export function attrValueText (key, value, raw) {
   if (value == null || value === '') return value
-  if (!INT_ATTR_KEYS.has(key)) return value
-  return Format.comma(Number(String(value).replace(/,/g, '')), 0)
+  if (INT_ATTR_KEYS.has(key)) return Format.comma(Number(String(value).replace(/,/g, '')), 0)
+  /* 拿不到裸数字（比如「有效词条汇总」那种汇总过的串）就退回内核的串 */
+  return Number.isFinite(Number(raw)) ? pctText(raw) : value
+}
+
+/*
+ * 从内核的 artis 模型里取出「这一件的裸数字」，交给 attrValueText 用。
+ * 三个出口（页面 / 接口 / CLI）都得走同一条路，否则同一件圣遗物三处显示不一样。
+ * 副词条按 key 存成 Map：内核已经把一个 key 的多次强化合成了一条，所以 key 唯一。
+ */
+export function rawNumsOf (artisEntry) {
+  return {
+    main: artisEntry?.main?.value,
+    sub: new Map((artisEntry?.attrs || []).map(a => [a.key, a.value]))
+  }
 }
 
 /* 圣遗物位置：1 花 2 羽 3 沙 4 杯 5 冠 */
@@ -110,7 +149,7 @@ function panelOf (attr, locale) {
       key,
       label: statLabel(key, locale),
       value: v,
-      text: kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1),
+      text: kind === 'int' ? Format.comma(v, 0) : pctText(v),
       kind
     })
   }
@@ -251,7 +290,7 @@ export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
   const makeRow = ([key, kind]) => {
     const total = a[key] ?? 0
     const base = b[key] ?? 0
-    const fmt = (v) => (kind === 'int' ? Format.comma(v, 0) : Format.pct(v, 1))
+    const fmt = (v) => (kind === 'int' ? Format.comma(v, 0) : pctText(v))
     const iconKey = key === 'dmg' ? dmgIcon : key
     return {
       key,
@@ -276,18 +315,21 @@ export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
   return [...rows, ...dmgRows.map(makeRow)]
 }
 
-/* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字） */
-function artifactOf (pos, marked, dbRow, locale) {
+/* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字）
+ * raw 是内核解析出的裸数字（`profile.artis.artis[pos]`），只用来修显示口径，见 attrValueText */
+function artifactOf (pos, marked, dbRow, locale, raw) {
   const posName = slotLabel(pos, locale)
   if (!marked || !marked.name) return { pos, posName, empty: true }
 
   const setNameZh = marked.set || ''
+  /* 副词条按 key 取裸数字：内核已经把一个 key 的多次强化合成了一条，所以 key 唯一 */
+  const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
   const subs = (marked.attrs || [])
     .filter(x => x.key)
     .map(x => ({
       key: x.key,
       label: artiLabel(x.key, locale),
-      value: attrValueText(x.key, x.value),
+      value: attrValueText(x.key, x.value, rawSub.get(x.key)),
       upNum: x.upNum || 0,
       /* 词条有效率：miao 算好的百分比串，'-' 表示没算（非有效词条） */
       eff: x.eff ?? '-',
@@ -316,7 +358,7 @@ function artifactOf (pos, marked, dbRow, locale) {
       ? {
           key: marked.main.key,
           label: artiLabel(marked.main.key, locale),
-          value: attrValueText(marked.main.key, marked.main.value),
+          value: attrValueText(marked.main.key, marked.main.value, rawMain),
           _mark: marked.main._mark ?? null,
           point: statPoint(marked.main._mark)
         }
@@ -400,13 +442,20 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
 
   /* 有效词条汇总：miao 的 allAttr（全队圣遗物里所有有效副词条），补到 9 格 */
   const allAttrRaw = profile.artis?.getAllAttr?.() || []
+  /* 汇总的裸数字：miao 的 getAllAttr 只给格式化好的串，原始和拿不回来 —— 但每一件的裸数字
+     都在 artis 模型里，照它同一套加法加一遍（只加 attrs 的 value，不含主词条）就够了，
+     也只为显示时舍一次。upNum / 有效词条次序这些仍用 miao 的。 */
+  const rawAll = {}
+  for (const arti of Object.values(profile.artis?.artis || {})) {
+    for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
+  }
   const allAttr = Array.from({ length: 9 }, (_, i) => {
     const a = allAttrRaw[i]
     if (!a || !a.key) return {}
     return {
       key: a.key,
       label: shortLabel(a.key, loc),
-      value: attrValueText(a.key, a.value),
+      value: attrValueText(a.key, a.value, rawAll[a.key]),
       upNum: a.upNum || 0,
       eff: a.eff ?? '-',
       cls: weightClass(cw[a.key] || 0)
@@ -438,7 +487,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
       /* 精通显整数（和游戏、和上面 attrValueText 一个口径），其余是百分比 */
       weaponAttrs[wCalc.attr.key] = wCalc.attr.key === 'mastery'
         ? Format.comma(wCalc.attr.value, 0)
-        : Format.pct(wCalc.attr.value, 1)
+        : pctText(wCalc.attr.value)
     }
     weaponDesc = wObj.getAffixDesc?.(profile.weapon.affix)?.desc || ''
   }
@@ -456,6 +505,11 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   return {
     uid: profile.uid,
     avatarId: profile.id,
+    /* 这个角色**自己**上一次被同步的时刻（avatar 表那行），不是整个 UID 的最后一次抓取 ——
+       展柜是子集，每次抓取只覆盖展柜里那几个，所以角色之间能差好几天（实测本库有
+       10-11 与 10-06 并存）。列表页页脚报的是 UID 级时间（= 上次同步 enka，见
+       buildAccountView 的 fetchedAt），两处语义不同，别混。 */
+    fetchedAt: fmtTime(row.fetched_at),
     name: i18n.avatarName(profile.id, loc) || char.name,
     nameZh: char.name,
     star: char.star || 5,
@@ -517,7 +571,8 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     attrTable: attrTableOf(profile, loc, cw, elem),
     allAttr,
     consList,
-    artifacts: [1, 2, 3, 4, 5].map(pos => artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc))
+    artifacts: [1, 2, 3, 4, 5].map(pos =>
+      artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc, profile.artis?.artis?.[pos]))
   }
 }
 
@@ -545,7 +600,9 @@ export function fmtTime (iso) {
  * 不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 ——
  * 新角色先于 miao 更新是常态。
  *
- * @param {object} opts.fetchedAt  最后一次抓取的原始 ISO UTC，出口转成本地时区文本
+ * @param {object} opts.fetchedAt  这个 UID 最后一次抓取的原始 ISO UTC（= 上次同步 enka，
+ *                                 通常取自 fetch_log 最新一条），出口转成本地时区文本。
+ *                                 角色各自的时间在 shapeCharacter 里按 avatar.fetched_at 出。
  */
 export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }) {
   const loc = i18n.resolveLocale(locale)

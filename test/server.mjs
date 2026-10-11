@@ -118,6 +118,22 @@ let chsView = null
     ok(withSubs.every(a => a.subs.every(s => s.upNum >= 1)), '副词条都带强化次数（内核靠重复次数算的，不能丢）')
     ok(!!diluc.weapon.name, `武器名 ${diluc.weapon.name}`)
   }
+
+  /* 角色级数据时间：明细页靠它说「这个角色什么时候同步的」，不能拿 UID 级时间冒充 ——
+     展柜是分批攒的，角色之间能差好几天。这里把迪卢克的时间改成一个明显不同的时刻，
+     再请求一次：角色级要跟着变，UID 级（来自 fetch_log）必须纹丝不动。
+     注意夹具里所有角色共用同一个 stamp，所以「改了迪卢克、其它人不变」才算真证明。 */
+  const seed = '2026-01-02T03:04:05.000Z'
+  app.db.prepare('UPDATE avatar SET fetched_at = ? WHERE avatar_id = ?').run(seed, diluc.avatarId)
+  const again = (await json(`/api/uid/${UID}?locale=chs`)).data
+  const d2 = again.avatars.find(a => a.avatarId === diluc.avatarId)
+  ok(!!d2?.fetchedAt, '角色视图带自己的数据时间')
+  eq(new Date(String(d2?.fetchedAt).replace(' ', 'T')).getTime(), new Date(seed).getTime(),
+    '角色时间是它自己那次同步的时刻（avatar.fetched_at）')
+  ok(again.avatars.filter(a => a.avatarId !== diluc.avatarId).every(a => a.fetchedAt !== d2?.fetchedAt),
+    '同 UID 的其它角色不受影响（各是各的时间）')
+  eq(again.fetchedAt, chsView.fetchedAt,
+    'UID 级时间不变（它来自 fetch_log，与 avatar 表无关）')
 }
 
 /* ---------------- 4. 视图：其它语言（这一层是本次的重点）---------------- */
