@@ -18,10 +18,18 @@
  * 第 61 秒又能打满，实际两秒里放了两次配额。令牌桶按速率匀速补充，没这个缝，
  * 同时允许短时突发（桶满时可以一次取光），这对「玩家连着换几次展柜再刷新」更友好。
  *
+ * ⚠️ **用 `TokenBucket`，不要用同库的 `RateLimiter`**（2026-10-11 踩出来的）。
+ * `RateLimiter` 名字像令牌桶，其实是「令牌桶 + 每窗口次数上限」两层 —— 它的类注释自己写着
+ * "a token bucket plus an additional check to limit how many tokens we can remove each interval"，
+ * `tryRemoveTokens()` 里就有一句 `count > tokensPerInterval - tokensThisInterval → false`。
+ * 于是窗口里打满 N 次之后，哪怕令牌桶 3 秒就补回 1 个，也得干等整个窗口翻页：
+ * 实测桶将空时 `getWaitTime(1)` 返回 59997ms，`Retry-After` 跟着报 53 秒 ——
+ * 上面那段「匀速补充、没这个缝」的论证被这层固定窗口整个推翻了。我们只要令牌桶这一件事。
+ *
  * ⚠️ 生效范围只有**单进程**。多实例部署（Serverless、多容器）各数各的，
  * 那种场景得换成外部存储（Redis 之类）。本项目是一个长期跑的单进程服务，够用。
  */
-import { RateLimiter } from 'limiter'
+import { TokenBucket } from 'limiter'
 
 /* ---------------- 档位 ---------------- */
 
@@ -113,7 +121,10 @@ function createBuckets ({ now = () => Date.now() } = {}) {
   function bucketFor (key, limit, windowMs) {
     let b = buckets.get(key)
     if (!b) {
-      b = { limiter: new RateLimiter({ tokensPerInterval: limit, interval: windowMs }), lastSeen: 0 }
+      const bucket = new TokenBucket({ bucketSize: limit, tokensPerInterval: limit, interval: windowMs })
+      /* TokenBucket 造出来是空桶，得先装满 —— 不装的话每个新 IP 的第一个请求反而被拒 */
+      bucket.content = limit
+      b = { limiter: bucket, lastSeen: 0 }
       buckets.set(key, b)
     }
     b.lastSeen = now()
@@ -132,15 +143,16 @@ function createBuckets ({ now = () => Date.now() } = {}) {
   function take (key, limit, windowMs) {
     const b = bucketFor(key, limit, windowMs)
     if (!b.limiter.tryRemoveTokens(1)) {
-      /* getWaitTime(1) 给「还要多久才能取出 1 个」。它文档里说会对超容量的请求抛
-         RangeError —— 我们只取 1 个、容量至少是 1，正常不会触发，兜一下防它把请求打成 500 */
+      /* getWaitTime(1) 给「还要多久才能取出 1 个」—— 就是补一个令牌的时间，不是等整窗口。
+         取超出桶容量的数量它会抛 RangeError；我们只取 1 个、容量至少是 1，正常情况下碰不到，
+         兜一下防它把请求打成 500 */
       let wait = windowMs
       try { wait = b.limiter.getWaitTime(1) } catch {}
       sweep()
       return { ok: false, retryAfterMs: Math.max(1, wait) }
     }
     sweep()
-    return { ok: true, remaining: b.limiter.getTokensRemaining() }
+    return { ok: true, remaining: b.limiter.remainingTokens() }
   }
 
   /* 回收长期没动静的桶；表太大时按插入顺序淘汰最老的一成 */

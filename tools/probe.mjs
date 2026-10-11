@@ -95,5 +95,8 @@ try {
 } finally {
   ws?.close()
   child.kill()
-  fs.rmSync(prof, { recursive: true, force: true })
+  /* 等 chrome 真退干净再删临时 profile：Windows 上进程没退完时 chrome_debug.log 还锁着，
+     rmSync 会 EBUSY，把已经量到的结果一起吞掉（实测踩过）。删不掉就算了，本来就在系统临时目录里。 */
+  await new Promise(r => { child.once('exit', r); setTimeout(r, 1500) })
+  try { fs.rmSync(prof, { recursive: true, force: true }) } catch { /* 占着就留着 */ }
 }

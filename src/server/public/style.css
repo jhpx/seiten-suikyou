@@ -288,45 +288,73 @@ body {
 
 /* ───────────────────────── 首页：筛选条 ─────────────────────────
  *
- * 搜索框 + 三排 chips（元素 / 评分等级 / 属性权重）。视觉全部沿用顶栏控件那套
- * （--ctrl-bg 深色玻璃 + --gold-line 金描边 + focus 金晕），一个新色都不引 ——
- * 筛选条和顶栏在同一屏上，另起一套必然搭不上。
+ * 一行：搜索框 + 三个下拉。视觉沿用顶栏控件那套（--ctrl-bg 深色玻璃 + --gold-line 金描边），
+ * 一个新色都不引 —— 筛选条和顶栏在同一屏上，另起一套必然搭不上。
  * 34px 高：比顶栏控件（36）矮 2px，它是内容区的次级控件，不该和顶栏主角一样高。
+ *
+ * 选项收进下拉而不是平铺：三组平铺要占三行（元素 8 + 等级 9 + 权重 5），520px 下把角色网格
+ * 挤下去一大截；竖排面板只占一行高。窄屏（≤ 一行放不下时）靠 flex-wrap 折成两行。
  */
-/* 竖排：三组 chips 横着塞不进 520px，而且三排「全部」并排时看不出哪排管哪种筛选 */
 .roster-filter {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   margin-bottom: 12px;
 }
-.rf-search { min-width: 0; height: 34px; }
+.rf-search { flex: 1 1 130px; min-width: 0; height: 34px; }
 .rf-search::placeholder { color: rgba(240, 236, 225, .45); }
-.rf-row { display: flex; gap: 8px; align-items: center; }
-/* 标签定宽（按最长的英文 Element 给到 48px），三排 chips 的左边缘才对得齐 */
-.rf-label { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); letter-spacing: .04em; }
-.rf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.rf-chip {
-  width: 34px; height: 34px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
+
+/* 下拉容器：面板绝对定位挂在它下面，得有个定位参照 */
+.rf-dd { position: relative; min-width: 0; }
+.rf-dd-btn {
+  display: flex; align-items: center; gap: 4px;
+  height: 34px; padding: 0 10px;
   background: var(--ctrl-bg);
   border: 1px solid var(--gold-line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: 12px; letter-spacing: .04em;
   cursor: pointer;
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease;
 }
-.rf-chip img { width: 20px; height: 20px; object-fit: contain; pointer-events: none; }
-.rf-chip:hover { border-color: rgba(211, 188, 142, .5); }
-/* 文字 chip（「全部」/ 等级 / 属性）：日文「すべて」、中文「元素精通」都塞不进 34px 见方，
-   宽度交给内容撑 */
-.rf-chip.rf-all, .rf-chip.rf-text { width: auto; padding: 0 10px; letter-spacing: .04em; }
-/* 激活 = 金描边 + 金晕 + 淡金底，和顶栏按钮 hover/focus 是同一支金 */
-.rf-chip.active {
+/* 组名和值共用这一个 span：长了省略号截，按钮宽度就不跟着文案乱跳 */
+.rf-dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-caret { font-size: 9px; line-height: 1; opacity: .7; }
+.rf-dd-btn:hover { border-color: rgba(211, 188, 142, .5); }
+/* 展开态 = 金描边 + 金晕；选中态再加淡金底。和顶栏按钮 hover 是同一支金 */
+.rf-dd.open .rf-dd-btn {
   border-color: var(--gold-line-hi);
-  background: rgba(211, 188, 142, .16);
   color: var(--gold-lt);
   box-shadow: 0 0 0 3px rgba(211, 188, 142, .13);
 }
+.rf-dd-btn.active { border-color: var(--gold-line-hi); background: rgba(211, 188, 142, .16); color: var(--gold-lt); }
+
+/* 面板底用不透明色（--bg-4）：半透明的话下面的角色网格会透上来，选项读不清 */
+.rf-menu {
+  display: none;
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  min-width: 100%;
+  /* 288px = 9 个选项（等级 MAX…D 共 9 档，最长的那个面板）刚好放满不滚动 */
+  max-height: 288px; overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .55);
+}
+.rf-dd.open .rf-menu { display: block; }
+/* 最右那组（权重）改成右对齐：英文的「Elemental Mastery」比按钮本身宽，
+   左对齐会一路顶出去被 body 的 overflow-x 裁掉 */
+.rf-dd:last-child .rf-menu { left: auto; right: 0; }
+.rf-opt {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; height: 30px; padding: 0 10px;
+  background: none; border: 0; border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 12px; letter-spacing: .04em; text-align: left; white-space: nowrap;
+  cursor: pointer;
+}
+.rf-opt:hover { background: rgba(211, 188, 142, .12); color: var(--cream); }
+.rf-opt.active { background: rgba(211, 188, 142, .10); color: var(--gold-lt); }
+.rf-opt-elem img { width: 18px; height: 18px; object-fit: contain; }
 
 /* ───────────────────────── 首页：角色卡片网格 ─────────────────────────
  *

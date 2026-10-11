@@ -284,8 +284,12 @@ function renderRoster () {
 
 /* ───────────────────────── 首页：筛选条 ─────────────────────────
  *
- * 搜索框 + 三排 chips（元素 / 评分等级 / 属性权重）。两条规则：
- * ① 筛选只重画网格那一块（refreshRosterGrid），不重建整条筛选栏 ——
+ * 一行：搜索框 + 三个下拉（元素 / 评分等级 / 属性权重）。
+ * 选项**收进下拉**而不是平铺成 chips：三组平铺要占三行（元素 8 + 等级 9 + 权重 5），
+ * 520px 宽下把角色网格挤下去一大截；收进竖排面板只占一行高。
+ *
+ * 两条规则：
+ * ① 筛选只重画网格那一块（refreshRosterGrid），不重建筛选栏 ——
  *    重建会把搜索框的焦点和光标位置一起冲掉，每敲一个字焦点丢一次。
  * ② 元素图标从名单里已有角色借、属性名由 /api/meta 下发 ——
  *    和卡片一个规矩：URL 和文案一律后端给，前端不拼路径、不写死词条名。
@@ -312,46 +316,78 @@ function dropStaleFilter (key, values) {
   if (state.filter[key] && !values.includes(state.filter[key])) state.filter[key] = ''
 }
 
-/* 元素图标/名字从名单里已有角色身上借（URL 一律后端下发） */
-function elemChip (view, e) {
+/* 元素选项：图标 + 名字，都从名单里已有角色身上借（URL 一律后端下发） */
+function elemOption (view, e) {
   const src = view.avatars.find(a => a.elem === e)
+  const label = src?.elemText || e
   const img = el('img')
   img.src = src?.elemIcon || ''
-  img.alt = src?.elemText || e
+  img.alt = label
   img.onerror = () => imgError(img)
-  return { node: img, title: src?.elemText || e }
+  const node = el('span', 'rf-opt-elem')
+  node.append(img, el('span', '', label))
+  return { value: e, label, node }
 }
 
+/* 收面板的唯一入口：点面板外面、按 Esc、选了选项，都走这里 */
+function closeMenus () {
+  for (const dd of document.querySelectorAll('.rf-dd.open')) dd.classList.remove('open')
+}
+
+/* 只在模块加载时装一次 —— 放进 renderFilterBar 会每重绘一次叠一个监听。
+   closest 判「点在不在某个下拉里」：点按钮本身也算在里面，交给按钮自己的 toggle 处理。 */
+addEventListener('click', e => { if (!e.target?.closest('.rf-dd')) closeMenus() })
+addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus() })
+
 /*
- * 一排筛选：标签 + chips。点一下选中，再点一下取消（回到「全部」）。
- * 激活态只切 class、不重建节点 —— 和搜索框同一个理由。
- * items 是 [{ value, node, title }]，node 可以是节点也可以是字符串。
+ * 一个下拉筛选：按钮 + 竖排面板。
+ * 按钮平时只写组名，选中后写「组名·值」—— 不写成「选中就把组名换成值」，
+ * 那样「权重·攻击力」会缩成光秃秃的「攻击力」，看不出这颗按钮管的是权重。
+ * 值长了用省略号截（按钮宽度不跟着文案乱跳），全称挂 title。
+ * items 是 [{ value, label, node? }]，node 缺省时直接渲染 label。
  */
-function filterRow (labelKey, key, items, isText) {
-  const row = el('div', 'rf-row')
-  row.append(el('span', 'rf-label', T(labelKey)))
-  const box = el('div', 'rf-chips')
+function filterDropdown (labelKey, key, items) {
+  const dd = el('div', 'rf-dd')
+  const btn = el('button', 'rf-dd-btn')
+  btn.type = 'button'
+  const text = el('span', 'rf-dd-text')
+  btn.append(text, el('span', 'rf-caret', '▾'))
+
+  const options = [{ value: '', label: T('filterAll') }, ...items]
+  const menu = el('div', 'rf-menu')
+
   const paint = () => {
-    for (const c of box.children) c.classList.toggle('active', c.dataset.val === state.filter[key])
+    const cur = state.filter[key]
+    const name = options.find(o => o.value === cur)?.label || cur
+    text.textContent = cur ? `${T(labelKey)}·${name}` : T(labelKey)
+    btn.title = cur ? `${T(labelKey)}：${name}` : T(labelKey)
+    btn.classList.toggle('active', !!cur)
+    for (const b of menu.children) b.classList.toggle('active', b.dataset.val === cur)
   }
-  const chip = (value, node, cls, title) => {
-    const c = el('button', cls)
-    c.type = 'button'
-    c.dataset.val = value
-    if (title) c.title = title
-    c.append(node)
-    c.addEventListener('click', () => {
-      state.filter[key] = state.filter[key] === value ? '' : value
+
+  for (const o of options) {
+    const b = el('button', 'rf-opt')
+    b.type = 'button'
+    b.dataset.val = o.value
+    b.append(o.node || document.createTextNode(o.label))
+    b.addEventListener('click', () => {
+      state.filter[key] = o.value
       paint()
+      closeMenus()
       refreshRosterGrid()
     })
-    box.append(c)
+    menu.append(b)
   }
-  chip('', T('filterAll'), 'rf-chip rf-all')
-  for (const { value, node, title } of items) chip(value, node, `rf-chip${isText ? ' rf-text' : ''}`, title)
+
+  btn.addEventListener('click', () => {
+    const open = !dd.classList.contains('open')
+    closeMenus()
+    dd.classList.toggle('open', open)
+  })
+
   paint()
-  row.append(box)
-  return row
+  dd.append(btn, menu)
+  return dd
 }
 
 function renderFilterBar (view) {
@@ -369,16 +405,16 @@ function renderFilterBar (view) {
 
   const elems = rosterElems(view)
   dropStaleFilter('elem', elems)
-  bar.append(filterRow('filterElem', 'elem', elems.map(e => ({ value: e, ...elemChip(view, e) })), false))
+  bar.append(filterDropdown('filterElem', 'elem', elems.map(e => elemOption(view, e))))
 
   const ranks = rosterRanks(view)
   dropStaleFilter('rank', ranks)
-  bar.append(filterRow('filterRank', 'rank', ranks.map(r => ({ value: r, node: r })), true))
+  bar.append(filterDropdown('filterRank', 'rank', ranks.map(r => ({ value: r, label: r }))))
 
   /* 权重那四个选项是固定的 taxonomy，不按名单裁剪 —— 点出空结果也是有效信息
      （「我这号里没人吃防御」），裁剪掉反而看不出来 */
-  bar.append(filterRow('filterWeight', 'weight',
-    state.weightOptions.map(o => ({ value: o.key, node: o.label })), true))
+  bar.append(filterDropdown('filterWeight', 'weight',
+    state.weightOptions.map(o => ({ value: o.key, label: o.label }))))
 
   return bar
 }

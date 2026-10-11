@@ -2,7 +2,7 @@
  * 上游抓取测试 —— 「数据怎么拿回来」这一跳的守门人
  *
  * 和另外几个测试的分工：
- *   enka（本文件）  管「从上游拿到 JSON」：多源顺序、什么时候该换源、失败信息够不够看
+ *   enka（本文件）  管「从上游拿到 JSON」：多源并行、什么时候算失败、失败信息够不够看
  *   pipeline       管「拿到之后」：ingest / repo / materialize 有没有把数据搞坏
  *   server         管「接口怎么给」：路由 / 静态文件 / 错误形状
  *   cli            管「命令行跑起来是什么样」
@@ -37,13 +37,15 @@ const netFail = (code = 'UND_ERR_CONNECT_TIMEOUT') =>
   Object.assign(new TypeError('fetch failed'),
     { cause: Object.assign(new Error('Connect Timeout Error'), { code }) })
 
-/** 造一个假 fetch，顺便记下每个源被打了几次 —— fallback 该不该发生全靠它 */
+/** 造一个假 fetch，顺便记下每个源被打了几次、谁先回来（全靠它区分并行和串行） */
 function spy (plan) {
   const calls = []
   const fetchImpl = async (url) => {
     calls.push(url)
     const hit = plan.find(p => url.includes(p.match))
     if (!hit) throw new Error('未预期的 URL：' + url)
+    /* delay 用来造「两个源都成功但快慢不同」——并行下决定谁赢 */
+    if (hit.delay) await new Promise(r => setTimeout(r, hit.delay))
     if (hit.throw) throw hit.throw
     return jsonRes(hit.body, hit.status)
   }
@@ -54,64 +56,92 @@ async function messageOf (fn) {
   try { await fn(); return null } catch (e) { return e.message }
 }
 
-/* ---------------- 1. 源顺序 ---------------- */
-console.log('=== 1. 源顺序（国内镜像优先）===')
+/* ---------------- 1. 并行：谁先成功用谁 ---------------- */
+console.log('=== 1. 并行打所有源，谁先成功用谁 ===')
 
 {
-  const { calls, fetchImpl } = spy([{ match: 'microgg', body: { playerInfo: { nickname: '阿空' } } }])
+  const { calls, fetchImpl } = spy([
+    { match: 'microgg', body: { playerInfo: { nickname: '镜像' } } },
+    { match: 'enka', body: { playerInfo: { nickname: '官方' } }, delay: 50 }
+  ])
   const out = await fetchEnka(101242308, { fetchImpl })
-  eq(out.playerInfo.nickname, '阿空', '主源返回的数据原样透传')
-  eq(calls.length, 1, '主源成功时不打第二个源')
-  ok(calls[0].includes('microgg'), '第一个打的是国内镜像 profile.microgg.cn')
+  eq(out.playerInfo.nickname, '镜像', '热缓存时 microgg 先回来就用它（0.35s 那 10 倍优势不能丢）')
+  eq(calls.length, 2, '两个源是同时打的，不是打完一个再打下一个')
 }
 
-/* ---------------- 2. 什么时候该换源 ---------------- */
-console.log('\n=== 2. 什么时候该换源 ===')
+{
+  /* 这就是修「3 秒超时把 microgg 砍掉后只剩慢路」的场景：
+     microgg 要回源米游社（实测 6s 起），并行下 enka 先回来，用户不用陪着等 */
+  const { fetchImpl } = spy([
+    { match: 'microgg', body: { playerInfo: { nickname: '镜像' } }, delay: 200 },
+    { match: 'enka', body: { playerInfo: { nickname: '官方' } } }
+  ])
+  const out = await fetchEnka(101242308, { fetchImpl })
+  eq(out.playerInfo.nickname, '官方', 'microgg 慢时 enka 顶上，不干等它')
+}
+
+/* ---------------- 2. 一个源挂了另一个顶上 ---------------- */
+console.log('\n=== 2. 一个源报错时，另一个源照样救得回来 ===')
 
 {
-  /* 网络层失败 → 换源 */
-  const { calls, fetchImpl } = spy([
+  const { fetchImpl } = spy([
     { match: 'microgg', throw: netFail() },
     { match: 'enka', body: { playerInfo: { nickname: '兜底成功' } } }
   ])
   const out = await fetchEnka(101242308, { fetchImpl })
-  eq(out.playerInfo.nickname, '兜底成功', '主源连不上时，第二个源救回来')
-  eq(calls.length, 2, '两个源都试了')
+  eq(out.playerInfo.nickname, '兜底成功', 'microgg 连不上时，enka 救回来')
 }
 
 {
-  /* ★ 业务答复 → 不换源。这条最重要：424 是「这个玩家没开展柜」，
-     在哪个源上都一样，换源只是白打一次上游。 */
-  const { calls, fetchImpl } = spy([{ match: 'microgg', status: 424, body: {} }])
-  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
-  ok(msg.includes('未公开'), '424 翻译成人话，不是「HTTP 424」')
-  eq(calls.length, 1, '424 时只打一次 —— 业务答复换源没用')
+  /* ★ 这次修的核心。microgg 的 424 是「它自己回源失败」
+     （原文："Can't contact the data service. Either the game servers are down..."），
+     不是「玩家没开展柜」——同一时刻 enka 手上往往有数据。
+     老规则把 424 当业务结论直接抛，用户明明开了展柜却看到「未公开」。 */
+  const { fetchImpl } = spy([
+    { match: 'microgg', status: 424, body: {} },
+    { match: 'enka', body: { playerInfo: { nickname: 'enka有数据' } } }
+  ])
+  const out = await fetchEnka(101242308, { fetchImpl })
+  eq(out.playerInfo.nickname, 'enka有数据', 'microgg 的 424 不当业务结论，enka 有数据就用 enka 的')
 }
 
 {
-  const { calls, fetchImpl } = spy([{ match: 'microgg', status: 404, body: {} }])
-  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
-  ok(msg.includes('查不到'), '404 翻译成人话')
-  eq(calls.length, 1, '404 时只打一次')
-}
-
-{
-  /* 5xx 是源自己坏了 —— 这个该换源 */
-  const { calls, fetchImpl } = spy([
-    { match: 'microgg', status: 502, body: {} },
+  /* 限流是「这个源现在忙」，不是对这条请求的答复 —— 同样不该拦住兜底源 */
+  const { fetchImpl } = spy([
+    { match: 'microgg', status: 429, body: {} },
     { match: 'enka', body: { playerInfo: { nickname: 'ok' } } }
   ])
   const out = await fetchEnka(101242308, { fetchImpl })
-  eq(out.playerInfo.nickname, 'ok', '主源 5xx 时换源成功')
-  eq(calls.length, 2, '5xx 会换源（那是源自己的故障）')
+  eq(out.playerInfo.nickname, 'ok', 'microgg 限流（429）时 enka 顶上')
 }
 
-/* ---------------- 3. 失败信息要够看 ---------------- */
-console.log('\n=== 3. 失败信息要够看 ===')
+/* ---------------- 3. 全失败时才谈错误 ---------------- */
+console.log('\n=== 3. 全失败时的错误信息 ===')
+
+{
+  /* 两个源都说没这个人 —— 那才是业务结论 */
+  const { fetchImpl } = spy([
+    { match: 'microgg', status: 404, body: {} },
+    { match: 'enka', status: 404, body: {} }
+  ])
+  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
+  ok(msg.includes('查不到'), '两个源都 404 → 翻译成人话')
+  ok(!msg.includes('所有上游'), '业务结论不套「所有上游都拿不到数据」的壳')
+}
+
+{
+  /* 两个源都说没开展柜 —— 用户需要看到「去游戏资料页开一下」这个动作 */
+  const { fetchImpl } = spy([
+    { match: 'microgg', status: 424, body: {} },
+    { match: 'enka', status: 424, body: {} }
+  ])
+  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
+  ok(msg.includes('未公开'), '两个源都 424 → 翻译成人话（不是「HTTP 424」）')
+}
 
 {
   /* 这次踩的坑：老实现只说一句 `fetch failed`，查了 20 分钟才知道是 TCP 连不上。
-     全部失败时，每个源各自的原因都得在信息里。 */
+     混合失败（一个网络挂、一个业务答复）时，每个源各自的原因都得在信息里。 */
   const { fetchImpl } = spy([
     { match: 'microgg', throw: netFail('UND_ERR_CONNECT_TIMEOUT') },
     { match: 'enka', throw: netFail('UND_ERR_HEADERS_TIMEOUT') }
@@ -120,21 +150,31 @@ console.log('\n=== 3. 失败信息要够看 ===')
   ok(msg.includes('microgg') && msg.includes('enka'), '两个源都被点名')
   ok(msg.includes('UND_ERR_CONNECT_TIMEOUT') && msg.includes('UND_ERR_HEADERS_TIMEOUT'),
     '每个源各自的原因都在（不是一句 fetch failed）')
+  /* 老实现的前缀是硬编码的模块名 `enka:`，microgg 回 429 时也报 `enka: 请求太频繁`，
+     排查时能把人带沟里 —— 前缀必须是源名，不能挂死一个源 */
+  ok(!msg.startsWith('enka:'), '错误信息不挂死「enka:」前缀')
 }
 
 {
   const abort = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })
-  const { fetchImpl } = spy([{ match: 'microgg', throw: abort }])
-  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl, source: 'microgg', timeoutMs: 3000 }))
-  ok(msg.includes('超时') && msg.includes('3000'), '超时说清了是谁、多久')
+  const { fetchImpl } = spy([
+    { match: 'microgg', throw: abort },
+    { match: 'enka', throw: abort }
+  ])
+  /* 故意用 4321 而不是 8000：撞上默认值就分不清「覆盖生效」还是「本来就这个数」 */
+  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl, timeoutMs: 4321 }))
+  ok(msg.includes('超时') && msg.includes('4321'), '超时说清了等多久')
 }
 
 {
-  /* 单源失败时产品前缀不该和源名撞车（实际跑出过 `enka: enka: 超时`）。
-     源名只在多源时才需要标 —— 只有一个源时，标了纯属重复。 */
-  const { fetchImpl } = spy([{ match: 'enka', throw: netFail() }])
-  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl, source: 'enka' }))
-  eq(msg.match(/enka/g).length, 1, '单源失败时「enka」只出现一次（不重复前缀）')
+  /* 不传 timeoutMs 时用默认那份 —— 并行下它是「最坏等多久」，慢的源没人等它 */
+  const abort = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })
+  const { fetchImpl } = spy([
+    { match: 'microgg', throw: abort },
+    { match: 'enka', throw: abort }
+  ])
+  const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
+  ok(msg.includes('8000'), '默认超时 8000ms（microgg 冷回源 6s、enka 上限 4.5s，都得留出赢的机会）')
 }
 
 /* ---------------- 4. 排查用的手动指定源 ---------------- */
@@ -146,7 +186,7 @@ console.log('\n=== 4. ENKA_SOURCE 指定单源 ===')
   try {
     const out = await fetchEnka(101242308, { fetchImpl })
     eq(out.playerInfo.nickname, 'e', '只打指定的源')
-    eq(calls.length, 1, '没去打 microgg')
+    eq(calls.length, 1, '没去打 microgg（并行也挡在选源这一步）')
   } finally { delete process.env.ENKA_SOURCE }
 
   process.env.ENKA_SOURCE = '不存在的源'
@@ -158,5 +198,5 @@ console.log('\n=== 4. ENKA_SOURCE 指定单源 ===')
 
 console.log(fail > 0
   ? `\n[FAIL] 上游抓取测试有 ${fail} 项不通过（通过 ${pass}）`
-  : `\n[OK] 上游抓取正常：镜像优先、业务答复不换源、失败信息带原因（${pass} 项）`)
+  : `\n[OK] 上游抓取正常：并行取最快、单源故障不拦住兜底、失败信息带原因（${pass} 项）`)
 process.exit(fail > 0 ? 1 : 0)

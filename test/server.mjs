@@ -407,6 +407,28 @@ console.log('\n=== 10. 限流 ===')
     eq((await g()).status, 200, '  等过窗口 → 恢复（令牌桶在补）')
     a.server.close()
   }
+
+  /* ⑥ 配额用完**不必等整个窗口** —— 这条专门钉「令牌桶 vs 固定窗口」的语义差。
+        桶里没令牌时，能刷新的时刻是「补回 1 个」而不是「窗口翻页」：
+        窗口 1000ms 补 2 个 → 500ms 补 1 个。所以「等 700ms」必须已经能刷。
+        若哪天换回 limiter 的 RateLimiter（令牌桶之上还有一层窗口计数），这里会红。 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', trustProxy: true,
+      rateLimit: { read: { limit: 2, windowMs: 1000 } }
+    })
+    repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
+    const g = () => fetch(a.url + `/api/uid/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.50' } })
+    eq((await g()).status, 200, '  打满前：第 1 次放行')
+    eq((await g()).status, 200, '  第 2 次放行（配额刚好用尽）')
+    const r3 = await g()
+    eq(r3.status, 429, '  第 3 次被拦')
+    ok(Number(r3.headers.get('retry-after')) <= 2,
+      `  Retry-After 是「补 1 个」而不是整窗口（${r3.headers.get('retry-after')} 秒）`)
+    await new Promise(r => setTimeout(r, 700))
+    eq((await g()).status, 200, '  等 700ms（> 补充间隔、< 窗口）→ 已恢复，没被窗口锁死')
+    a.server.close()
+  }
 }
 
 /* ---------------- 收尾 ---------------- */
