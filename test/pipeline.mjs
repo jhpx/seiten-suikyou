@@ -19,6 +19,8 @@ import { openDb, SCHEMA_VERSION } from '../src/store/db.js'
 import * as repo from '../src/store/repo.js'
 import { ingestPayload } from '../src/adapter/ingest.js'
 import { toMiaoProfile, normalizeLevel } from '../src/adapter/materialize.js'
+import { shapeCharacter } from '../src/view/shape.js'
+import { enkaPropKey, ENKA_PROP_TO_KEY } from '../src/store/props.js'
 import { diffPanels } from '../src/adapter/panel-check.js'
 
 let failed = 0
@@ -56,23 +58,51 @@ const weaponId = findWeaponId()
 ok(!!weaponId, `能按数字 id 查到 5★ 长柄武器（id=${weaponId}）`)
 
 /* ---------------- 2. 造一份「enka 形状」的原始响应 ---------------- */
-/* 刻意用原始 prop id，不带任何属性值 —— 这才是 enka 真正给的东西 */
+/* 刻意用原始 prop id，属性值只给 enka 真会给的那两样：
+   flat.reliquaryMainstat.statValue（主词条数值）与 flat.reliquarySubstats（合并后的副词条） */
 
-const equip = (pos, mainKey, subs) => ({
-  itemId: [0, 80540, 80520, 80550, 80510, 80530][pos],  // 魔女套各部位部件 id
-  flat: {
-    equipType: ['', 'EQUIP_BRACER', 'EQUIP_NECKLACE', 'EQUIP_SHOES', 'EQUIP_RING', 'EQUIP_DRESS'][pos],
-    rankLevel: 5,
-    /* 官方文案 key。套装名 5 件共用同一个（真实数据就是这样），部件名各不相同 */
-    nameTextMapHash: 1308846500 + pos,
-    setNameTextMapHash: 1035953267
-  },
-  reliquary: {
-    level: 21,                       // enka 是 1 基，21 = 满级
-    mainPropId: mainIdOf(mainKey),
-    appendPropIdList: subs
+/* miao key → enka 字符串 prop id（与 src/store/props.js 一致，测试里独立写一份防实现走偏） */
+const ENKA_PROP = {
+  hp: 'FIGHT_PROP_HP_PERCENT', hpPlus: 'FIGHT_PROP_HP',
+  atk: 'FIGHT_PROP_ATTACK_PERCENT', atkPlus: 'FIGHT_PROP_ATTACK',
+  def: 'FIGHT_PROP_DEFENSE_PERCENT', defPlus: 'FIGHT_PROP_DEFENSE',
+  mastery: 'FIGHT_PROP_ELEMENT_MASTERY', recharge: 'FIGHT_PROP_CHARGE_EFFICIENCY',
+  cpct: 'FIGHT_PROP_CRITICAL', cdmg: 'FIGHT_PROP_CRITICAL_HURT', pyro: 'FIGHT_PROP_FIRE_ADD_HURT'
+}
+/* enka 会给的主词条数值（对齐真实数据里的档位，造得夸张点以便和内核值区分） */
+const ENKA_MAIN_VALUE = { hpPlus: 4780, atkPlus: 311, mastery: 187, cpct: 46.6, pyro: 46.6, cdmg: 62.2 }
+
+/* 数字 roll id → miao key（照 attrIdMap），用来把 fixture 的副词条按真实词条种类摊开 */
+const keyOfAttrId = (id) => artiMeta.attrIdMap[id]?.key || null
+
+const equip = (pos, mainKey, subs) => {
+  /* 副词条按 key 归拢后**合并成一条**（enka 的 flat.reliquarySubstats 就是合并过的：
+     同一个词条出了多次 roll，值已经加总在一起）。这里每次 roll 记 20，同 key 出 n 次就是 20n，
+     值取整十数以便与内核重算的带小数值区分（内核会算成 32.6 这种）。 */
+  const byKey = new Map()
+  for (const id of subs) {
+    const k = keyOfAttrId(id)
+    if (k) byKey.set(k, (byKey.get(k) || 0) + 20)
   }
-})
+  return {
+    itemId: [0, 80540, 80520, 80550, 80510, 80530][pos],  // 魔女套各部位部件 id
+    flat: {
+      equipType: ['', 'EQUIP_BRACER', 'EQUIP_NECKLACE', 'EQUIP_SHOES', 'EQUIP_RING', 'EQUIP_DRESS'][pos],
+      rankLevel: 5,
+      /* 官方文案 key。套装名 5 件共用同一个（真实数据就是这样），部件名各不相同 */
+      nameTextMapHash: 1308846500 + pos,
+      setNameTextMapHash: 1035953267,
+      /* enka 的原始数值：主词条一条、副词条按 key 合并后的若干条 */
+      reliquaryMainstat: { mainPropId: ENKA_PROP[mainKey], statValue: ENKA_MAIN_VALUE[mainKey] ?? 100 },
+      reliquarySubstats: [...byKey].map(([k, v]) => ({ appendPropId: ENKA_PROP[k], statValue: v }))
+    },
+    reliquary: {
+      level: 21,                       // enka 是 1 基，21 = 满级
+      mainPropId: mainIdOf(mainKey),
+      appendPropIdList: subs
+    }
+  }
+}
 
 const SUB = {
   cdmg: rollIdsOf('cdmg', 3),        // 同一个 id 连出 3 次 → 词条数应为 3
@@ -247,12 +277,12 @@ ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).avatars[0]) === 
 
 /* ---------------- 10. 老库升级 ---------------- */
 /*
- * 已经落地的库是 v1（没有那三列文案 key），CREATE TABLE IF NOT EXISTS 不会给
- * 老表补列，全靠 db.js 里的 ALTER 迁移。这段就是守住那条路：
- * 造一个「v1 形状的库」，再打开，必须自动补齐且老数据一条不丢。
+ * 已经落地的库是 v1（没有那三列文案 key、也没有 enka 原始数值那两列），
+ * CREATE TABLE IF NOT EXISTS 不会给老表补列，全靠 db.js 里的 ALTER 迁移。
+ * 这段就是守住那条路：造一个「v1 形状的库」，再打开，必须自动补齐且老数据一条不丢。
  */
 
-console.log('\n=== 8. 老库（v1）能自动升到 v2，数据不丢 ===')
+console.log('\n=== 8. 老库（v1）能自动升到最新版，数据不丢 ===')
 
 const cols = (d, table) => d.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name)
 
@@ -261,22 +291,28 @@ for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: tr
 
 /* 先建一个正常的新库，写好一行数据 */
 let d = openDb(tmpDb)
-ok(cols(d, 'artifact').includes('name_hash'), '新库直接就有 name_hash 列')
+ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('main_stat_value'),
+  '新库直接就有 name_hash / main_stat_value 列')
 repo.saveFetch(d, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
 
-/* 手工退回 v1：删掉那三列、版本号改回 1 */
+/* 手工退回 v1：删掉 v2 加的三列 + v3 加的两列、版本号改回 1 */
 d.exec('ALTER TABLE artifact DROP COLUMN name_hash')
 d.exec('ALTER TABLE artifact DROP COLUMN set_hash')
 d.exec('ALTER TABLE avatar DROP COLUMN weapon_name_hash')
+d.exec('ALTER TABLE artifact DROP COLUMN main_stat_value')
+d.exec('ALTER TABLE artifact DROP COLUMN sub_stats')
 d.exec('PRAGMA user_version = 1')
-ok(!cols(d, 'artifact').includes('name_hash'), '已退回 v1 形状（确实没这列了）')
+ok(!cols(d, 'artifact').includes('name_hash') && !cols(d, 'artifact').includes('main_stat_value'),
+  '已退回 v1 形状（两批加列确实都没了）')
 d.close()
 
-/* 重新打开 → 应该自动补列 */
+/* 重新打开 → 应该自动补列（跑 v1→v2→v3 两级迁移） */
 d = openDb(tmpDb)
 ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('set_hash'),
-  '打开老库时自动补上 artifact 的两列')
+  '打开老库时自动补上 artifact 的两列文案 key')
 ok(cols(d, 'avatar').includes('weapon_name_hash'), '自动补上 avatar 的 weapon_name_hash')
+ok(cols(d, 'artifact').includes('main_stat_value') && cols(d, 'artifact').includes('sub_stats'),
+  '自动补上 v3 的两列 enka 原始数值')
 ok(d.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION,
   `user_version 升到 ${SCHEMA_VERSION}`)
 
@@ -286,6 +322,9 @@ ok(after.avatars.length === 1 && after.avatars[0].artifacts.length === 5,
 const stillScores = scoreOf(after.avatars[0])
 ok(stillScores?.mark === viaDb.mark, `升级后照旧能算出同一个分（${stillScores?.mark}）`)
 ok(after.avatars[0].artifacts[0].name_hash === null, '老行补出来的新列是 NULL（不是 0，也别拿 0 充数）')
+/* 老库没 enka 数值 → 显示退回内核值，不炸 */
+const oldView = shapeCharacter(after.avatars[0], toMiaoProfile(after.avatars[0]), stillScores, 'chs')
+ok(!!oldView.artifacts[0].main, '老库（无 enka 数值）主词条照样显示，退回内核值')
 d.close()
 
 for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: true })
@@ -688,6 +727,80 @@ const { attrValueText } = await import('../src/view/shape.js')
   /* 面板同一条口径 —— 否则卡片 5.3%、面板 5.2%，同一页自己打自己 */
   const rows = attrTableOf({ attr: { cpct: 5.249999836087227 }, base: {} }, 'chs', {})
   ok(rows.find((r) => r.key === 'cpct')?.value === '5.3%', '面板百分比同口径 → 5.3%')
+}
+
+console.log('\n=== 14. 圣遗物显示用 enka 原始数值（不走内核重算）===')
+
+/*
+ * 评分 100% 归 miao，但页面上的**数值**要用 enka 的原始 statValue —— 内核的基准表有
+ * float 误差（满级花主词条 4,778.6，真值 4,780；精通 32.6，真值 33），enka 是官方算好的。
+ * 这段守三件事：① 落库了；② 显示用的是它；③ enka prop → miao key 的映射方向没搞反。
+ */
+{
+  /* 用一份干净的库，别受前面几节改库的影响 */
+  const vdb = openDb(':memory:')
+  repo.saveFetch(vdb, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
+  const row = repo.loadUid(vdb, ingested.uid).avatars.find(a => a.avatar_id === 10000046)
+  const a1 = row.artifacts.find(a => a.pos === 1)
+  ok(Number.isFinite(a1?.main_stat_value), '主词条数值落库了（main_stat_value）',
+    `实际 ${a1?.main_stat_value}`)
+  ok(Array.isArray(a1?.sub_stats) && a1.sub_stats.length > 0, '副词条数值落库了（sub_stats 数组）',
+    `实际 ${JSON.stringify(a1?.sub_stats)}`)
+
+  /* 花的主词条：enka 的 FIGHT_PROP_HP=4780（固定值）→ key 必须是 hpPlus（小生命）。
+     映射搞反（hpPlus→HP_PERCENT）的话这里会显示成 46.6 => 直接钉死方向。 */
+  const view = shapeCharacter(row, toMiaoProfile(row), scoreOf(row), 'chs')
+  const main1 = view.artifacts.find(x => x.pos === 1)?.main
+  ok(main1?.key === 'hpPlus', '花主词条 key = hpPlus（enka FIGHT_PROP_HP 是固定值）',
+    `实际 ${main1?.key}`)
+  ok(main1?.value === '4,780', '花主词条显示 4,780（enka 真值，不是内核的 4,778.6）',
+    `实际 ${main1?.value}`)
+
+  /* 羽的主词条：FIGHT_PROP_ATTACK=311（固定值）→ atkPlus */
+  const main2 = view.artifacts.find(x => x.pos === 2)?.main
+  ok(main2?.key === 'atkPlus' && main2?.value === '311',
+    '羽主词条 = atkPlus 311（enka 真值，不是内核的 310.8）', `实际 ${main2?.key} ${main2?.value}`)
+
+  /* 副词条整数类走 enka 值：2 号位（羽毛）带 2 次精通 roll，夹具每次记 20 → 合并后 40。
+     内核那套会按倍率算成 33 之类的带小数值 —— 这里要的就是 enka 的 40。 */
+  const mastery = (view.artifacts.find(x => x.pos === 2)?.subs || []).find(s => s.key === 'mastery')
+  ok(mastery?.value === '40', '副词条精通按 enka 值（2 次 roll × 20 = 40，不是内核那套 33）',
+    `实际 ${mastery?.value}`)
+
+  /* 没有 enka 数值的老行：退回内核值，不炸 */
+  const noEnka = { ...row, artifacts: row.artifacts.map(a => ({ ...a, main_stat_value: null, sub_stats: null })) }
+  const fallback = shapeCharacter(noEnka, toMiaoProfile(noEnka), scoreOf(noEnka), 'chs')
+  const fbMain = fallback.artifacts.find(x => x.pos === 1)?.main?.value
+  ok(fbMain != null && fbMain !== '4,780',
+    '老行没有 enka 数值时退回内核值（不等于 enka 的 4,780）', `实际 ${fbMain}`)
+  vdb.close()
+}
+
+{
+  /*
+   * 映射表方向直接钉死（不借夹具，免得夹具一变这段就空转）。
+   * 最要紧的是三对「大/小」别搞反：enka 的 **_PERCENT 是大生命/大攻击/大防御（→ hp/atk/def），
+   * 不带 PERCENT 的是固定值（→ hpPlus/atkPlus/defPlus）。搞反了主词条会把 4,780 显示成 46.6%。
+   */
+  const cases = [
+    ['FIGHT_PROP_HP', 'hpPlus'], ['FIGHT_PROP_HP_PERCENT', 'hp'],
+    ['FIGHT_PROP_ATTACK', 'atkPlus'], ['FIGHT_PROP_ATTACK_PERCENT', 'atk'],
+    ['FIGHT_PROP_DEFENSE', 'defPlus'], ['FIGHT_PROP_DEFENSE_PERCENT', 'def'],
+    ['FIGHT_PROP_ELEMENT_MASTERY', 'mastery'], ['FIGHT_PROP_CHARGE_EFFICIENCY', 'recharge'],
+    ['FIGHT_PROP_CRITICAL', 'cpct'], ['FIGHT_PROP_CRITICAL_HURT', 'cdmg'],
+    ['FIGHT_PROP_HEAL_ADD', 'heal'], ['FIGHT_PROP_ADD_HURT', 'dmg'],
+    ['FIGHT_PROP_PHYSICAL_ADD_HURT', 'phy'], ['FIGHT_PROP_FIRE_ADD_HURT', 'pyro'],
+    ['FIGHT_PROP_ELEC_ADD_HURT', 'electro'], ['FIGHT_PROP_WATER_ADD_HURT', 'hydro'],
+    ['FIGHT_PROP_GRASS_ADD_HURT', 'dendro'], ['FIGHT_PROP_WIND_ADD_HURT', 'anemo'],
+    ['FIGHT_PROP_ROCK_ADD_HURT', 'geo'], ['FIGHT_PROP_ICE_ADD_HURT', 'cryo']
+  ]
+  const bad = cases.filter(([prop, key]) => enkaPropKey(prop) !== key)
+  ok(bad.length === 0,
+    `enka prop → miao key 映射表 ${cases.length} 项全对（尤其大/小生命别搞反）`,
+    bad.map(([p, k]) => `${p} 应为 ${k}，实为 ${enkaPropKey(p)}`).join('；'))
+  ok(enkaPropKey('FIGHT_PROP_不存在的') === null, '不认识的 prop 返回 null（不瞎猜）')
+  ok(ENKA_PROP_TO_KEY.FIGHT_PROP_HP !== 'hp',
+    '守卫：固定值生命绝不许映到 hp（大生命）—— 搞反了花主词条就成百分比')
 }
 
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)

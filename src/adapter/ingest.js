@@ -47,7 +47,17 @@ function weaponOf (equipList) {
   }
 }
 
-/* 圣遗物：只认带 reliquary 的（武器没有），原始 prop id 原样带走 */
+/* 圣遗物：只认带 reliquary 的（武器没有），原始 prop id 原样带走。
+ *
+ * 数值也一并存：enka 的 `flat` 里带着官方算好的 statValue（主词条一条、副词条若干条），
+ * 页面显示**直接用它** —— 内核自己的基准表有 float 误差（满级花主词条算成 4778.6、真值 4780），
+ * 而算分仍然走 id（内核要靠 appendPropIdList 的重复次数算词条数）。
+ *
+ * ⚠️ `flat.reliquarySubstats` 是**合并后**的（同一词条多条 roll 合成一条），
+ * 与 `reliquary.appendPropIdList`（逐次 roll，保序保重复）不是一回事，两者都要存。
+ * ⚠️ `flat.reliquaryMainstat.mainPropId` 是**字符串**（FIGHT_PROP_HP），
+ * 而 `reliquary.mainPropId` 是**数字**（14001）—— 数字喂内核，字符串用于把 statValue 对到词条 key。
+ */
 function artifactsOf (equipList) {
   const out = []
   for (const e of equipList || []) {
@@ -55,6 +65,7 @@ function artifactsOf (equipList) {
     if (!re) continue
     const pos = posOf(e)
     if (!pos) continue
+    const flatMain = e.flat?.reliquaryMainstat
     out.push({
       pos,
       item_id: num(e.itemId),
@@ -62,6 +73,12 @@ function artifactsOf (equipList) {
       star: num(e.flat?.rankLevel) ?? 5,
       main_prop_id: num(re.mainPropId),
       append_prop_ids: (re.appendPropIdList || []).map(Number),
+      /* enka 的原始数值：显示层用，喂内核的仍是上面那两个 id。
+         主词条不用另存字符串 propId —— 数字 main_prop_id 经内核 mainIdMap 就是词条 key。 */
+      main_stat_value: num(flatMain?.statValue),
+      sub_stats: (e.flat?.reliquarySubstats || [])
+        .filter(s => s && s.appendPropId)
+        .map(s => ({ prop: s.appendPropId, value: num(s.statValue) })),
       name_hash: num(e.flat?.nameTextMapHash),        // 本件名字
       set_hash: num(e.flat?.setNameTextMapHash)       // 套装名（同套装 5 件共用一个）
     })

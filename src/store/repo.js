@@ -6,7 +6,7 @@
  */
 import { tx } from './db.js'
 
-const JSON_COLS = new Set(['skill_level_map', 'append_prop_ids', 'avatar_ids'])
+const JSON_COLS = new Set(['skill_level_map', 'append_prop_ids', 'avatar_ids', 'sub_stats'])
 
 const j = (v) => (v === undefined ? null : JSON.stringify(v))
 const pj = (v) => (v ? JSON.parse(v) : null)
@@ -45,7 +45,7 @@ const AVATAR_COLS = ['uid', 'avatar_id', 'level', 'promote', 'cons', 'fetter', '
   'weapon_item_id', 'weapon_name_hash', 'weapon_level', 'weapon_promote', 'weapon_affix', 'source', 'fetched_at']
 
 const ARTIFACT_COLS = ['uid', 'avatar_id', 'pos', 'item_id', 'level_raw', 'star',
-  'main_prop_id', 'append_prop_ids', 'name_hash', 'set_hash']
+  'main_prop_id', 'append_prop_ids', 'main_stat_value', 'sub_stats', 'name_hash', 'set_hash']
 
 /* 存一个角色：先写角色行，再整体换掉它的 5 件圣遗物 */
 export function saveAvatar (db, uid, av, stamp) {
@@ -96,7 +96,7 @@ export function loadAvatar (db, uid, avatarId) {
   return {
     ...av,
     skill_level_map: pj(av.skill_level_map),
-    artifacts: artis.map(a => ({ ...a, append_prop_ids: pj(a.append_prop_ids) }))
+    artifacts: artis.map(a => ({ ...a, append_prop_ids: pj(a.append_prop_ids), sub_stats: pj(a.sub_stats) }))
   }
 }
 

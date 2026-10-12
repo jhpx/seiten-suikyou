@@ -15,6 +15,7 @@
  */
 import { ArtisMark, Artifact, Format, i18n, Weapon } from '../index.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
+import { enkaPropKey } from '../store/props.js'
 
 /* miao 单条词条「分」公式：46.6 * _mark / 600（与 artis-mark.html 右栏数字逐字一致） */
 function statPoint (_mark) {
@@ -69,17 +70,23 @@ export function weightFilterOptions (locale) {
 /*
  * 词条数值 → 给人看的串。
  *
- * 数值仍然来自 miao 内核（`main.value` / `attrs[].value` 是内核算好并格式化过的串），
- * 这里只改「怎么显示」。两处都是内核的显示口径和游戏对不上：
+ * **数值来源（2026-10-12 起）**：优先用 enka 的原始 `statValue`（`value4`），
+ * 拿不到才退回内核算的值。为什么：miao 的基准表有 float 误差 —— 5★ 生之花满级主词条
+ * 它算 4,778.6，而游戏真值是 4,780（enka 的 statValue 本来就是 4780）；
+ * 副词条同理（精通真值 33，内核算 32.6）。enka 是官方算好的，直接用它才和游戏一模一样。
+ * 内核只剩两个用途：给评分（不碰显示）、以及老库没存 enka 值时的兜底。
  *
+ * ⚠️ 「显示」和「算分」是两条路：改这里的口径不影响任何评分（评分仍 100% 走内核）。
+ *
+ * 两处「怎么显示」的修正仍然需要：
  * ① 整数词条（精通 / 小攻击 / 小生命 / 小防御，含花、羽那两个固定值主词条）：
- *    miao 一律 `Format.comma(val, 1)`，于是到了页面成了「209.1」「16.3」这种
- *    **游戏里根本不存在的值** —— 游戏这四类一律显整数，它的强化档位本来就是整数累加出来的。
+ *    miao 一律 `Format.comma(val, 1)`，于是成了「209.1」「16.3」这种**游戏里不存在的值** ——
+ *    游戏这四类一律显整数（enka 的 statValue 本来就是整数）。收整到 0 位。
  * ② 百分比词条：miao 的 `Format.pct` 是 `(v*1).toFixed(1)`，**分不清 5.25 和 5.2499998**。
- *    而副词条表把倍率存成了 float32 精度的十进制：5★ 大生命第 3 档真值 0.0525，表里是
- *    0.05249999836087227 → 乘 100 = 5.249999836，落在 5.25 这个半分界**下面**，
- *    于是显示 5.2%，而游戏按十进制四舍五入显示 5.3%。所以要拿内核的裸数字自己舍一次。
- *    裸数字内核就留着（`profile.artis.artis[pos].main` / `.attrs`），由调用方传进来。
+ *    内核的裸数字是 float32 精度的十进制（5★ 大生命第 3 档真值 0.0525，内核表里
+ *    0.05249999836087227）→ 显示 5.2%，游戏按十进制四舍五入是 5.3%。
+ *    enka 的 statValue 是**已经乘过 100 的十进制**（5.8、46.6），没有这个噪声 —— 所以
+ *    有 enka 值时直接 `decRound` 到 1 位即可；没有时才退回去舍内核的 float32 裸数字。
  *
  * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num * 1).toFixed(fix)`，
  *    Number('1,015.8') 是 NaN，会原样吐出 'NaN'。先剥逗号再进。
@@ -107,16 +114,31 @@ function decRound (num, fix = 1) {
 /* 百分比统一走这里，别再用 Format.pct —— 理由见上面 ② */
 const pctText = (num) => decRound(num) + '%'
 
-export function attrValueText (key, value, raw) {
-  if (value == null || value === '') return value
-  if (INT_ATTR_KEYS.has(key)) return Format.comma(Number(String(value).replace(/,/g, '')), 0)
-  /* 拿不到裸数字（比如「有效词条汇总」那种汇总过的串）就退回内核的串 */
-  return Number.isFinite(Number(raw)) ? pctText(raw) : value
+/*
+ * 词条数值出口。
+ * @param {string} key      miao 词条 key（cpct / hpPlus …）
+ * @param {string} value    内核给好的格式化串（兜底用）
+ * @param {number} coreRaw  内核的裸数字（百分比词条要用它做十进制舍入）
+ * @param {number} enkaVal  enka 的原始 statValue（优先用它；混不到时 undefined）
+ *
+ * 优先级：enka 值 > 内核裸数字 > 内核串。
+ * enka 值能直接用是因为它和游戏同口径：固定值词条本来就是整数，百分比已乘 100。
+ */
+export function attrValueText (key, value, coreRaw, enkaVal) {
+  const hasEnka = Number.isFinite(Number(enkaVal))
+  /* 整数词条（精通/小攻击/小生命/小防御）：一律收整 */
+  if (INT_ATTR_KEYS.has(key)) {
+    const n = hasEnka ? Number(enkaVal) : Number(String(value).replace(/,/g, ''))
+    return Number.isFinite(n) ? Format.comma(n, 0) : (hasEnka ? String(enkaVal) : value)
+  }
+  /* 百分比词条：有 enka 值就直接按十进制舍（它已是 ×100 的十进制）；
+     没有才退回内核裸数字（要做 float32 噪声收敛）。都没有就原样透传内核串。 */
+  if (hasEnka) return pctText(Number(enkaVal))
+  return Number.isFinite(Number(coreRaw)) ? pctText(coreRaw) : value
 }
 
 /*
- * 从内核的 artis 模型里取出「这一件的裸数字」，交给 attrValueText 用。
- * 三个出口（页面 / 接口 / CLI）都得走同一条路，否则同一件圣遗物三处显示不一样。
+ * 从内核的 artis 模型里取出「这一件的裸数字」，交给 attrValueText 兜底用。
  * 副词条按 key 存成 Map：内核已经把一个 key 的多次强化合成了一条，所以 key 唯一。
  */
 export function rawNumsOf (artisEntry) {
@@ -124,6 +146,24 @@ export function rawNumsOf (artisEntry) {
     main: artisEntry?.main?.value,
     sub: new Map((artisEntry?.attrs || []).map(a => [a.key, a.value]))
   }
+}
+
+/*
+ * 从**库里那行**取 enka 的原始数值（artifact 表的 main_stat_value / sub_stats），
+ * 按 miao key 归拢。这是显示数值的第一来源，见 attrValueText 上面的说明。
+ *
+ * 主词条数值只有一个（key 由内核自己从 main_prop_id 解出来，调用方用 marked.main.key 定位，
+ * 不在这儿再解一遍）；副词条 key 由 enka 的字符串 prop 经 ENKA_PROP_TO_KEY 得到。
+ * 老库（<v3）这两列是 NULL → 返回空，调用方自然退回内核值。
+ */
+export function enkaNumsOf (dbRow) {
+  const main = Number.isFinite(Number(dbRow?.main_stat_value)) ? Number(dbRow.main_stat_value) : undefined
+  const sub = new Map()
+  for (const s of dbRow?.sub_stats || []) {
+    const k = enkaPropKey(s?.prop)
+    if (k && Number.isFinite(Number(s.value))) sub.set(k, Number(s.value))
+  }
+  return { main, sub }
 }
 
 /* 圣遗物位置：1 花 2 羽 3 沙 4 杯 5 冠 */
@@ -315,21 +355,23 @@ export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
   return [...rows, ...dmgRows.map(makeRow)]
 }
 
-/* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字）
- * raw 是内核解析出的裸数字（`profile.artis.artis[pos]`），只用来修显示口径，见 attrValueText */
+/* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字、拿 enka 的原始数值做显示）
+ * raw 是内核解析出的裸数字（`profile.artis.artis[pos]`），内核值只在库里没有 enka 值时兜底，
+ * 见 enkaNumsOf */
 function artifactOf (pos, marked, dbRow, locale, raw) {
   const posName = slotLabel(pos, locale)
   if (!marked || !marked.name) return { pos, posName, empty: true }
 
   const setNameZh = marked.set || ''
-  /* 副词条按 key 取裸数字：内核已经把一个 key 的多次强化合成了一条，所以 key 唯一 */
+  /* 显示数值：优先用 enka 的原始 statValue（与游戏一致），内核重算的值只兜底 */
+  const enka = enkaNumsOf(dbRow)
   const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
   const subs = (marked.attrs || [])
     .filter(x => x.key)
     .map(x => ({
       key: x.key,
       label: artiLabel(x.key, locale),
-      value: attrValueText(x.key, x.value, rawSub.get(x.key)),
+      value: attrValueText(x.key, x.value, rawSub.get(x.key), enka.sub.get(x.key)),
       upNum: x.upNum || 0,
       /* 词条有效率：miao 算好的百分比串，'-' 表示没算（非有效词条） */
       eff: x.eff ?? '-',
@@ -358,7 +400,7 @@ function artifactOf (pos, marked, dbRow, locale, raw) {
       ? {
           key: marked.main.key,
           label: artiLabel(marked.main.key, locale),
-          value: attrValueText(marked.main.key, marked.main.value, rawMain),
+          value: attrValueText(marked.main.key, marked.main.value, rawMain, enka.main),
           _mark: marked.main._mark ?? null,
           point: statPoint(marked.main._mark)
         }
@@ -449,13 +491,21 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   for (const arti of Object.values(profile.artis?.artis || {})) {
     for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
   }
+  /* enka 侧的同一套加法：显示优先用它（与游戏同口径），见 attrValueText */
+  const enkaAll = {}
+  for (const arti of row.artifacts || []) {
+    for (const s of arti.sub_stats || []) {
+      const k = enkaPropKey(s?.prop)
+      if (k && Number.isFinite(Number(s.value))) enkaAll[k] = (enkaAll[k] || 0) + Number(s.value)
+    }
+  }
   const allAttr = Array.from({ length: 9 }, (_, i) => {
     const a = allAttrRaw[i]
     if (!a || !a.key) return {}
     return {
       key: a.key,
       label: shortLabel(a.key, loc),
-      value: attrValueText(a.key, a.value, rawAll[a.key]),
+      value: attrValueText(a.key, a.value, rawAll[a.key], enkaAll[a.key]),
       upNum: a.upNum || 0,
       eff: a.eff ?? '-',
       cls: weightClass(cw[a.key] || 0)

@@ -54,8 +54,15 @@ CREATE TABLE IF NOT EXISTS artifact (
   item_id         INTEGER NOT NULL,   -- 部位物品 id（5 位数，前两位定套装）
   level_raw       INTEGER NOT NULL,   -- 原样存，读时按 source 归一化
   star            INTEGER NOT NULL,   -- 星级
-  main_prop_id    INTEGER NOT NULL,   -- 主词条 prop id
+  main_prop_id    INTEGER NOT NULL,   -- 主词条 prop id（喂内核算分用的数字 id）
   append_prop_ids TEXT    NOT NULL,   -- JSON 数组，保序保重复
+  -- 下面两列是 enka 的**原始数值**（页面显示直接用它，不经过 miao 的基准表重算）：
+  -- 内核自己的 attrIdMap 基准有 float 误差（满级花主词条 4778.6 而游戏真值 4780），
+  -- 而 enka 的 flat 里本来就带着官方算好的 statValue。两处口径各司其职：
+  -- 算分走 main_prop_id / append_prop_ids（内核要靠 id 的重复次数算词条数），
+  -- 显示走 main_stat_value / sub_stats（要跟游戏一模一样）。
+  main_stat_value REAL,               -- 主词条数值（enka flat.reliquaryMainstat.statValue）
+  sub_stats       TEXT,               -- JSON [{prop,value}]，enka flat.reliquarySubstats（已合并，保序）
   name_hash       INTEGER,            -- 这一件圣遗物名字的官方文案 key
   set_hash        INTEGER,            -- 套装名字的官方文案 key（同套装 5 件都一样）
   PRIMARY KEY (uid, avatar_id, pos),

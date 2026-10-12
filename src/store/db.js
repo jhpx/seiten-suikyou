@@ -15,7 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SCHEMA_FILE = path.join(HERE, 'schema.sql')
 
 /* 结构版本。改了 schema.sql 就 +1，migrate 会把老库升上来。 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /*
  * 增量迁移表：MIGRATIONS[v] 把「版本 v」的库升到「版本 v+1」。
@@ -30,6 +30,13 @@ const MIGRATIONS = {
     db.exec('ALTER TABLE artifact ADD COLUMN name_hash INTEGER')
     db.exec('ALTER TABLE artifact ADD COLUMN set_hash INTEGER')
     db.exec('ALTER TABLE avatar ADD COLUMN weapon_name_hash INTEGER')
+  },
+  /* v2 → v3：补上 enka 的**原始数值**（页面显示直接用它，不走 miao 的基准表重算）。
+     老库这两列是 NULL —— 显示层拿不到 enka 值时会退回内核值（不炸，只是数字还是内核口径），
+     重新抓一次 / 重新 ingest 就填上了。 */
+  2: (db) => {
+    db.exec('ALTER TABLE artifact ADD COLUMN main_stat_value REAL')
+    db.exec('ALTER TABLE artifact ADD COLUMN sub_stats TEXT')
   }
 }
 

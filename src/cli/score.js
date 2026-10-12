@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, i18n } from '../index.js'
-import { attrValueText, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
+import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../view/shape.js'
 import { openDb } from '../store/db.js'
 import * as repo from '../store/repo.js'
 import { ingestPayload } from '../adapter/ingest.js'
@@ -98,17 +98,18 @@ function renderCharacter (row, profile, result, locale) {
     const a = result.artis?.[idx]
     if (!a || !a.name) { out.push(`  ${idx} ${slotLabel(idx, locale)}  ——`); continue }
     const dbRow = dbArtis.get(idx)
-    /* 裸数字只为修显示口径（百分比的小数舍入），见 shape.js 的 attrValueText */
+    /* 显示数值优先用 enka 原始值、内核值兜底；见 shape.js 的 attrValueText / enkaNumsOf */
+    const enka = enkaNumsOf(dbRow)
     const { main: rawMain, sub: rawSub } = rawNumsOf(profile.artis?.artis?.[idx])
     const aname = (dbRow?.name_hash && i18n.name(dbRow.name_hash, locale)) || a.name
     out.push(`  ${idx} ${slotLabel(idx, locale)}  ${padW(aname, 14)} ★5 Lv.${pad(a.level ?? 0, 2)}   ${pad(a.mark, 6)}  ${a.markClass}`)
     if (a.main && a.main.value !== undefined) {
-      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${attrValueText(a.main.key, a.main.value, rawMain)}`)
+      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${attrValueText(a.main.key, a.main.value, rawMain, enka.main)}`)
     }
     const subs = (a.attrs || []).filter(x => x.key)
     if (subs.length) {
       out.push(`       ${U('substat')}  ` + subs.map(x =>
-        `${statLabel(x.key, locale)} ${attrValueText(x.key, x.value, rawSub.get(x.key))}${x.upNum > 1 ? `×${x.upNum}` : ''}`
+        `${statLabel(x.key, locale)} ${attrValueText(x.key, x.value, rawSub.get(x.key), enka.sub.get(x.key))}${x.upNum > 1 ? `×${x.upNum}` : ''}`
       ).join('  '))
     }
   }
