@@ -17,7 +17,7 @@ import { ArtisMark, Artifact as MiaoArtifact, Format, i18n, Weapon } from '../in
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
 import { Artifact } from '../domain/artifact.js'
 import { isIntegerStatKey } from '../domain/stat.js'
-import { num } from '../domain/num.js'
+import { num } from '../shared/util.js'
 
 /* miao 单条词条「分」公式：46.6 * _mark / 600（与 artis-mark.html 右栏数字逐字一致） */
 function statPoint (_mark) {
@@ -128,10 +128,12 @@ const pctText = (num) => decRound(num) + '%'
  * enka 值能直接用是因为它和游戏同口径：固定值词条本来就是整数，百分比已乘 100。
  */
 export function attrValueText (key, value, coreRaw, enkaVal) {
-  /* ⚠️ 判「有没有 enka 值」一律用 num()，**不许用 Number()** —— `Number(null) === 0`，
-     老库（<v3）那两列是 NULL，用 Number() 会把「没有」读成「0」，于是主词条显示成 0 / 0.0%
-     而兜底逻辑整条失效（真实库上踩过；老数据的显示就靠这段兜底）。 */
-  const enka = num(enkaVal)
+  /* ⚠️ `enkaVal` 由调用方从**模型字段**取来（enkaNumsOf / subStatTotals），已是 number|null
+     —— 直接 `?? null`，不重复 num（类型在 constructor 就固定了）。
+     这儿**绝不能**退化成 Number()：`Number(null) === 0` 会把「没有 enka 值」读成「值 = 0」，
+     老库（<v3）那两列是 NULL，主词条会显示成 0 / 0.0% 且兜底逻辑整条失效（真实库上踩过）。
+     `coreRaw` 是**内核**给的裸数字、`value` 是内核的格式化串 —— 另一条来源，下面单独解析。 */
+  const enka = enkaVal ?? null
   /* 整数词条（精通/小攻击/小生命/小防御）：一律收整 */
   if (isIntegerStatKey(key)) {
     const n = enka ?? num(String(value).replace(/,/g, ''))
@@ -164,12 +166,12 @@ export function rawNumsOf (artisEntry) {
  * 老库（<v3）这两处是空的 → 返回空，调用方自然退回内核值。
  */
 export function enkaNumsOf (art) {
-  /* 走 num()（不是 Number()）：NULL 与「值为 0」必须分得开，见 attrValueText 上面的说明。 */
-  const main = num(art?.mainStatValue)
+  /* `art` 是模型（domain/artifact.js 的 Artifact）：`mainStatValue` 与每个 `Stat.value`
+     都已在 constructor 归一到 number|null —— 直接取用、判 null，不再 num。 */
+  const main = art?.mainStatValue ?? null
   const sub = new Map()
   for (const s of art?.subStats || []) {
-    const v = s.key ? num(s.value) : null
-    if (v !== null) sub.set(s.key, v)
+    if (s.key && s.value !== null) sub.set(s.key, s.value)
   }
   return { main, sub }
 }

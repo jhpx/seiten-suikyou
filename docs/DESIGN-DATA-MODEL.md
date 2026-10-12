@@ -112,10 +112,23 @@ enka 原始响应 (JSON)
 所以「改一列要动几个文件」变成「改一个模型」；`ingest` 只做编排，
 挑字段与「enka 长什么样 → 模型」的映射都交给各模型的 `ofEnka`。
 
-⚠️ 模型**不许引外层**（`test/arch.mjs` 第 7 节：只许 `./`）—— 不许 import
-store / adapter / view / miao / 三方包。一旦它反过来依赖存储或数据源，就退化成
-「跟着 DB 列名走的数据袋」，那正是它要解决的问题。为此 `payload_hash` 的算法
-（要 `node:crypto`）留在适配层，模型只负责把它存下来。
+⚠️ 模型**不许引外层**（`test/arch.mjs` 第 7 节）—— 只许两种 import：同目录的 `./xxx.js`，
+以及更底一层的共用件 `../shared/util.js`。不许 import store / adapter / view / miao / 三方包。
+一旦它反过来依赖存储或数据源，就退化成「跟着 DB 列名走的数据袋」，那正是它要解决的问题。
+为此 `payload_hash` 的算法（要 `node:crypto`）留在适配层，模型只负责把它存下来。
+
+`src/shared/util.js` 是**跨层的纯 JS 小工具**（`num` 脏值收敛、库里 JSON 文本列的编解码、
+`parseArgs`）：不属于任何一层，所以谁都能引它；反过来它谁也不引（连 `node:` 都不用），
+否则会把运行环境顺着它带进领域层。只服务单层的工具不进这儿（`decRound` 只在展示层用，
+就留在 `view/shape.js`）。
+
+**字段类型不变量（「获取数据时转一次」）**：每个模型的 constructor 是**类型归一的唯一入口** ——
+数字语义的标量字段进对象时一律 `num()` 收敛成 `number | null`。于是 `ofEnka`（外部响应）与
+`fromRow`（库行）**都只做字段名映射、不再各自转换**；下游（materialize / view / cli）**信任**这个
+类型、不再重复 `num`。`num` 全项目只有两处合法用法：① 模型 constructor；② 出口解析**内核给的
+字符串数字**（`Format` 出的 "4,778.6"，那是另一条来源）。守卫在 `test/pipeline.mjs` §2b ——
+⚠️ 写这类测试别拿数值列（REAL/INTEGER）塞字符串：SQLite 的**类型亲和性**会自己转成数字，
+测出来的是 SQLite 不是我们；要用 TEXT 列里的 JSON（`sub_stats`）或直接造 row 对象。
 
 ---
 

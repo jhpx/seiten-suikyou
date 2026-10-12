@@ -18,7 +18,7 @@
  *   · 库里只存 id 与数值，**不存任何名字**（名字是多语言的，见 docs/DESIGN-DATA-MODEL.md）。
  */
 import { Stat } from './stat.js'
-import { num } from './num.js'
+import { encodeJson, num, parseJson } from '../shared/util.js'
 
 /* 装备槽位名 → 圣遗物位置（与上游 EnkaData.js 的 artisIdxMap 一致） */
 const POS_BY_EQUIP_TYPE = {
@@ -33,25 +33,23 @@ const POS_BY_EQUIP_TYPE = {
    那个 [4,2,5,1,3][name[3]-1] 的逆映射。 */
 const POS_BY_ID_DIGIT = { 4: 1, 2: 2, 5: 3, 1: 4, 3: 5 }
 
-/* 库里那两列 JSON 是文本：解坏了当空，别让手工改过的库把整包读挂 */
-const parse = (text) => {
-  if (!text) return null
-  try { return JSON.parse(text) } catch { return null }
-}
-
 export class Artifact {
   constructor ({ pos, itemId, levelRaw, star, mainPropId, appendPropIds,
     mainStatValue, subStats, nameHash, setHash }) {
-    this.pos = pos                               // 1 花 2 羽 3 沙 4 杯 5 头
-    this.itemId = itemId                         // 部件 id（miao Artifact.get 拿它查套装/名字/图标）
-    this.levelRaw = levelRaw                     // enka 的原始等级（1 基，5★ 满级 21；内核口径 0 基，差 1）
-    this.star = star
-    this.mainPropId = mainPropId                 // 主词条数字 id → 喂内核
+    /* 类型不变量：标量字段统统 number|null，**由 constructor 一次性归一**，
+       ofEnka / fromRow 只做字段名映射、不再各自 num —— 这就是「数据进对象时转一次」。
+       （两个集合字段的元素类型另有归属：appendPropIds 是数字 id 数组，
+        subStats 的元素是 Stat，后者自己保证 value 是 number|null。） */
+    this.pos = num(pos)                          // 1 花 2 羽 3 沙 4 杯 5 头
+    this.itemId = num(itemId)                    // 部件 id（miao Artifact.get 拿它查套装/名字/图标）
+    this.levelRaw = num(levelRaw)                // enka 的原始等级（1 基，5★ 满级 21；内核口径 0 基，差 1）
+    this.star = num(star)
+    this.mainPropId = num(mainPropId)            // 主词条数字 id → 喂内核
     this.appendPropIds = appendPropIds || []     // 副词条逐次 roll 的 id → 喂内核（保序保重复）
-    this.mainStatValue = mainStatValue ?? null   // enka 原始主词条数值 → 显示
+    this.mainStatValue = num(mainStatValue)      // enka 原始主词条数值 → 显示
     this.subStats = subStats || []               // Stat[]，enka 合并后的副词条 → 显示
-    this.nameHash = nameHash ?? null             // 本件名字的官方文案 key
-    this.setHash = setHash ?? null               // 套装名的官方文案 key（同套 5 件共用一个）
+    this.nameHash = num(nameHash)                // 本件名字的官方文案 key
+    this.setHash = num(setHash)                  // 套装名的官方文案 key（同套 5 件共用一个）
   }
 
   /*
@@ -65,9 +63,9 @@ export class Artifact {
   toValues (uid, avatarId) {
     return [
       uid, avatarId, this.pos, this.itemId, this.levelRaw, this.star,
-      this.mainPropId, JSON.stringify(this.appendPropIds),
+      this.mainPropId, encodeJson(this.appendPropIds),
       this.mainStatValue,
-      JSON.stringify(this.subStats.map(s => ({ prop: s.prop, value: s.value }))),
+      encodeJson(this.subStats.map(s => ({ prop: s.prop, value: s.value }))),
       this.nameHash, this.setHash
     ]
   }
@@ -80,9 +78,9 @@ export class Artifact {
       levelRaw: row.level_raw,
       star: row.star,
       mainPropId: row.main_prop_id,
-      appendPropIds: parse(row.append_prop_ids) || [],
+      appendPropIds: parseJson(row.append_prop_ids) || [],
       mainStatValue: row.main_stat_value,
-      subStats: (parse(row.sub_stats) || []).map(s => new Stat(s.prop, s.value)),
+      subStats: (parseJson(row.sub_stats) || []).map(s => new Stat(s.prop, s.value)),
       nameHash: row.name_hash,
       setHash: row.set_hash
     })
@@ -95,23 +93,25 @@ export class Artifact {
       POS_BY_ID_DIGIT[String(equip.itemId)[3]] || null
     if (!pos) return null
     const re = equip.reliquary
+    /* 这里只做「字段映射 + 业务默认」（`?? 0` / `?? 5`）；脏值 → number 由 constructor 归一。
+       appendPropIds 是数组、且**保序保重复**，所以单独用 `.map(Number)`（不能去重/过滤）。 */
     return new Artifact({
       pos,
-      itemId: num(equip.itemId),
-      levelRaw: num(re.level) ?? 0,
-      star: num(equip.flat?.rankLevel) ?? 5,
-      mainPropId: num(re.mainPropId),
+      itemId: equip.itemId,
+      levelRaw: re.level ?? 0,
+      star: equip.flat?.rankLevel ?? 5,
+      mainPropId: re.mainPropId,
       appendPropIds: (re.appendPropIdList || []).map(Number),
       /* enka 的 `flat` 里带着官方算好的 statValue：显示层直接用它 ——
          内核自己那份基准表有 float 误差（满级花主词条算成 4,778.6，真值 4,780）。 */
-      mainStatValue: num(equip.flat?.reliquaryMainstat?.statValue),
+      mainStatValue: equip.flat?.reliquaryMainstat?.statValue,
       /* ⚠️ `flat.reliquarySubstats` 是**合并后**的（同一词条多条 roll 合成一条），
          与 `reliquary.appendPropIdList`（逐次 roll、保序保重复）不是一回事 —— 两份都要留。 */
       subStats: (equip.flat?.reliquarySubstats || [])
         .filter(s => s && s.appendPropId)
-        .map(s => new Stat(s.appendPropId, num(s.statValue))),
-      nameHash: num(equip.flat?.nameTextMapHash),
-      setHash: num(equip.flat?.setNameTextMapHash)
+        .map(s => new Stat(s.appendPropId, s.statValue)),
+      nameHash: equip.flat?.nameTextMapHash,
+      setHash: equip.flat?.setNameTextMapHash
     })
   }
 
@@ -149,9 +149,9 @@ export class Artifact {
     const out = new Map()
     for (const a of artifacts || []) {
       for (const s of a.subStats || []) {
-        /* 用 num() 不用 Number()：`Number(null) === 0` 会把「没这个数」加成一个 0（见 num.js） */
-        const v = s.key ? num(s.value) : null
-        if (v !== null) out.set(s.key, (out.get(s.key) || 0) + v)
+        /* Stat.value 已由 constructor 归一到 number|null → 判 null 就够，不用再 num
+           （走 num() 而不能用 Number()：`Number(null) === 0` 会把「没这个数」加成一个 0） */
+        if (s.key && s.value !== null) out.set(s.key, (out.get(s.key) || 0) + s.value)
       }
     }
     return out

@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto'
 
-import { num } from '../domain/num.js'
+import { num } from '../shared/util.js'
 import { Player } from '../domain/player.js'
 import { Character } from '../domain/character.js'
 

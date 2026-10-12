@@ -14,17 +14,18 @@
  * ⚠️ 「装备了但元数据不认识这把」和「压根没装备」是两回事。这个值对象只回答
  *    「enka 说装备了没有」（`equipped`）；「认不认识」要看出口能不能查到名字（view/shape.js）。
  */
-import { num } from './num.js'
+import { num } from '../shared/util.js'
 
 export class Weapon {
   constructor ({
     itemId = null, nameHash = null, level = null, promote = null, affix = null
   } = {}) {
-    this.itemId = itemId       // 武器物品 id；null = 没装备
-    this.nameHash = nameHash   // 武器名文案 key
-    this.level = level
-    this.promote = promote     // 突破等级
-    this.affix = affix         // 精炼等级（1~5）
+    /* 类型不变量：五个字段统统 number|null（由这儿一次性归一，ofEnka / fromRow 都不再 num） */
+    this.itemId = num(itemId)       // 武器物品 id；null = 没装备
+    this.nameHash = num(nameHash)   // 武器名文案 key
+    this.level = num(level)
+    this.promote = num(promote)     // 突破等级
+    this.affix = num(affix)         // 精炼等级（1~5）
   }
 
   /* avatar 表里属于武器的列。**顺序与 toValues 严格一致**（改一个必须动另一个） */
@@ -56,14 +57,15 @@ export class Weapon {
   static ofEnka (equipList) {
     const w = (equipList || []).find(e => e.flat?.itemType === 'ITEM_WEAPON')
     if (!w) return Weapon.none()
-    const affix = Object.values(w.weapon?.affixMap || {})[0]
+    /* enka 的 affixMap 是「额外精炼次数」：精1 存的是 0 或不存 → +1 才是 1~5。
+       +1 是**业务语义**（不是类型转换），所以留在 ofEnka；类型归一到此为止，后面交给 constructor。 */
+    const affix = num(Object.values(w.weapon?.affixMap || {})[0])
     return new Weapon({
-      itemId: num(w.itemId),
-      nameHash: num(w.flat?.nameTextMapHash),
-      level: num(w.weapon?.level),
-      promote: num(w.weapon?.promoteLevel),
-      /* enka 的 affixMap 是「额外精炼次数」：精1 存的是 0 或不存 → +1 才是 1~5 */
-      affix: (num(affix) ?? 0) + 1
+      itemId: w.itemId,
+      nameHash: w.flat?.nameTextMapHash,
+      level: w.weapon?.level,
+      promote: w.weapon?.promoteLevel,
+      affix: (affix ?? 0) + 1
     })
   }
 }

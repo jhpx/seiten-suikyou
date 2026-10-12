@@ -21,7 +21,7 @@ import { ingestPayload } from '../src/adapter/ingest.js'
 import { toMiaoProfile } from '../src/adapter/materialize.js'
 import { shapeCharacter } from '../src/view/shape.js'
 import { Artifact } from '../src/domain/artifact.js'
-import { enkaPropKey, ENKA_PROP_TO_KEY } from '../src/domain/stat.js'
+import { Stat, enkaPropKey, ENKA_PROP_TO_KEY } from '../src/domain/stat.js'
 import { diffPanels } from '../src/adapter/panel-check.js'
 
 let failed = 0
@@ -210,6 +210,42 @@ ok(cdmgRolls.length === 3, '同 key 的多次 roll 一条不少（这是词条�
 const 中文字 = JSON.stringify(ingested.player.characters)
 ok(!/[\u4e00-\u9fa5]/.test(中文字), '库行里没有中文名（存储层只存 id）',
   (中文字.match(/[\u4e00-\u9fa5]+/) || [])[0])
+
+/* ---------------- 2b. 类型不变量 ---------------- */
+
+console.log('\n=== 2b. 类型归一只在 constructor 做一次（之后字段类型固定）===')
+
+/* 守的是「数据进对象时转一次」这条：脏值（字符串数字 / null / undefined）经 constructor
+   之后，模型字段一律是 number|null —— 所以 ofEnka / fromRow / 出口都不必再 num。
+   把这些断言拆掉，就得在别处补一堆防御式 num，类型也就谈不上「固定」了。 */
+
+/* ① 脏值直接进 constructor */
+const dirtyArt = new Artifact({
+  pos: '1', itemId: '91501', levelRaw: '21', star: '5', mainPropId: '14001',
+  mainStatValue: '4780',
+  subStats: [new Stat('FIGHT_PROP_HP_PERCENT', '46.6')],
+  nameHash: '123', setHash: undefined
+})
+ok(dirtyArt.mainStatValue === 4780, '字符串主词条值 → number（constructor 归一）',
+  `实际 ${JSON.stringify(dirtyArt.mainStatValue)}`)
+ok(dirtyArt.levelRaw === 21 && dirtyArt.pos === 1, '字符串等级 / 位置 → number')
+ok(dirtyArt.subStats[0].value === 46.6, 'Stat 的字符串值 → number')
+ok(dirtyArt.setHash === null, '缺字段（undefined）→ null，不是 0 / NaN',
+  `实际 ${JSON.stringify(dirtyArt.setHash)}`)
+
+/* ② 被手工改过的库：JSON 列（TEXT）里塞字符串数值，fromRow 也得归一。
+     注意别拿 main_stat_value 试 —— 它是 REAL 列，SQLite 的**类型亲和性**会自己把
+     '4780' 转成数字，那样测的是 SQLite 不是我们。sub_stats 是 TEXT 列，里面的
+     JSON 是原样文本，SQLite 不碰，才能真正验证 constructor 的归一。 */
+const dirtyDb = openDb(':memory:')
+repo.saveFetch(dirtyDb, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
+dirtyDb.prepare(`UPDATE artifact
+  SET sub_stats = '[{"prop":"FIGHT_PROP_HP_PERCENT","value":"46.6"}]'
+  WHERE pos = 1`).run()
+const rowBack = Artifact.fromRow(dirtyDb.prepare('SELECT * FROM artifact WHERE pos = 1').get())
+ok(rowBack.subStats[0].value === 46.6,
+  'JSON 列里的字符串数值 → number（fromRow 复用同一个 constructor）',
+  `实际 ${JSON.stringify(rowBack.subStats[0].value)}`)
 
 /* ---------------- 5. 落库 + 读回 ---------------- */
 

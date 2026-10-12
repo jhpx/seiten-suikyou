@@ -221,27 +221,46 @@ for (const f of ['icon_charge_efficiency.svg', 'icon_critical_hurt.svg', 'icon_h
 ok(/stroke-width="\.3"/.test(fs.readFileSync(path.join(SVG_DIR, 'icon_ice_add_hurt.svg'), 'utf8')),
   'icon_ice_add_hurt.svg 保留 stroke-width（冰花枝的粗细靠它）')
 
-// ─────────────────────────────────── 7. 领域层不许反向依赖外层
+// ─────────────────────────────── 7. 领域层不许反向依赖外层；共用件零依赖
 console.log('\n=== 7. 领域层（src/domain）只描述「是什么」，不依赖任何外层 ===')
 
 /* 领域模型是最内层（domain/artifact.js、domain/stat.js）。它存在的意义正是
    「让内存里的形状不再由 DB 列名决定」，所以它**不许**反过来知道：
    DB 列名（store）、enka 的响应（adapter）、miao 内核、页面渲染（view）。
    一旦引了，它就退化成「跟着存储列名走的数据袋」—— 那正是它要解决的问题。
-   只许引同目录（`./xxx.js`），不比配 miao、不引三方包。 */
+   能引的只有两种：同目录（`./xxx.js`）、以及更底一层的共用件（`../shared/util.js`）——
+   后者是纯 JS 零依赖（下面断死），不会把运行环境或外层概念带进领域层。
+   `../adapter/...` 这种「看起来像同族」的路径照样是越界，别放它进来。 */
 const DOMAIN_DIR = path.join(ROOT, 'src', 'domain')
+const SHARED_DIR = path.join(ROOT, 'src', 'shared')
+const SHARED_SPEC = /^\.\.\/shared\/[a-z0-9_-]+\.js$/
 const domainFiles = fs.readdirSync(DOMAIN_DIR).filter(f => f.endsWith('.js')).sort()
 ok(domainFiles.length > 0, `src/domain 下有 ${domainFiles.length} 个领域模型文件`)
 const domainOffenders = []
 for (const f of domainFiles) {
   for (const [spec, line] of specifiersOf(path.join(DOMAIN_DIR, f))) {
     const where = `src/domain/${f}:${line}`
-    if (!spec.startsWith('./')) domainOffenders.push(`${where} 引了外层/外部：${spec}`)
+    if (spec.startsWith('./') || SHARED_SPEC.test(spec)) continue
+    domainOffenders.push(`${where} 引了外层/外部：${spec}`)
   }
 }
 ok(domainOffenders.length === 0,
-  'src/domain 只引同目录（不碰 store / adapter / view / miao / 三方包）')
+  'src/domain 只引同目录与 src/shared（不碰 store / adapter / view / miao / 三方包）')
 for (const o of domainOffenders.slice(0, 20)) console.log('        ' + o)
+
+/* 共用件反过来必须**零依赖** —— 领域层引它，所以它一条 import 都不能有：
+   引了 `node:` 就把运行环境带进领域层（`payload_hash` 的 crypto 之所以留在适配层，
+   就是这个道理），引了任何 src 模块则等于开了条绕过分层的后门。 */
+const sharedFiles = fs.readdirSync(SHARED_DIR).filter(f => f.endsWith('.js')).sort()
+ok(sharedFiles.length > 0, `src/shared 下有 ${sharedFiles.length} 个共用件文件`)
+const sharedOffenders = []
+for (const f of sharedFiles) {
+  for (const [spec, line] of specifiersOf(path.join(SHARED_DIR, f))) {
+    sharedOffenders.push(`src/shared/${f}:${line} 引了 ${spec}`)
+  }
+}
+ok(sharedOffenders.length === 0, 'src/shared 零依赖（不引 node: 内置模块、不引任何 src 模块）')
+for (const o of sharedOffenders.slice(0, 20)) console.log('        ' + o)
 
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

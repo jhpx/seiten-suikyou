@@ -19,6 +19,7 @@ import { fetchEnka } from '../adapter/enka.js'
 import { ingestPayload } from '../adapter/ingest.js'
 import { buildAccountView, fmtTime, weightFilterOptions } from '../view/shape.js'
 import { createRateGate } from './rate-limit.js'
+import { parseArgs } from '../shared/util.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC = path.join(HERE, 'public')
@@ -286,18 +287,6 @@ export function startServer ({ port = 8787, host = '127.0.0.1', ...appOpts } = {
 }
 
 /* ---------------- 命令行入口 ---------------- */
-
-function parseArgs (argv) {
-  const out = {}
-  for (let i = 0; i < argv.length; i++) {
-    if (!argv[i].startsWith('--')) continue
-    const key = argv[i].slice(2)
-    const next = argv[i + 1]
-    if (next === undefined || next.startsWith('--')) out[key] = true
-    else { out[key] = next; i++ }
-  }
-  return out
-}
 
 /* 只有被当成脚本跑时才起服务；被 import 时（测试）什么都不做 */
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

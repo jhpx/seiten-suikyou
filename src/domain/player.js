@@ -10,23 +10,25 @@
  * ⚠️ payloadHash（原始响应指纹）不是玩家属性，是「这一次抓取」的元信息，
  *    所以它只在这儿**存着**，怎么算交给适配层（domain 不许碰 node:crypto）。
  */
-import { num } from './num.js'
+import { num } from '../shared/util.js'
 
 export class Player {
   constructor ({
     uid, nickname = null, level = null, worldLevel = null, signature = null,
     avatarIcon = null, nameCard = null, payloadHash = null, fetchedAt = null, characters = []
   } = {}) {
-    this.uid = uid
+    /* 类型不变量：数字字段 number|null（由 constructor 一次性归一，ofEnka / fromRow 不再 num）；
+       字符串字段缺了就是 null（nickname / signature / hash / 时间戳）。 */
+    this.uid = num(uid)
     this.nickname = nickname
-    this.level = level
-    this.worldLevel = worldLevel
+    this.level = num(level)
+    this.worldLevel = num(worldLevel)
     this.signature = signature
-    this.avatarIcon = avatarIcon   // profilePicture.avatarID（存 id，不存图名）
-    this.nameCard = nameCard
-    this.payloadHash = payloadHash // 原始响应指纹：判断「内容有没有变」
+    this.avatarIcon = num(avatarIcon)   // profilePicture.avatarID（存 id，不存图名）
+    this.nameCard = num(nameCard)
+    this.payloadHash = payloadHash      // 原始响应指纹：判断「内容有没有变」
     this.fetchedAt = fetchedAt
-    this.characters = characters   // Character[]
+    this.characters = characters        // Character[]
   }
 
   /* account 表的列。**顺序与 toValues 严格一致** */
@@ -66,11 +68,11 @@ export class Player {
     return new Player({
       uid,
       nickname: info.nickname ?? null,
-      level: num(info.level),
-      worldLevel: num(info.worldLevel),
+      level: info.level,
+      worldLevel: info.worldLevel,
       signature: info.signature ?? null,
-      avatarIcon: num(info.profilePicture?.avatarID),
-      nameCard: num(info.nameCardId)
+      avatarIcon: info.profilePicture?.avatarID,
+      nameCard: info.nameCardId
     })
   }
 }

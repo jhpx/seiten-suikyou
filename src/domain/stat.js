@@ -71,6 +71,8 @@ export const isIntegerStatKey = (key) => {
   return prop === StatType.ELEMENTAL_MASTERY || FIXED_PROPS.has(prop)
 }
 
+import { num } from '../shared/util.js'
+
 /*
  * 一条词条 = 类型 + 数值。
  *
@@ -80,7 +82,9 @@ export const isIntegerStatKey = (key) => {
 export class Stat {
   constructor (prop, value) {
     this.prop = prop
-    this.value = value
+    /* 类型不变量：词条数值一律是 number|null。在这儿转唯一的一次，
+       下游（subStatTotals / enkaNumsOf）直接信任它，不再各自 num。 */
+    this.value = num(value)
   }
 
   /** miao 短 key（cpct / hpPlus …）；认不出返回 null */

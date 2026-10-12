@@ -13,28 +13,25 @@
  *   · `skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推，这里不猜。
  *   · 圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
  */
-import { num } from './num.js'
+import { encodeJson, num, parseJson } from '../shared/util.js'
 import { Weapon } from './weapon.js'
 import { Artifact } from './artifact.js'
 
-/* JSON 列（skill_level_map）读回：解坏了当空，别让手工改过的库把整包读挂 */
-const parseMap = (text) => {
-  if (!text) return null
-  try { return JSON.parse(text) ?? null } catch { return null }
-}
-
 export class Character {
   constructor ({
-    uid, avatarId, level = null, promote = null, cons = 0, fetter = null, costume = 0,
+    uid, avatarId, level, promote, cons, fetter, costume,
     skillLevelMap = null, weapon = Weapon.none(), artifacts = [], source = 'enka', fetchedAt = null
   }) {
-    this.uid = uid
-    this.avatarId = avatarId             // avatarId，角色的稳定数字 id
-    this.level = level
-    this.promote = promote
-    this.cons = cons                     // 命座数 = talentIdList.length
-    this.fetter = fetter                 // 好感等级
-    this.costume = costume               // 皮肤 id，0 = 无
+    /* 类型不变量：标量字段 number|null（由 constructor 一次性归一，ofEnka / fromRow 不再 num）。
+       cons / costume 例外地**不是 null**：它们的「没有」就是 0（没命座 / 没皮肤），
+       所以用 `?? 0` 落到领域默认，而不是留 null。 */
+    this.uid = num(uid)
+    this.avatarId = num(avatarId)        // avatarId，角色的稳定数字 id
+    this.level = num(level)
+    this.promote = num(promote)
+    this.cons = num(cons) ?? 0           // 命座数 = talentIdList.length
+    this.fetter = num(fetter)            // 好感等级
+    this.costume = num(costume) ?? 0     // 皮肤 id，0 = 无
     this.skillLevelMap = skillLevelMap   // {天赋id: 等级}，读写时自己 JSON 编解码
     this.weapon = weapon                 // Weapon
     this.artifacts = artifacts           // Artifact[]
@@ -50,7 +47,7 @@ export class Character {
   /** 按 COLS 顺序的各列值（写 avatar 行用）。JSON 列在这儿编码；stamp 覆盖 fetched_at */
   toValues (stamp) {
     return [this.uid, this.avatarId, this.level, this.promote, this.cons, this.fetter,
-      this.costume, JSON.stringify(this.skillLevelMap),
+      this.costume, encodeJson(this.skillLevelMap),
       ...this.weapon.toValues(), this.source, stamp ?? this.fetchedAt]
   }
 
@@ -65,7 +62,7 @@ export class Character {
       cons: row.cons,
       fetter: row.fetter,
       costume: row.costume,
-      skillLevelMap: parseMap(row.skill_level_map),
+      skillLevelMap: parseJson(row.skill_level_map),
       weapon: Weapon.fromRow(row),
       artifacts,
       source: row.source,
@@ -75,13 +72,14 @@ export class Character {
 
   /** enka 的一个 avatarInfo → Character（含武器与圣遗物） */
   static ofEnka (ds, source = 'enka') {
+    /* 只映射字段：脏值 → number 交给 constructor，默认值（costume 的 0）也交给它 */
     return new Character({
-      avatarId: num(ds.avatarId),
-      level: num(ds.propMap?.['4001']?.val),
-      promote: num(ds.propMap?.['1002']?.val),
+      avatarId: ds.avatarId,
+      level: ds.propMap?.['4001']?.val,
+      promote: ds.propMap?.['1002']?.val,
       cons: ds.talentIdList ? ds.talentIdList.length : 0,
-      fetter: num(ds.fetterInfo?.expLevel),
-      costume: num(ds.costumeId) ?? 0,
+      fetter: ds.fetterInfo?.expLevel,
+      costume: ds.costumeId,
       skillLevelMap: ds.skillLevelMap || null,
       weapon: Weapon.ofEnka(ds.equipList),
       /* 武器（没有 reliquary）、位置认不出的装备，Artifact.ofEnka 会返回 null，滤掉。

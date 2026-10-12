@@ -15,24 +15,10 @@ import { ingestPayload } from '../adapter/ingest.js'
 import { fetchEnka } from '../adapter/enka.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
 import { diffPanels, REL_TOL, ABS_TOL } from '../adapter/panel-check.js'
+import { parseArgs } from '../shared/util.js'
 
 /* 界面文字 / 部位名 / 词条名都复用网页端那两张表，免得两处各写一套、加语言时漏改 */
 const uiText = i18n.uiText
-
-/* ---------------- 参数 ---------------- */
-
-function parseArgs (argv) {
-  const out = { _: [] }
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (!a.startsWith('--')) { out._.push(a); continue }
-    const key = a.slice(2)
-    const next = argv[i + 1]
-    if (next === undefined || next.startsWith('--')) out[key] = true
-    else { out[key] = next; i++ }
-  }
-  return out
-}
 
 const USAGE = `
 星天水镜 · 命令行评分
