@@ -1,19 +1,19 @@
 # miao 内核同步报告
 
-- 同步时间：2026-10-06 19:00:57
+- 同步时间：2026-10-12 20:20:37
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
-- 搬运文件：510 个 / 3605.4 KB
-- 处置方式：**原样搬运 502 个**　|　定点改写 8 个　|　本地生成 2 个
+- 搬运文件：514 个 / 3667.1 KB
+- 处置方式：**原样搬运 506 个**　|　定点改写 8 个　|　本地生成 2 个
 - 增量基准：最后一个动过 `vendor/miao` 的 git 提交
-- 相对上一版（提交 `924247a`）：新增 6 个　|　移除 1 个　|　内容变化 23 个　|　未动 483 个
+- 相对上一版（提交 `2838f6e`）：新增 4 个　|　移除 0 个　|　内容变化 17 个　|　未动 495 个
 
-搬运范围：components（6）、models（19）、resources（484）、tools（1）
+搬运范围：components（6）、models（19）、resources（488）、tools（1）
 
 ---
 
 ## 一、同步了哪些数据
 
-**结论先行：510 个文件里 502 个是逐字节原样搬运的，一行没改。**
+**结论先行：514 个文件里 506 个是逐字节原样搬运的，一行没改。**
 被改写的只有 8 个「和云崽机器人运行时绑定」的代码文件（第三节），
 另有 2 个文件是本项目手写的（第四节）。
 
@@ -27,15 +27,15 @@
 | 角色元数据 | 5 | `CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent` |
 | 领域模型 | 7 | `Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口 |
 | 路径工具 | 1 | `path.js` —— `#miao.path` 别名的目标 |
-| 角色数据 | 204 | 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`） |
-| 武器数据 | 270 | 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件 |
+| 角色数据 | 207 | 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`） |
+| 武器数据 | 271 | 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件 |
 | 圣遗物数据 | 6 | 部位与套装数据、副词条基准、评分权重表（`artis-mark.js`） |
 | 素材数据 | 4 | 突破素材（`CharMeta` 引用了 `Material` 模型）、素材缩写、每日材料 |
 
 ### 1.2 资源数据的构成
 
-- **角色数据 204 个** = 125 个角色的 `data.json`（等级 / 突破 / 天赋等基础数据）＋ 75 个角色的 `artis.js`（该角色专属的评分规则，并非每个角色都有）＋ 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
-- **武器数据 270 个** = 256 把武器的详情 `data.json`（单手剑 60、法器 56、弓 51、双手剑 46、长柄武器 43）＋ 5 类各 1 个 `calc.js`（武器特效数值换算）与 1 个类型级 `data.json` ＋ 4 个索引文件（`index` / `alias` / `desc` / `extra`）
+- **角色数据 207 个** = 127 个角色的 `data.json`（等级 / 突破 / 天赋等基础数据）＋ 76 个角色的 `artis.js`（该角色专属的评分规则，并非每个角色都有）＋ 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **武器数据 271 个** = 257 把武器的详情 `data.json`（单手剑 60、法器 57、弓 51、双手剑 46、长柄武器 43）＋ 5 类各 1 个 `calc.js`（武器特效数值换算）与 1 个类型级 `data.json` ＋ 4 个索引文件（`index` / `alias` / `desc` / `extra`）
 - **圣遗物数据 6 个** = 部位与套装数据（`data.json`）、副词条基准（`calc.js`）、评分权重表（`artis-mark.js`）、别名、`extra`、`index`
 - **素材数据 4 个** = 突破素材（角色元数据引用了 `Material` 模型）、素材缩写（`abbr.js`）、每日材料（`daily.js`）、`index`
 
@@ -56,62 +56,53 @@
 
 ## 二、相对上一版差在哪
 
-基准是提交 `924247a`（2026-09-20 00:11:57 +0800）—— 也就是上一版同步的产物。
+基准是提交 `2838f6e`（2026-10-06 21:10:42 +0800）—— 也就是上一版同步的产物。
 
 差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件
 （同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。
 
-- 新增 **6** 个　- 移除 **1** 个　- 内容变化 **23** 个　- 未动 **483** 个
+- 新增 **4** 个　- 移除 **0** 个　- 内容变化 **17** 个　- 未动 **495** 个
 
-### 新增（6 个）
+### 新增（4 个）
 
-- **武器数据**（6 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
-
-<details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
-
-- `resources/meta-gs/weapon/bow/柔风游弦/data.json`
-- `resources/meta-gs/weapon/catalyst/凝雪沉心/data.json`
-- `resources/meta-gs/weapon/catalyst/漩流颂歌/data.json`
-- `resources/meta-gs/weapon/sword/新枝/data.json`
-- `resources/meta-gs/weapon/sword/蝶变/data.json`
-- `resources/meta-gs/weapon/sword/银釭/data.json`
-
-</details>
-
-### 移除（1 个）
-
-- **角色数据**（1 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **角色数据**（3 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **武器数据**（1 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
 
 <details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
 
-- `resources/meta-gs/character/胡桃/artis.js`
+- `resources/meta-gs/character/奥黛塔/artis.js`
+- `resources/meta-gs/character/瓦列里/data.json`
+- `resources/meta-gs/character/米提亚/data.json`
+- `resources/meta-gs/weapon/catalyst/秘星典谕/data.json`
 
 </details>
 
-### 内容变化（23 个）
+### 移除（0 个）
 
-- **评分算法**（1 个）—— `Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体
-- **角色数据**（12 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
-- **武器数据**（7 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
-- **圣遗物数据**（2 个）—— 部位与套装数据、副词条基准、评分权重表（`artis-mark.js`）
+（无）
+
+### 内容变化（17 个）
+
+- **角色元数据**（1 个）—— `CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent`
+- **领域模型**（2 个）—— `Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口
+- **角色数据**（3 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **武器数据**（9 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
+- **圣遗物数据**（1 个）—— 部位与套装数据、副词条基准、评分权重表（`artis-mark.js`）
 - **素材数据**（1 个）—— 突破素材（`CharMeta` 引用了 `Material` 模型）、素材缩写、每日材料
 
 <details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
 
-- `models/artis/ArtisMarkCfg.js`
+- `models/character/CharMeta.js`
+- `models/Character.js`
+- `models/Material.js`
 - `resources/meta-gs/character/alias.js`
 - `resources/meta-gs/character/data.json`
-- `resources/meta-gs/character/可莉/artis.js`
-- `resources/meta-gs/character/宵宫/artis.js`
-- …（本类共 12 个，余下省略）
+- `resources/meta-gs/character/extra.js`
 - `resources/meta-gs/weapon/alias.js`
-- `resources/meta-gs/weapon/bow/calc.js`
-- `resources/meta-gs/weapon/bow/data.json`
 - `resources/meta-gs/weapon/catalyst/calc.js`
 - `resources/meta-gs/weapon/catalyst/data.json`
-- `resources/meta-gs/weapon/sword/calc.js`
-- `resources/meta-gs/weapon/sword/data.json`
-- `resources/meta-gs/artifact/alias.js`
+- `resources/meta-gs/weapon/catalyst/凝雪沉心/data.json`
+- …（本类共 9 个，余下省略）
 - `resources/meta-gs/artifact/artis-mark.js`
 - `resources/meta-gs/material/data.json`
 
@@ -154,20 +145,20 @@ rootPath 由「miao 的上两级」改为 miao 根（本项目没有云崽宿主
 
 ### `models/artis/ArtisMarkCfg.js`
 
-def/getCfg 透出 isDefaultWeight（上游权重表没这个角色、只能拿通用表兜底时为 true）
+def/getCfg 透出 isDefaultWeight（表里没这个角色、走通用兜底）与 isCustomWeight（专属规则默认分支手写了权重）
 
 ### `models/character/CharImg.js`
 
 整体替换为置空实现（渲染层，写死云崽路径且依赖 image-size）
 
-- import：移除 `node:fs`、`lodash`、`image-size`、`#miao.path`
+- import：移除 `node:fs`、`node:path`、`node:url`、`lodash`、`image-size`、`#miao`、`#miao.path`
 
 ### `models/Base.js`
 
 缓存定时器加 unref（原版 10 分钟 setTimeout 会把一次性脚本拖住）
 
 > 这里只讲「改了什么」，不贴 diff。要逐行核对：`git log -p -- vendor/miao/<文件>`。
-> 资源数据（484 个）在本节没有任何条目 —— 因为它们一个字都没改。
+> 资源数据（488 个）在本节没有任何条目 —— 因为它们一个字都没改。
 
 ---
 
@@ -189,7 +180,7 @@ def/getCfg 透出 isDefaultWeight（上游权重表没这个角色、只能拿�
 
 ---
 
-## 五、没有改动的部分：502 个
+## 五、没有改动的部分：506 个
 
 除上面「改写的 + 生成的」以外，其余文件全部逐字节复制，同步脚本对它们零编辑：
 
@@ -197,7 +188,7 @@ def/getCfg 透出 isDefaultWeight（上游权重表没这个角色、只能拿�
 |---|---|---|---|
 | `components/` | 6 | 4 | `Data.js`、`index.js` |
 | `models/` | 19 | 14 | `Base.js`、`artis/ArtisMarkCfg.js`、`character/CharCfg.js`、`character/CharImg.js`、`index.js` |
-| `resources/` | 484 | 484 | —— 全部原样 |
+| `resources/` | 488 | 488 | —— 全部原样 |
 | `tools/` | 1 | 0 | `path.js` |
 
 资源数据是最能说明问题的一块：角色基础数据、角色评分规则、武器数据、圣遗物权重表、素材数据
