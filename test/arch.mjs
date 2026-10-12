@@ -221,5 +221,27 @@ for (const f of ['icon_charge_efficiency.svg', 'icon_critical_hurt.svg', 'icon_h
 ok(/stroke-width="\.3"/.test(fs.readFileSync(path.join(SVG_DIR, 'icon_ice_add_hurt.svg'), 'utf8')),
   'icon_ice_add_hurt.svg 保留 stroke-width（冰花枝的粗细靠它）')
 
+// ─────────────────────────────────── 7. 领域层不许反向依赖外层
+console.log('\n=== 7. 领域层（src/domain）只描述「是什么」，不依赖任何外层 ===')
+
+/* 领域模型是最内层（domain/artifact.js、domain/stat.js）。它存在的意义正是
+   「让内存里的形状不再由 DB 列名决定」，所以它**不许**反过来知道：
+   DB 列名（store）、enka 的响应（adapter）、miao 内核、页面渲染（view）。
+   一旦引了，它就退化成「跟着存储列名走的数据袋」—— 那正是它要解决的问题。
+   只许引同目录（`./xxx.js`），不比配 miao、不引三方包。 */
+const DOMAIN_DIR = path.join(ROOT, 'src', 'domain')
+const domainFiles = fs.readdirSync(DOMAIN_DIR).filter(f => f.endsWith('.js')).sort()
+ok(domainFiles.length > 0, `src/domain 下有 ${domainFiles.length} 个领域模型文件`)
+const domainOffenders = []
+for (const f of domainFiles) {
+  for (const [spec, line] of specifiersOf(path.join(DOMAIN_DIR, f))) {
+    const where = `src/domain/${f}:${line}`
+    if (!spec.startsWith('./')) domainOffenders.push(`${where} 引了外层/外部：${spec}`)
+  }
+}
+ok(domainOffenders.length === 0,
+  'src/domain 只引同目录（不碰 store / adapter / view / miao / 三方包）')
+for (const o of domainOffenders.slice(0, 20)) console.log('        ' + o)
+
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

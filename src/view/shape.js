@@ -13,9 +13,11 @@
  *      例外只有一处：**怎么显示**（不是算多少）—— 整数词条要收整、百分比词条要按十进制舍，
  *      miao 的 `Format.comma` / `Format.pct` 这两个口径都和游戏对不上，理由见 attrValueText。
  */
-import { ArtisMark, Artifact, Format, i18n, Weapon } from '../index.js'
+import { ArtisMark, Artifact as MiaoArtifact, Format, i18n, Weapon } from '../index.js'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.js'
-import { enkaPropKey } from '../store/props.js'
+import { Artifact } from '../domain/artifact.js'
+import { isIntegerStatKey } from '../domain/stat.js'
+import { num } from '../domain/num.js'
 
 /* miao 单条词条「分」公式：46.6 * _mark / 600（与 artis-mark.html 右栏数字逐字一致） */
 function statPoint (_mark) {
@@ -31,7 +33,7 @@ const KEY_TITLE = ArtisMark.getKeyTitleMap('gs')
  * 直接沿用就丢了「大/小」。卡片要跟 miao 长得一样，所以中文下优先用这张表。
  */
 let ARTI_TITLE = {}
-try { ARTI_TITLE = Artifact.getArtisKeyTitle('gs') || {} } catch { ARTI_TITLE = {} }
+try { ARTI_TITLE = MiaoArtifact.getArtisKeyTitle('gs') || {} } catch { ARTI_TITLE = {} }
 
 /* 「有效词条汇总」里 miao 会把标题再缩短一档：大生命/小生命 → 生命，暴击率 → 暴击 */
 const SHORT_TITLE = {
@@ -91,7 +93,8 @@ export function weightFilterOptions (locale) {
  * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num * 1).toFixed(fix)`，
  *    Number('1,015.8') 是 NaN，会原样吐出 'NaN'。先剥逗号再进。
  */
-const INT_ATTR_KEYS = new Set(['mastery', 'atkPlus', 'defPlus', 'hpPlus'])
+/* 「哪些词条是整数口径」的判据在领域层（domain/stat.js 的 isIntegerStatKey）：
+   它按词条的**类型**算（固定值三项 + 元素精通），比在这儿手抄一份 key 名单可靠。 */
 
 /* 十进制四舍五入前「推一把」的量，为什么需要见 decRound */
 const ROUND_NUDGE = 1e-9
@@ -125,16 +128,20 @@ const pctText = (num) => decRound(num) + '%'
  * enka 值能直接用是因为它和游戏同口径：固定值词条本来就是整数，百分比已乘 100。
  */
 export function attrValueText (key, value, coreRaw, enkaVal) {
-  const hasEnka = Number.isFinite(Number(enkaVal))
+  /* ⚠️ 判「有没有 enka 值」一律用 num()，**不许用 Number()** —— `Number(null) === 0`，
+     老库（<v3）那两列是 NULL，用 Number() 会把「没有」读成「0」，于是主词条显示成 0 / 0.0%
+     而兜底逻辑整条失效（真实库上踩过；老数据的显示就靠这段兜底）。 */
+  const enka = num(enkaVal)
   /* 整数词条（精通/小攻击/小生命/小防御）：一律收整 */
-  if (INT_ATTR_KEYS.has(key)) {
-    const n = hasEnka ? Number(enkaVal) : Number(String(value).replace(/,/g, ''))
-    return Number.isFinite(n) ? Format.comma(n, 0) : (hasEnka ? String(enkaVal) : value)
+  if (isIntegerStatKey(key)) {
+    const n = enka ?? num(String(value).replace(/,/g, ''))
+    return n !== null ? Format.comma(n, 0) : value
   }
   /* 百分比词条：有 enka 值就直接按十进制舍（它已是 ×100 的十进制）；
      没有才退回内核裸数字（要做 float32 噪声收敛）。都没有就原样透传内核串。 */
-  if (hasEnka) return pctText(Number(enkaVal))
-  return Number.isFinite(Number(coreRaw)) ? pctText(coreRaw) : value
+  if (enka !== null) return pctText(enka)
+  const core = num(coreRaw)
+  return core !== null ? pctText(core) : value
 }
 
 /*
@@ -149,19 +156,20 @@ export function rawNumsOf (artisEntry) {
 }
 
 /*
- * 从**库里那行**取 enka 的原始数值（artifact 表的 main_stat_value / sub_stats），
- * 按 miao key 归拢。这是显示数值的第一来源，见 attrValueText 上面的说明。
+ * 从一件圣遗物（模型 Artifact）取 enka 的原始数值，按 miao key 归拢。
+ * 这是显示数值的第一来源，见 attrValueText 上面的说明。
  *
- * 主词条数值只有一个（key 由内核自己从 main_prop_id 解出来，调用方用 marked.main.key 定位，
- * 不在这儿再解一遍）；副词条 key 由 enka 的字符串 prop 经 ENKA_PROP_TO_KEY 得到。
- * 老库（<v3）这两列是 NULL → 返回空，调用方自然退回内核值。
+ * 主词条数值只有一个（key 由内核自己从 main_prop_id 解出来、调用方用 marked.main.key 定位，
+ * 不在这儿再解一遍）；副词条的 key 由 Stat 自己的 prop 换算。
+ * 老库（<v3）这两处是空的 → 返回空，调用方自然退回内核值。
  */
-export function enkaNumsOf (dbRow) {
-  const main = Number.isFinite(Number(dbRow?.main_stat_value)) ? Number(dbRow.main_stat_value) : undefined
+export function enkaNumsOf (art) {
+  /* 走 num()（不是 Number()）：NULL 与「值为 0」必须分得开，见 attrValueText 上面的说明。 */
+  const main = num(art?.mainStatValue)
   const sub = new Map()
-  for (const s of dbRow?.sub_stats || []) {
-    const k = enkaPropKey(s?.prop)
-    if (k && Number.isFinite(Number(s.value))) sub.set(k, Number(s.value))
+  for (const s of art?.subStats || []) {
+    const v = s.key ? num(s.value) : null
+    if (v !== null) sub.set(s.key, v)
   }
   return { main, sub }
 }
@@ -355,16 +363,15 @@ export function attrTableOf (profile, locale, charWeight = {}, elem = '') {
   return [...rows, ...dmgRows.map(makeRow)]
 }
 
-/* 一件圣遗物：miao 的评分结果 + 库里那行（拿 hash 查名字、拿 enka 的原始数值做显示）
- * raw 是内核解析出的裸数字（`profile.artis.artis[pos]`），内核值只在库里没有 enka 值时兜底，
- * 见 enkaNumsOf */
-function artifactOf (pos, marked, dbRow, locale, raw) {
+/* 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
+ * raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
+function artifactOf (pos, marked, art, locale, raw) {
   const posName = slotLabel(pos, locale)
   if (!marked || !marked.name) return { pos, posName, empty: true }
 
   const setNameZh = marked.set || ''
   /* 显示数值：优先用 enka 的原始 statValue（与游戏一致），内核重算的值只兜底 */
-  const enka = enkaNumsOf(dbRow)
+  const enka = enkaNumsOf(art)
   const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
   const subs = (marked.attrs || [])
     .filter(x => x.key)
@@ -384,12 +391,12 @@ function artifactOf (pos, marked, dbRow, locale, raw) {
     pos,
     posName,
     empty: false,
-    name: (dbRow?.name_hash && i18n.name(dbRow.name_hash, locale)) || marked.name,
+    name: (art?.nameHash && i18n.name(art.nameHash, locale)) || marked.name,
     nameZh: marked.name,
-    setName: (dbRow?.set_hash && i18n.setNameByHash(dbRow.set_hash, locale)) || setNameZh,
+    setName: (art?.setHash && i18n.setNameByHash(art.setHash, locale)) || setNameZh,
     setNameZh,
     level: marked.level,
-    star: dbRow?.star ?? 5,
+    star: art?.star ?? 5,
     /* mark 是给眼睛看的串（1 位小数），markValue 给进度环用（0..70 的原始分） */
     mark: marked.mark,
     markValue: marked._mark || 0,
@@ -411,7 +418,7 @@ function artifactOf (pos, marked, dbRow, locale, raw) {
 
 /**
  * 一个角色 → 视图对象
- * @param {object} row      repo.loadAvatar 出来的一行（含 artifacts）
+ * @param {Character} ch    领域模型（见 domain/character.js），含武器与圣遗物
  * @param {object} profile  toMiaoProfile 出来的 miao profile
  * @param {object} result   ArtisMark.getMarkDetail(profile, true) 的结果
  * @param {string} locale   语言代码（认不出会退回默认语言）
@@ -459,11 +466,12 @@ export function classTitleOf (result) {
   }
   return title
 }
-export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCALE) {
+export function shapeCharacter (ch, profile, result, locale = i18n.DEFAULT_LOCALE) {
   const loc = i18n.resolveLocale(locale)
   const char = profile.char
-  const dbArtis = new Map((row.artifacts || []).map(a => [a.pos, a]))
-  const talent = deriveTalent(char, row.skill_level_map || {})
+  /* 圣遗物按位置索引（模型 Artifact）—— 渲染时拿 hash 查名字、拿 enka 数值做显示 */
+  const artifactsByPos = new Map((ch.artifacts || []).map(a => [a.pos, a]))
+  const talent = deriveTalent(char, ch.skillLevelMap || {})
   /* 生效权重：ArtisMark.getMarkDetail(profile, **true**) 的 charWeight。
      ⚠️ 第二个参数必须是 true —— charWeight 只在 withDetail 分支里挂上
      （vendor ArtisMark.js:231 `if (withDetail) ret.charWeight = …`），
@@ -491,21 +499,16 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
   for (const arti of Object.values(profile.artis?.artis || {})) {
     for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
   }
-  /* enka 侧的同一套加法：显示优先用它（与游戏同口径），见 attrValueText */
-  const enkaAll = {}
-  for (const arti of row.artifacts || []) {
-    for (const s of arti.sub_stats || []) {
-      const k = enkaPropKey(s?.prop)
-      if (k && Number.isFinite(Number(s.value))) enkaAll[k] = (enkaAll[k] || 0) + Number(s.value)
-    }
-  }
+  /* enka 侧的同一套加法：在模型上做（见 Artifact.subStatTotals）。
+     显示优先用它（与游戏同口径），见 attrValueText */
+  const enkaAll = Artifact.subStatTotals(ch.artifacts)
   const allAttr = Array.from({ length: 9 }, (_, i) => {
     const a = allAttrRaw[i]
     if (!a || !a.key) return {}
     return {
       key: a.key,
       label: shortLabel(a.key, loc),
-      value: attrValueText(a.key, a.value, rawAll[a.key], enkaAll[a.key]),
+      value: attrValueText(a.key, a.value, rawAll[a.key], enkaAll.get(a.key)),
       upNum: a.upNum || 0,
       eff: a.eff ?? '-',
       cls: weightClass(cw[a.key] || 0)
@@ -527,7 +530,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
 
   /* 武器：图标 + 主/副属性 + 精炼描述，全来自 miao 的 Weapon 元数据。
      上游是 Avatar.getWeaponDetail()（models/Avatar.js:225），我们没搬 Avatar，照它的逻辑重算。 */
-  const wObj = row.weapon_item_id ? Weapon.get(row.weapon_item_id) : null
+  const wObj = ch.weapon.equipped ? Weapon.get(ch.weapon.itemId) : null
   const weaponAttrs = {}
   let weaponDesc = ''
   if (wObj) {
@@ -546,7 +549,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
      两条都查不到 ≠ 角色没装备武器，而是「这把武器比我们的元数据新」——
      例：奥黛塔的 11438。enka 照样给了 level/promote/affix，说明是装备着的。
      两种情况在界面上必须分开说，前端靠下面的 state 选文案。 */
-  const wName = (row.weapon_item_id ? i18n.weaponName(row.weapon_item_id, loc) : null) ||
+  const wName = (ch.weapon.equipped ? i18n.weaponName(ch.weapon.itemId, loc) : null) ||
     profile.weapon.name || ''
 
   const imgs = charImgs(char)
@@ -559,7 +562,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
        展柜是子集，每次抓取只覆盖展柜里那几个，所以角色之间能差好几天（实测本库有
        10-11 与 10-06 并存）。列表页页脚报的是 UID 级时间（= 上次同步 enka，见
        buildAccountView 的 fetchedAt），两处语义不同，别混。 */
-    fetchedAt: fmtTime(row.fetched_at),
+    fetchedAt: fmtTime(ch.fetchedAt),
     name: i18n.avatarName(profile.id, loc) || char.name,
     nameZh: char.name,
     star: char.star || 5,
@@ -580,10 +583,10 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     talent: talentView,
     weapon: {
       /* 三态，前端按它选文案，别再靠「name 是不是空串」猜：
-         'none'    角色压根没装备武器（enka 里 weapon_item_id 就是空）
+         'none'    角色压根没装备武器（enka 里 weapon.itemId 就是空）
          'unknown' 装备了，但 i18n 表和 miao 元数据都不认识这把（新版本武器）
          'ok'      查到名字了 */
-      state: !row.weapon_item_id ? 'none' : (wName ? 'ok' : 'unknown'),
+      state: !ch.weapon.equipped ? 'none' : (wName ? 'ok' : 'unknown'),
       name: wName,
       nameZh: profile.weapon.name || '',
       /* 卡片里显示的是缩写名（上游 weapon.sName || weapon.name） */
@@ -599,7 +602,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
          卡片上就不至于空着一个格子。 */
       icon: wObj
         ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
-        : (row.weapon_item_id ? `/assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
+        : (ch.weapon.equipped ? `/assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
       attrs: weaponAttrs,
       desc: weaponDesc
     },
@@ -622,7 +625,7 @@ export function shapeCharacter (row, profile, result, locale = i18n.DEFAULT_LOCA
     allAttr,
     consList,
     artifacts: [1, 2, 3, 4, 5].map(pos =>
-      artifactOf(pos, result.artis?.[pos], dbArtis.get(pos), loc, profile.artis?.artis?.[pos]))
+      artifactOf(pos, result.artis?.[pos], artifactsByPos.get(pos), loc, profile.artis?.artis?.[pos]))
   }
 }
 
@@ -650,30 +653,31 @@ export function fmtTime (iso) {
  * 不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 ——
  * 新角色先于 miao 更新是常态。
  *
+ * @param {Player} opts.player     领域模型（见 domain/player.js），含账号信息与角色们
  * @param {object} opts.fetchedAt  这个 UID 最后一次抓取的原始 ISO UTC（= 上次同步 enka，
  *                                 通常取自 fetch_log 最新一条），出口转成本地时区文本。
- *                                 角色各自的时间在 shapeCharacter 里按 avatar.fetched_at 出。
+ *                                 角色各自的时间在 shapeCharacter 里按 character.fetchedAt 出。
  */
-export function buildAccountView ({ account, rows, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }) {
+export function buildAccountView ({ player, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }) {
   const loc = i18n.resolveLocale(locale)
   const avatars = []
   const skipped = []
-  for (const row of rows) {
-    const profile = toMiaoProfile(row)
-    if (!profile) { skipped.push(row.avatar_id); continue }
-    profile._raw = row
-    avatars.push(shapeCharacter(row, profile, ArtisMark.getMarkDetail(profile, true), loc))
+  for (const ch of player?.characters || []) {
+    const profile = toMiaoProfile(ch)
+    if (!profile) { skipped.push(ch.avatarId); continue }
+    profile._raw = ch
+    avatars.push(shapeCharacter(ch, profile, ArtisMark.getMarkDetail(profile, true), loc))
   }
   return {
     locale: loc,
     fetchedAt: fmtTime(fetchedAt),
-    account: account
+    account: player
       ? {
-          uid: account.uid,
-          nickname: account.nickname,
-          level: account.level,
-          worldLevel: account.world_level,
-          signature: account.signature
+          uid: player.uid,
+          nickname: player.nickname,
+          level: player.level,
+          worldLevel: player.worldLevel,
+          signature: player.signature
         }
       : null,
     count: avatars.length,

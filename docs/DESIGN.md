@@ -251,8 +251,8 @@ enka 原始响应
 4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
    所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
 5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
-   所以 `src/adapter/materialize.js` 的 `normalizeLevel()` 对 enka 减 1。
-   库里存的是原始值 + 来源，万一推断错了改一个函数就能全量重算，不用重新抓。
+   所以 `src/adapter/materialize.js` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
+   库里存的是原始值 + 来源，万一推断错了改这一行就能全量重算，不用重新抓。
 6. **`test/fixtures.mjs` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
    （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 小生命是 `hpPlus`、大生命才是 `hp`；
    羽毛的主词条同理应是 `atkPlus`）。因为 1/2 号位的主词条不参与评分、且胡桃的大小生命/攻击权重相同，

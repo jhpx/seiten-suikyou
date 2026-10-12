@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { openDb } from '../src/store/db.js'
-import { loadUid } from '../src/store/repo.js'
+import { loadPlayer } from '../src/store/repo.js'
 import { buildAccountView } from '../src/view/shape.js'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
@@ -33,8 +33,9 @@ const uids = db.prepare('SELECT uid FROM account').all().map(r => r.uid)
 
 const wanted = new Set()
 for (const uid of uids) {
-  const { avatars } = loadUid(db, uid)
-  const view = buildAccountView({ account: null, rows: avatars, locale: 'chs' })
+  const player = loadPlayer(db, uid)
+  if (!player) continue
+  const view = buildAccountView({ player, locale: 'chs' })
   for (const av of view.avatars) {
     wanted.add(urlToRel(av.splash))
     /* 首页角色网格用的正面大头照，和明细页的立绘是两张不同的图 */

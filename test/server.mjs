@@ -31,7 +31,7 @@ function eq (a, b, label) {
 
 /* 播种：把真实响应过一遍 ingest 落进内存库 */
 const summary = ingestPayload(REAL, { source: 'enka' })
-const UID = summary.uid
+const UID = summary.player.uid
 
 const app = await startServer({ port: 0, dbFile: ':memory:' })
 repo.saveFetch(app.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
@@ -303,7 +303,7 @@ console.log('\n=== 9. 武器三态 ===')
     const sum = ingestPayload(raw, { source: 'enka' })
     const a = await startServer({ port: 0, dbFile: ':memory:' })
     repo.saveFetch(a.db, { ...sum, stamp: '2026-09-13T00:00:00.000Z' })
-    const view = (await (await fetch(a.url + `/api/uid/${sum.uid}`)).json()).data
+    const view = (await (await fetch(a.url + `/api/uid/${sum.player.uid}`)).json()).data
     const w = view.avatars.find(x => x.avatarId === 10000016).weapon
     a.server.close()
 

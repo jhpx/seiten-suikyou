@@ -71,7 +71,8 @@ cdTime (data) {
 ```
 enka 原始响应 (JSON)
       │
-      │  ① ingest：挑字段、原始 id 原样保留、记录 source 与 level 基数、带走官方文案 key
+      │  ① ingest：把响应组装成领域模型（见 §2.1），挑字段与映射交给模型的 ofEnka；
+      │            原始 id 原样保留、记 source、带走官方文案 key
       ▼
 ┌─────────────────────────────────────────────────────────┐
 │  ② canonical store（DB，与语言无关）                     │
@@ -95,6 +96,26 @@ enka 原始响应 (JSON)
 |---|---|---|
 | ③ 计算 | miao 的中文名（**必须**，内核拿中文名查表） | miao 自己的 meta |
 | ④ 展示 | 用户语言的名字 | 官方文案表 / 我们自建的 i18n 表（§5） |
+
+### 2.1 领域模型（`src/domain/`）
+
+「存储契约」不是一堆列名，而是四个模型：
+
+| 模型 | 对应 | 说明 |
+|---|---|---|
+| `Player` | account 行 + 它名下的角色 | 聚合根；账号信息分批变，写库时对「本次没给值」的列用 COALESCE 保留旧值 |
+| `Character` | avatar 行 + 武器 + 5 件圣遗物 | 玩家实例（练成什么样），与 miao 的同名「图鉴 + 内核」模型不是一回事 |
+| `Weapon` | avatar 行里的 `weapon_*` 五列 | 1:1 嵌进角色行，不单独落表；`COLS` 由 `Character.COLS` 接进去 |
+| `Artifact` | artifact 行 | 保证 `appendPropIds` 保序保重复（内核靠它算词条数） |
+
+每个模型自己声明列名、自己序列化/反序列化（`COLS` / `toValues` / `fromRow`），
+所以「改一列要动几个文件」变成「改一个模型」；`ingest` 只做编排，
+挑字段与「enka 长什么样 → 模型」的映射都交给各模型的 `ofEnka`。
+
+⚠️ 模型**不许引外层**（`test/arch.mjs` 第 7 节：只许 `./`）—— 不许 import
+store / adapter / view / miao / 三方包。一旦它反过来依赖存储或数据源，就退化成
+「跟着 DB 列名走的数据袋」，那正是它要解决的问题。为此 `payload_hash` 的算法
+（要 `node:crypto`）留在适配层，模型只负责把它存下来。
 
 ---
 
@@ -129,7 +150,7 @@ enka 原始响应 (JSON)
   四个上游对 level 基数的假设不一致：`EnkaData` 做 `-1`，`MysPanelData` / `EnkaHSRApi` / `HomoApi` 都不做。
   而 `EnkaData` 里的 `Math.min(20, (re.level ?? 0) - 1)` —— 那个 **20 的上限只在「1 基」假设下才有意义**
   （0 基的话根本不会超 20），所以 enka 给的是 1 基（满级 = 21）。
-  存原始值 + 记基数，将来若推断错了，改一行归一化代码就能全量重算，**不用重新抓 enka**。
+  存原始值 + 记基数，将来若推断错了，改 `materialize` 里那一行减 1 就能全量重算，**不用重新抓 enka**。
   实测锚点：迪卢克满级 5★ 暴击伤害冠解析出 `62.2%`（若基数错会得 59.5%）。
 - **`append_prop_ids` 保序保重复**：这是「词条数 / 副词条有效率」的唯一来源，不能去重。
 - **技能等级存 `skill_level_map` 原始 JSON**（`{天赋id: 等级}`），不在 ingest 阶段拆成 `elem` / `talent_a/e/q`。

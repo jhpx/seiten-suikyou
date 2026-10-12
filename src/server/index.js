@@ -139,11 +139,11 @@ export function createApp ({
   /* 限流闸门。rateLimit 传 false 就没有闸门（本地调试用），后面判一下 null 即可 */
   const gate = createRateGate({ trustProxy, rules: rateLimit })
 
-  /* 库里的行 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
+  /* 库里的数据 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
   function viewOf (uid, locale) {
-    const { account, avatars: rows } = repo.loadUid(db, uid)
-    if (!rows.length && !account) return null
-    return buildAccountView({ account, rows, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
+    const player = repo.loadPlayer(db, uid)
+    if (!player) return null
+    return buildAccountView({ player, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
   }
 
   function handleFetch (uid) {
@@ -201,13 +201,13 @@ export function createApp ({
     /* ---- 库里有哪些 uid ---- */
     if (isGet && pathname === '/api/uids') {
       const list = repo.listUids(db).map(uid => {
-        const acc = repo.getAccount(db, uid)
+        const acc = repo.loadAccount(db, uid)
         return {
           uid,
           nickname: acc?.nickname ?? null,
           level: acc?.level ?? null,
-          worldLevel: acc?.world_level ?? null,
-          avatarCount: repo.listAvatarIds(db, uid).length,
+          worldLevel: acc?.worldLevel ?? null,
+          avatarCount: repo.listCharacterIds(db, uid).length,
           fetchedAt: fmtTime(repo.lastFetch(db, uid)?.fetched_at)   /* ISO UTC → 本地时区文本 */
         }
       })

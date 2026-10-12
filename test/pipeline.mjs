@@ -18,9 +18,10 @@ import { ArtisMark, Meta, Character, ArtisMarkCfg } from '../src/index.js'
 import { openDb, SCHEMA_VERSION } from '../src/store/db.js'
 import * as repo from '../src/store/repo.js'
 import { ingestPayload } from '../src/adapter/ingest.js'
-import { toMiaoProfile, normalizeLevel } from '../src/adapter/materialize.js'
+import { toMiaoProfile } from '../src/adapter/materialize.js'
 import { shapeCharacter } from '../src/view/shape.js'
-import { enkaPropKey, ENKA_PROP_TO_KEY } from '../src/store/props.js'
+import { Artifact } from '../src/domain/artifact.js'
+import { enkaPropKey, ENKA_PROP_TO_KEY } from '../src/domain/stat.js'
 import { diffPanels } from '../src/adapter/panel-check.js'
 
 let failed = 0
@@ -61,7 +62,7 @@ ok(!!weaponId, `能按数字 id 查到 5★ 长柄武器（id=${weaponId}）`)
 /* 刻意用原始 prop id，属性值只给 enka 真会给的那两样：
    flat.reliquaryMainstat.statValue（主词条数值）与 flat.reliquarySubstats（合并后的副词条） */
 
-/* miao key → enka 字符串 prop id（与 src/store/props.js 一致，测试里独立写一份防实现走偏） */
+/* miao key → enka 字符串 prop id（与 src/domain/stat.js 一致，测试里独立写一份防实现走偏） */
 const ENKA_PROP = {
   hp: 'FIGHT_PROP_HP_PERCENT', hpPlus: 'FIGHT_PROP_HP',
   atk: 'FIGHT_PROP_ATTACK_PERCENT', atkPlus: 'FIGHT_PROP_ATTACK',
@@ -136,44 +137,77 @@ const payload = {
   }]
 }
 
-/* ---------------- 3. level 归一化 ---------------- */
+/* ---------------- 3. level 基数（enka 1 基 → 内核 0 基） ---------------- */
 
-console.log('\n=== 1. level 基数归一化 ===')
-ok(normalizeLevel(21, 'enka') === 20, 'enka 的 21（满级）→ 20', `实际 ${normalizeLevel(21, 'enka')}`)
-ok(normalizeLevel(13, 'enka') === 12, 'enka 的 13 → 12', `实际 ${normalizeLevel(13, 'enka')}`)
-ok(normalizeLevel(20, 'mys') === 20, '米游社的 20（0 基）→ 原样 20', `实际 ${normalizeLevel(20, 'mys')}`)
-ok(normalizeLevel(null, 'enka') === 0, '空值不炸，退回 0')
+console.log('\n=== 1. level 基数：enka 1 基 → 内核 0 基 ===')
+/* 库里存 enka 的原值（1 基，5★ 满级 21），组装 profile 时减 1 换成内核要的 0 基（满级 20）。
+   这里断言的就是内核实际收到的那个数 —— profile.artis.artis[pos].level。 */
+const coreLevelOf = (enkaLevel) => {
+  const one = structuredClone(payload)
+  one.avatarInfoList[0].equipList = [equip(1, 'hpPlus', [])]
+  one.avatarInfoList[0].equipList[0].reliquary.level = enkaLevel
+  return toMiaoProfile(ingestPayload(one, { source: 'enka' }).player.characters[0])?.artis?.artis?.['1']?.level
+}
+ok(coreLevelOf(21) === 20, 'enka 的 21（满级）→ 内核 20', `实际 ${coreLevelOf(21)}`)
+ok(coreLevelOf(13) === 12, 'enka 的 13 → 内核 12', `实际 ${coreLevelOf(13)}`)
+ok(coreLevelOf(1) === 0, 'enka 的 1（0 级）→ 内核 0', `实际 ${coreLevelOf(1)}`)
+
+/* ---------------- 3b. 初始词条条数 quality() ---------------- */
+
+/* quality = 初始副词条条数 —— 5★ 下就靠它区分「初始三词条(3) / 初始四词条(4)」。
+   为什么不能拿下面那份夹具来测：夹具是为**算分**造的，roll 条数与等级并不自洽
+   （满级 21 却只给 4 条 roll），对它调 quality() 会得到负数。所以在这儿按真实档位单独造。 */
+const fakeArtifact = (levelRaw, rollCount) => new Artifact({
+  pos: 1, itemId: 80540, levelRaw, star: 5, mainPropId: mainIdOf('hpPlus'),
+  appendPropIds: Array.from({ length: rollCount }, () => rollIdsOf('cdmg')[0]),
+  mainStatValue: 4780, subStats: []
+})
+
+console.log('\n=== 1b. 初始词条条数 quality() ===')
+ok(fakeArtifact(21, 8).quality() === 3, '满级 + 8 条 roll → 初始三词条',
+  `实际 ${fakeArtifact(21, 8).quality()}`)
+ok(fakeArtifact(21, 9).quality() === 4, '满级 + 9 条 roll → 初始四词条',
+  `实际 ${fakeArtifact(21, 9).quality()}`)
+ok(fakeArtifact(13, 6).quality() === 3, '12 级（升过 3 档）+ 6 条 roll → 初始三词条',
+  `实际 ${fakeArtifact(13, 6).quality()}`)
+ok(fakeArtifact(1, 4).quality() === 4, '0 级（未升过）+ 4 条 roll → 初始四词条',
+  `实际 ${fakeArtifact(1, 4).quality()}`)
+/* 这条是边界守卫：原始值 4 归一后是 3，3//4 = 0 档（对）；直接拿原始值 4 算，4//4 = 1 档（错，
+   会得出 3-1=2）。所以 quality() 必须用归一化后的等级。 */
+ok(fakeArtifact(4, 3).quality() === 3,
+  '原始 4 → 归一 3（升过 0 档）：拿原始值直接整除 4 会错算成 2',
+  `实际 ${fakeArtifact(4, 3).quality()}`)
 
 /* ---------------- 4. ingest ---------------- */
 
-console.log('\n=== 2. ingest：enka 响应 → 库行 ===')
+console.log('\n=== 2. ingest：enka 响应 → 领域模型 ===')
 const ingested = ingestPayload(payload, { source: 'enka' })
-const av0 = ingested.avatars[0]
+const av0 = ingested.player.characters[0]
 
-ok(ingested.uid === 900000001, 'uid 解析正确')
-ok(av0.avatar_id === 10000046, 'avatarId 解析正确')
+ok(ingested.player.uid === 900000001, 'uid 解析正确')
+ok(av0.avatarId === 10000046, 'avatarId 解析正确')
 ok(av0.level === 90 && av0.promote === 6, '等级 / 突破解析正确')
 ok(av0.cons === 3, '命座数 = talentIdList.length')
-ok(av0.weapon_item_id === weaponId, '武器按 itemId 存')
-ok(av0.weapon_affix === 1, '精炼等级：enka 的 0 → 精1')
-ok(av0.weapon_name_hash === 800766043, '武器名文案 key 带下来了（多语言靠它）',
-  `实际 ${av0.weapon_name_hash}`)
+ok(av0.weapon.itemId === weaponId, '武器按 itemId 存')
+ok(av0.weapon.affix === 1, '精炼等级：enka 的 0 → 精1')
+ok(av0.weapon.nameHash === 800766043, '武器名文案 key 带下来了（多语言靠它）',
+  `实际 ${av0.weapon.nameHash}`)
 ok(av0.artifacts.length === 5, '圣遗物 5 件')
 ok(av0.artifacts.map(a => a.pos).join(',') === '1,2,3,4,5', '位置按 1花2羽3沙4杯5头 映射')
-ok(av0.artifacts[0].level_raw === 21, 'level 存原始值（不在这儿归一化）')
-ok(av0.artifacts.every(a => a.name_hash) && new Set(av0.artifacts.map(a => a.name_hash)).size === 5,
+ok(av0.artifacts[0].levelRaw === 21, 'level 存原始值（不在这儿归一化）')
+ok(av0.artifacts.every(a => a.nameHash) && new Set(av0.artifacts.map(a => a.nameHash)).size === 5,
   '5 件的部件名文案 key 各不相同')
-ok(new Set(av0.artifacts.map(a => a.set_hash)).size === 1,
+ok(new Set(av0.artifacts.map(a => a.setHash)).size === 1,
   '同一套的 5 件共用同一个套装名文案 key',
-  `实际 ${JSON.stringify(av0.artifacts.map(a => a.set_hash))}`)
-ok(av0.artifacts[0].append_prop_ids.length === 4, 'append_prop_ids 条数正确')
+  `实际 ${JSON.stringify(av0.artifacts.map(a => a.setHash))}`)
+ok(av0.artifacts[0].appendPropIds.length === 4, 'appendPropIds 条数正确')
 /* 词条数是内核按 key 分组数出来的（ArtisAttr 里 tmp[key].upNum++），
    同一次 key 的多次 roll 可能是不同的 id（id 里编了数值档位），
    所以这里真正要守的是「原样保留每一次 roll，不许聚合、不许去重」 */
-const cdmgRolls = av0.artifacts[0].append_prop_ids.filter(id => artiMeta.attrIdMap[id]?.key === 'cdmg')
+const cdmgRolls = av0.artifacts[0].appendPropIds.filter(id => artiMeta.attrIdMap[id]?.key === 'cdmg')
 ok(cdmgRolls.length === 3, '同 key 的多次 roll 一条不少（这是词条数的唯一来源）',
-  `实际 ${JSON.stringify(av0.artifacts[0].append_prop_ids)}`)
-const 中文字 = JSON.stringify(ingested.avatars)
+  `实际 ${JSON.stringify(av0.artifacts[0].appendPropIds)}`)
+const 中文字 = JSON.stringify(ingested.player.characters)
 ok(!/[\u4e00-\u9fa5]/.test(中文字), '库行里没有中文名（存储层只存 id）',
   (中文字.match(/[\u4e00-\u9fa5]+/) || [])[0])
 
@@ -183,22 +217,22 @@ console.log('\n=== 3. 落库 → 读回（JSON 序列化不丢东西）===')
 const db = openDb(':memory:')
 repo.saveFetch(db, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
 
-const back = repo.loadUid(db, ingested.uid)
-ok(back.account?.nickname === '测试号', '账号读回正确')
-ok(back.avatars.length === 1, '角色读回正确')
+const back = repo.loadPlayer(db, ingested.player.uid)
+ok(back?.nickname === '测试号', '账号读回正确')
+ok(back.characters.length === 1, '角色读回正确')
 
-const a0 = back.avatars[0]
+const a0 = back.characters[0]
 const g0 = av0.artifacts[0]
 const b0 = a0.artifacts[0]
-ok(JSON.stringify(b0.append_prop_ids) === JSON.stringify(g0.append_prop_ids),
-  'append_prop_ids 读回逐字一致（含顺序与每一次 roll）',
-  `写入 ${JSON.stringify(g0.append_prop_ids)}\n        读回 ${JSON.stringify(b0.append_prop_ids)}`)
-ok(b0.main_prop_id === g0.main_prop_id && b0.item_id === g0.item_id && b0.level_raw === g0.level_raw,
+ok(JSON.stringify(b0.appendPropIds) === JSON.stringify(g0.appendPropIds),
+  'appendPropIds 读回逐字一致（含顺序与每一次 roll）',
+  `写入 ${JSON.stringify(g0.appendPropIds)}\n        读回 ${JSON.stringify(b0.appendPropIds)}`)
+ok(b0.mainPropId === g0.mainPropId && b0.itemId === g0.itemId && b0.levelRaw === g0.levelRaw,
   '主词条 id / 部件 id / level 读回一致')
-ok(JSON.stringify(a0.skill_level_map) === JSON.stringify(av0.skill_level_map), '天赋表读回一致')
-ok(b0.name_hash === g0.name_hash && b0.set_hash === g0.set_hash,
+ok(JSON.stringify(a0.skillLevelMap) === JSON.stringify(av0.skillLevelMap), '天赋表读回一致')
+ok(b0.nameHash === g0.nameHash && b0.setHash === g0.setHash,
   '文案 key 读回一致（没有它，多语言就得重新抓一遍 enka）')
-ok(a0.weapon_name_hash === av0.weapon_name_hash, '武器文案 key 读回一致')
+ok(a0.weapon.nameHash === av0.weapon.nameHash, '武器文案 key 读回一致')
 
 /* ---------------- 6. 两条路算出的分必须一样 ---------------- */
 
@@ -238,19 +272,19 @@ second.avatarInfoList = [{
   ]
 }]
 repo.saveFetch(db, { ...ingestPayload(second, { source: 'enka' }), stamp: '2026-01-02T00:00:00.000Z' })
-const merged = repo.listAvatarIds(db, ingested.uid)
+const merged = repo.listCharacterIds(db, ingested.player.uid)
 ok(merged.length === 2, `两次抓取各拿 1 个角色 → 库里累计 2 个（实际 ${merged.length}）`,
   `实际 ${JSON.stringify(merged)}`)
 ok(merged.includes(10000046), '第二次没抓到的胡桃仍在库里')
-ok(repo.lastFetch(db, ingested.uid)?.fetched_at === '2026-01-02T00:00:00.000Z', '抓取流水记到最后一次')
+ok(repo.lastFetch(db, ingested.player.uid)?.fetched_at === '2026-01-02T00:00:00.000Z', '抓取流水记到最后一次')
 
 /* ---------------- 8. 重复抓取幂等 ---------------- */
 
 console.log('\n=== 6. 同一份数据抓两次，结果不变 ===')
 repo.saveFetch(db, { ...ingested, stamp: '2026-01-03T00:00:00.000Z' })
-const again = scoreOf(repo.loadAvatar(db, ingested.uid, 10000046))
+const again = scoreOf(repo.loadCharacter(db, ingested.player.uid, 10000046))
 ok(again.mark === viaDb.mark, `重复抓取后分数不变（${again.mark}）`)
-ok(repo.listAvatarIds(db, ingested.uid).length === 2, '重复抓取不会新增重复行')
+ok(repo.listCharacterIds(db, ingested.player.uid).length === 2, '重复抓取不会新增重复行')
 
 /* ---------------- 9. 脏数据不炸 ---------------- */
 
@@ -263,7 +297,7 @@ dirty.avatarInfoList[0].equipList.push({
 let dirtyScore = null
 let dirtyThrew = false
 try {
-  dirtyScore = scoreOf(ingestPayload(dirty, { source: 'enka' }).avatars[0])
+  dirtyScore = scoreOf(ingestPayload(dirty, { source: 'enka' }).player.characters[0])
 } catch (e) {
   dirtyThrew = true
   console.log('        ' + e.message)
@@ -272,7 +306,7 @@ ok(!dirtyThrew, '认不出的部件 id 不会抛异常')
 ok(!!dirtyScore, '脏数据仍能算出分（坏的那件跳过）')
 
 const unknownChar = { ...structuredClone(payload), avatarInfoList: [{ avatarId: 999999999, propMap: {}, equipList: [] }] }
-ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).avatars[0]) === null,
+ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).player.characters[0]) === null,
   'miao 不认识的角色返回 null，不抛异常')
 
 /* ---------------- 10. 老库升级 ---------------- */
@@ -316,14 +350,14 @@ ok(cols(d, 'artifact').includes('main_stat_value') && cols(d, 'artifact').includ
 ok(d.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION,
   `user_version 升到 ${SCHEMA_VERSION}`)
 
-const after = repo.loadUid(d, ingested.uid)
-ok(after.avatars.length === 1 && after.avatars[0].artifacts.length === 5,
+const after = repo.loadPlayer(d, ingested.player.uid)
+ok(after.characters.length === 1 && after.characters[0].artifacts.length === 5,
   '升级后老数据一条不丢（1 个角色 5 件圣遗物）')
-const stillScores = scoreOf(after.avatars[0])
+const stillScores = scoreOf(after.characters[0])
 ok(stillScores?.mark === viaDb.mark, `升级后照旧能算出同一个分（${stillScores?.mark}）`)
-ok(after.avatars[0].artifacts[0].name_hash === null, '老行补出来的新列是 NULL（不是 0，也别拿 0 充数）')
+ok(after.characters[0].artifacts[0].nameHash === null, '老行补出来的新列是 NULL（不是 0，也别拿 0 充数）')
 /* 老库没 enka 数值 → 显示退回内核值，不炸 */
-const oldView = shapeCharacter(after.avatars[0], toMiaoProfile(after.avatars[0]), stillScores, 'chs')
+const oldView = shapeCharacter(after.characters[0], toMiaoProfile(after.characters[0]), stillScores, 'chs')
 ok(!!oldView.artifacts[0].main, '老库（无 enka 数值）主词条照样显示，退回内核值')
 d.close()
 
@@ -353,16 +387,16 @@ const realRaw = JSON.parse(fs.readFileSync(path.join('test', 'data', 'enka-real.
 const realIn = ingestPayload(realRaw, { source: 'enka' })
 const realDb = openDb(':memory:')
 repo.saveFetch(realDb, { ...realIn, stamp: '2026-01-04T00:00:00.000Z' })
-const realBack = repo.loadUid(realDb, realIn.uid)
+const realBack = repo.loadPlayer(realDb, realIn.player.uid)
 
-ok(realBack.avatars.length === 3, `真实响应 3 个角色全部入库（实际 ${realBack.avatars.length}）`)
-ok(realBack.avatars.every(a => a.artifacts.length === 5 || a.artifacts.length === 0),
+ok(realBack.characters.length === 3, `真实响应 3 个角色全部入库（实际 ${realBack.characters.length}）`)
+ok(realBack.characters.every(a => a.artifacts.length === 5 || a.artifacts.length === 0),
   '每件圣遗物都落在 1~5 号位')
 
 const profileById = new Map()
-for (const row of realBack.avatars) {
-  const p = toMiaoProfile(row)
-  if (p) profileById.set(row.avatar_id, p)
+for (const ch of realBack.characters) {
+  const p = toMiaoProfile(ch)
+  if (p) profileById.set(ch.avatarId, p)
 }
 ok(profileById.size === 3, '3 个角色 miao 都认识')
 
@@ -375,7 +409,7 @@ ok(cmp.ok,
 
 /* 顺带用真实数据锚一个数值：迪卢克的满级 5★ 暴击伤害冠 = 62.2%
    这一条同时证明 level 21→20 的归一化在真实数据上也对（错了会变 59.5） */
-const diluc = realBack.avatars.find(a => a.avatar_id === 10000016)
+const diluc = realBack.characters.find(a => a.avatarId === 10000016)
 const dilucMark = diluc ? scoreOf(diluc) : null
 ok(dilucMark?.artis['5']?.main?.value === '62.2%',
   '真实数据锚点：迪卢克暴伤冠主词条 = 62.2%（level 归一化在真实数据上也对）',
@@ -722,6 +756,19 @@ const { attrValueText } = await import('../src/view/shape.js')
   /* 拿不到裸数字（汇总过的串、CLI 那些老调用方）时原样用内核的串 —— 不许瞎猜 */
   ok(attrValueText('hp', '5.2%') === '5.2%', '没有裸数字 → 原样用内核的串（不猜）')
   ok(attrValueText('hp', '') === '', '空值原样返回')
+
+  /* ⚠️ 老库（<v3）主词条那两列是 NULL。传进来必须被当成「没有 enka 值」，而不是 0 ——
+     `Number(null) === 0` 会把主词条钉成 0（整数词条）/ 0.0%（百分比词条），
+     兜底逻辑整条失效；真实库上就是这么被看见的（满级花主词条显示「生命值 0」）。
+     三种「空」各钉一条：null / undefined / 空串（走 num()，不走 Number()）。 */
+  ok(attrValueText('hp', '46.6%', 46.62, null) === '46.6%',
+    'enka 值为 null → 退回内核值，不当成 0（百分比）')
+  ok(attrValueText('hp', '46.6%', 46.62, undefined) === '46.6%',
+    'enka 值为 undefined → 退回内核值（百分比）')
+  ok(attrValueText('hpPlus', '4,778.6', 4778.55, null) === '4,779',
+    'enka 值为 null → 退回内核值，不当成 0（整数词条）')
+  ok(attrValueText('hp', '0.0%', 0, 0) === '0.0%',
+    'enka 值**真是 0** 时照用（0 和「没有」分得开，这正是不能用 Number() 的原因）')
 }
 {
   /* 面板同一条口径 —— 否则卡片 5.3%、面板 5.2%，同一页自己打自己 */
@@ -740,12 +787,12 @@ console.log('\n=== 14. 圣遗物显示用 enka 原始数值（不走内核重算
   /* 用一份干净的库，别受前面几节改库的影响 */
   const vdb = openDb(':memory:')
   repo.saveFetch(vdb, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
-  const row = repo.loadUid(vdb, ingested.uid).avatars.find(a => a.avatar_id === 10000046)
+  const row = repo.loadPlayer(vdb, ingested.player.uid).characters.find(a => a.avatarId === 10000046)
   const a1 = row.artifacts.find(a => a.pos === 1)
-  ok(Number.isFinite(a1?.main_stat_value), '主词条数值落库了（main_stat_value）',
-    `实际 ${a1?.main_stat_value}`)
-  ok(Array.isArray(a1?.sub_stats) && a1.sub_stats.length > 0, '副词条数值落库了（sub_stats 数组）',
-    `实际 ${JSON.stringify(a1?.sub_stats)}`)
+  ok(Number.isFinite(a1?.mainStatValue), '主词条数值落库了（mainStatValue）',
+    `实际 ${a1?.mainStatValue}`)
+  ok(Array.isArray(a1?.subStats) && a1.subStats.length > 0, '副词条数值落库了（subStats 数组）',
+    `实际 ${JSON.stringify(a1?.subStats)}`)
 
   /* 花的主词条：enka 的 FIGHT_PROP_HP=4780（固定值）→ key 必须是 hpPlus（小生命）。
      映射搞反（hpPlus→HP_PERCENT）的话这里会显示成 46.6 => 直接钉死方向。 */
@@ -767,12 +814,18 @@ console.log('\n=== 14. 圣遗物显示用 enka 原始数值（不走内核重算
   ok(mastery?.value === '40', '副词条精通按 enka 值（2 次 roll × 20 = 40，不是内核那套 33）',
     `实际 ${mastery?.value}`)
 
-  /* 没有 enka 数值的老行：退回内核值，不炸 */
-  const noEnka = { ...row, artifacts: row.artifacts.map(a => ({ ...a, main_stat_value: null, sub_stats: null })) }
+  /* 没有 enka 数值的老行：退回内核值，不炸。
+     造法就是「模型里这两处留空」—— 模型是纯字段对象，展开再覆盖即可。 */
+  const noEnka = {
+    ...row,
+    artifacts: row.artifacts.map(a => new Artifact({ ...a, mainStatValue: null, subStats: [] }))
+  }
   const fallback = shapeCharacter(noEnka, toMiaoProfile(noEnka), scoreOf(noEnka), 'chs')
   const fbMain = fallback.artifacts.find(x => x.pos === 1)?.main?.value
-  ok(fbMain != null && fbMain !== '4,780',
-    '老行没有 enka 数值时退回内核值（不等于 enka 的 4,780）', `实际 ${fbMain}`)
+  /* 断言要钉到具体值：只写「不等于 4,780」的话，退化成 "0" 也能过（这就是它一开始漏掉的原因） */
+  ok(fbMain === '4,779',
+    '老行没有 enka 数值时退回内核值（4,779 = 内核 4,778.55 收整；有 enka 值才是 4,780）',
+    `实际 ${fbMain}`)
   vdb.close()
 }
 

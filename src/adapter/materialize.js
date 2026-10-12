@@ -1,30 +1,16 @@
 /*
- * materialize —— 把库里那几行组装成 miao 内核能吃的 profile
+ * materialize —— 把领域模型（一个 Character）组装成 miao 内核能吃的 profile
  *
  * 这是「计算出口」，方向是 id → 中文名：库里存的是与语言无关的数字 id，
  * 而内核拿中文名当键查表（usefulAttr[char.name]、weaponCfg['护摩之杖']）。
  *
  * 内核要求（缺了会炸）：char 必须是真 Character 对象、artis 必须是真 Artis 实例、
  * attr 得自己算好（76 个角色规则里 56 个要读它）、weapon 的 name 必须是中文。
- */
-import { Artis, Artifact, Attr, Character, Weapon } from '../index.js'
-
-/*
- * level 归一化 —— 全项目唯一需要「猜」数据源语义的地方。
  *
- * 内核要 0 基（5★ 满级 = 20），enka 给的是 1 基（满级 21）：依据是上游 EnkaData.js
- * 写的 `Math.min(20, level - 1)`，那个 20 的上限只在 1 基假设下才有意义。
- * 米游社那边不减，因为它给的就是 0 基。
- *
- * 库里存的是 level_raw（原样），基数差异在这里按 source 处理 —— 万一推错了，
- * 改这一个函数就能全量重算，不用重新抓 enka。
+ * ⚠️ 入参是我们自己的领域模型 Character（domain/character.js），不是 miao 的同名模型 ——
+ *    所以这里把 miao 的两个同名类显式改名成 Miao* 以示区分。
  */
-export function normalizeLevel (levelRaw, source = 'enka') {
-  const n = Number(levelRaw)
-  if (!Number.isFinite(n)) return 0
-  const normalized = source === 'enka' ? n - 1 : n
-  return Math.max(0, Math.min(20, normalized))
-}
+import { Artis, Artifact as MiaoArtifact, Attr, Character as MiaoCharacter, Weapon as MiaoWeapon } from '../index.js'
 
 /* 旅行者这类角色的元素要看天赋表；普通角色直接用 char.elem */
 export function deriveElem (char, skillLevelMap = {}) {
@@ -49,24 +35,30 @@ export function deriveTalent (char, skillLevelMap = {}) {
 }
 
 /**
- * 库里的一行（含圣遗物）→ miao profile
+ * 一个角色（领域模型）→ miao profile
+ * @param {import('../domain/character.js').Character} ch
  * @returns {object|null} 角色不被 miao 认识时返回 null
  */
-export function toMiaoProfile (row) {
-  const char = Character.get(row.avatar_id)
+export function toMiaoProfile (ch) {
+  const char = MiaoCharacter.get(ch.avatarId)
   if (!char) return null
 
-  /* 圣遗物仍然只喂「部件名 + 原始 prop id」，属性让内核自己解析 */
+  /* 圣遗物仍然只喂「部件名 + 原始 prop id」，属性让内核自己解析。
+     ch.artifacts 是领域模型对象（domain/artifact.js 的 Artifact），字段名跟它走。 */
   const artis = new Artis('gs', true)
-  for (const a of row.artifacts || []) {
-    const obj = Artifact.get(a.item_id)
+  for (const a of ch.artifacts || []) {
+    const obj = MiaoArtifact.get(a.itemId)
     if (!obj) continue
+    /* 等级基数：库里存的是 enka 的原值（1 基，5★ 满级 21），内核要 0 基（满级 20）——
+       两边刚好差 1，在这儿减掉。全项目只此一处需要「猜」上游语义，不另立模块。
+       将来若接了米游社那类 0 基的源，这儿要按 ch.source 分叉。 */
+    const level = Math.max(0, (Number(a.levelRaw) || 1) - 1)
     artis.setArtis(a.pos, {
       name: obj.name,
-      level: normalizeLevel(a.level_raw, row.source),
+      level,
       star: a.star,
-      mainId: a.main_prop_id,
-      attrIds: a.append_prop_ids
+      mainId: a.mainPropId,
+      attrIds: a.appendPropIds
     })
   }
 
@@ -74,20 +66,21 @@ export function toMiaoProfile (row) {
     isProfile: true,
     isGs: true,
     game: 'gs',
-    uid: row.uid,
+    uid: ch.uid,
     id: char.id,
     char,
-    elem: deriveElem(char, row.skill_level_map) || char.elem,
-    level: row.level,
-    promote: row.promote,
-    cons: row.cons ?? 0,
-    fetter: row.fetter,
-    costume: row.costume,
+    elem: deriveElem(char, ch.skillLevelMap) || char.elem,
+    level: ch.level,
+    promote: ch.promote,
+    cons: ch.cons ?? 0,
+    fetter: ch.fetter,
+    costume: ch.costume,
     weapon: {
-      name: row.weapon_item_id ? (Weapon.get(row.weapon_item_id)?.name || '') : '',
-      level: row.weapon_level ?? 1,
-      promote: row.weapon_promote ?? 0,
-      affix: row.weapon_affix ?? 1
+      /* 名字必须是中文（内核拿它查 weaponCfg）：没有武器就是空串 */
+      name: ch.weapon.equipped ? (MiaoWeapon.get(ch.weapon.itemId)?.name || '') : '',
+      level: ch.weapon.level ?? 1,
+      promote: ch.weapon.promote ?? 0,
+      affix: ch.weapon.affix ?? 1
     },
     artis
   }
@@ -101,14 +94,14 @@ export function toMiaoProfile (row) {
   return profile
 }
 
-/** 批量：库里一批行 → 一批 profile，顺手把不认识的角色挑出来 */
-export function toMiaoProfiles (rows) {
+/** 批量：一批角色（领域模型）→ 一批 profile，顺手把不认识的角色挑出来 */
+export function toMiaoProfiles (chars) {
   const profiles = []
   const skipped = []
-  for (const row of rows) {
-    const p = toMiaoProfile(row)
+  for (const ch of chars) {
+    const p = toMiaoProfile(ch)
     if (p) profiles.push(p)
-    else skipped.push(row.avatar_id)
+    else skipped.push(ch.avatarId)
   }
   return { profiles, skipped }
 }

@@ -3,58 +3,45 @@
  *
  * 写入是「合并式 upsert」而不是覆盖：enka 一次只给展柜里那几个角色，
  * 所以每次抓到的角色覆盖，没抓到的原样留着（fetched_at 自然落后，用来判断陈旧）。
+ *
+ * 进出都走领域模型（src/domain/）：列名、JSON 编解码、扁列 ↔ 字段名的对应全在模型里
+ * （`Player.COLS` / `Character.COLS` / `Artifact.COLS` + 各自的 `toValues` / `fromRow`）。
+ * 这里只做两件事：拿模型出的值拼 SQL，把查到的行交回模型解 —— 不再维护「哪列是 JSON」的清单。
  */
 import { tx } from './db.js'
+import { Player } from '../domain/player.js'
+import { Character } from '../domain/character.js'
+import { Artifact } from '../domain/artifact.js'
 
-const JSON_COLS = new Set(['skill_level_map', 'append_prop_ids', 'avatar_ids', 'sub_stats'])
-
-const j = (v) => (v === undefined ? null : JSON.stringify(v))
-const pj = (v) => (v ? JSON.parse(v) : null)
-
-/* 按列名从对象里取值，JSON 列序列化 */
-const rowValues = (cols, obj) => cols.map(c => (JSON_COLS.has(c) ? j(obj[c]) : obj[c] ?? null))
-
-/* 列名只写一遍（表结构改动只需动这两张常量），ON CONFLICT 那份由这里生成。
-   keepOnNull 里的列写 COALESCE：本次没给值的就保留库里旧值 —— 账号信息会分批变。 */
-const upsertSql = (table, cols, key, keepOnNull = []) => {
+/* 列名只写一遍（表结构改动只需动模型），ON CONFLICT 那份由这里生成。
+   keep 里的列写 COALESCE：本次没给值的就保留库里旧值 —— 账号信息会分批变。 */
+const upsertModel = (db, table, cols, key, values, keep = []) => {
   const set = cols
     .filter(c => !key.includes(c))
-    .map(c => (keepOnNull.includes(c) ? `${c} = COALESCE(excluded.${c}, ${table}.${c})` : `${c} = excluded.${c}`))
+    .map(c => (keep.includes(c) ? `${c} = COALESCE(excluded.${c}, ${table}.${c})` : `${c} = excluded.${c}`))
     .join(',\n      ')
-  return `INSERT INTO ${table} (${cols.join(', ')})
+  db.prepare(`INSERT INTO ${table} (${cols.join(', ')})
     VALUES (${cols.map(() => '?').join(', ')})
     ON CONFLICT (${key.join(', ')}) DO UPDATE SET
-      ${set}`
+      ${set}`).run(...values)
 }
-
-const upsert = (db, table, cols, key, row, keepOnNull) =>
-  db.prepare(upsertSql(table, cols, key, keepOnNull)).run(...rowValues(cols, row))
 
 /* ---------------- 写 ---------------- */
 
-const ACCOUNT_COLS = ['uid', 'nickname', 'level', 'world_level', 'signature',
-  'avatar_icon', 'name_card', 'fetched_at', 'payload_hash']
-/* 这几项这次没给（比如只抓到角色列表）时保留旧值，剩下的直接盖 */
-const ACCOUNT_KEEP = ['nickname', 'level', 'world_level', 'signature', 'avatar_icon', 'name_card']
-
-export function saveAccount (db, acc, stamp) {
-  upsert(db, 'account', ACCOUNT_COLS, ['uid'], { ...acc, fetched_at: stamp }, ACCOUNT_KEEP)
+/* 账号一行。模型自己把 camelCase 摊回列名，JSON 列（如果有）也自己编码 */
+export function savePlayer (db, player, stamp) {
+  upsertModel(db, 'account', Player.COLS, ['uid'], player.toValues(stamp), Player.KEEP)
 }
 
-const AVATAR_COLS = ['uid', 'avatar_id', 'level', 'promote', 'cons', 'fetter', 'costume', 'skill_level_map',
-  'weapon_item_id', 'weapon_name_hash', 'weapon_level', 'weapon_promote', 'weapon_affix', 'source', 'fetched_at']
+/* 一个角色：先写角色行（武器那几列由 Character.toValues 一并给出），再整体换掉它的 5 件圣遗物 */
+export function saveCharacter (db, ch, stamp) {
+  upsertModel(db, 'avatar', Character.COLS, ['uid', 'avatar_id'], ch.toValues(stamp))
 
-const ARTIFACT_COLS = ['uid', 'avatar_id', 'pos', 'item_id', 'level_raw', 'star',
-  'main_prop_id', 'append_prop_ids', 'main_stat_value', 'sub_stats', 'name_hash', 'set_hash']
-
-/* 存一个角色：先写角色行，再整体换掉它的 5 件圣遗物 */
-export function saveAvatar (db, uid, av, stamp) {
-  upsert(db, 'avatar', AVATAR_COLS, ['uid', 'avatar_id'], { ...av, uid, fetched_at: stamp })
-
-  db.prepare('DELETE FROM artifact WHERE uid = ? AND avatar_id = ?').run(uid, av.avatar_id)
-  const ins = db.prepare(`INSERT INTO artifact (${ARTIFACT_COLS.join(', ')})
-    VALUES (${ARTIFACT_COLS.map(() => '?').join(', ')})`)
-  for (const a of av.artifacts || []) ins.run(...rowValues(ARTIFACT_COLS, { ...a, uid, avatar_id: av.avatar_id }))
+  db.prepare('DELETE FROM artifact WHERE uid = ? AND avatar_id = ?').run(ch.uid, ch.avatarId)
+  /* 列名与各列的值都由 Artifact 自己给（COLS 与 toValues 一一对应） */
+  const ins = db.prepare(`INSERT INTO artifact (${Artifact.COLS.join(', ')})
+    VALUES (${Artifact.COLS.map(() => '?').join(', ')})`)
+  for (const a of ch.artifacts || []) ins.run(...a.toValues(ch.uid, ch.avatarId))
 }
 
 /* 抓取流水：成了记一笔拿到了哪些角色，失败了也记（前端据此提示「还有哪些没拿到」） */
@@ -65,12 +52,13 @@ function logFetch (db, { uid, source, stamp, ok, avatarIds = null, ttl = null, n
 }
 
 /* 一次抓取落库：账号 + 角色们 + 流水，包在一个事务里 */
-export function saveFetch (db, { uid, account, avatars, source = 'enka', stamp = new Date().toISOString(), ttl = null, note = '' }) {
+export function saveFetch (db, { player, source = 'enka', stamp = new Date().toISOString(), ttl = null, note = '' }) {
   return tx(db, () => {
-    if (account) saveAccount(db, { ...account, uid }, stamp)
-    for (const av of avatars) saveAvatar(db, uid, av, stamp)
-    logFetch(db, { uid, source, stamp, ok: 1, avatarIds: avatars.map(a => a.avatar_id), ttl, note })
-    return avatars.length
+    if (player) savePlayer(db, player, stamp)
+    const chars = player?.characters || []
+    for (const ch of chars) saveCharacter(db, ch, stamp)
+    logFetch(db, { uid: player.uid, source, stamp, ok: 1, avatarIds: chars.map(c => c.avatarId), ttl, note })
+    return chars.length
   })
 }
 
@@ -80,30 +68,35 @@ export function logFailure (db, { uid, source = 'enka', note = '', stamp = new D
 
 /* ---------------- 读 ---------------- */
 
-export function getAccount (db, uid) {
-  return db.prepare('SELECT * FROM account WHERE uid = ?').get(uid) || null
+export function loadAccount (db, uid) {
+  return Player.fromRow(db.prepare('SELECT * FROM account WHERE uid = ?').get(uid)) || null
 }
 
-export function listAvatarIds (db, uid) {
+export function listCharacterIds (db, uid) {
   return db.prepare('SELECT avatar_id FROM avatar WHERE uid = ? ORDER BY avatar_id').all(uid).map(r => r.avatar_id)
 }
 
-/* 读一个角色，带上它的圣遗物。返回的结构就是 ingest 的入参形状，方便对拍。 */
-export function loadAvatar (db, uid, avatarId) {
-  const av = db.prepare('SELECT * FROM avatar WHERE uid = ? AND avatar_id = ?').get(uid, avatarId)
-  if (!av) return null
+/* 读一个角色，带上它的圣遗物。圣遗物行交回 Artifact 自己解（JSON 列在模型里解码）。 */
+export function loadCharacter (db, uid, avatarId) {
+  const row = db.prepare('SELECT * FROM avatar WHERE uid = ? AND avatar_id = ?').get(uid, avatarId)
+  if (!row) return null
   const artis = db.prepare('SELECT * FROM artifact WHERE uid = ? AND avatar_id = ? ORDER BY pos').all(uid, avatarId)
-  return {
-    ...av,
-    skill_level_map: pj(av.skill_level_map),
-    artifacts: artis.map(a => ({ ...a, append_prop_ids: pj(a.append_prop_ids), sub_stats: pj(a.sub_stats) }))
-  }
+  return Character.fromRow(row, artis.map(r => Artifact.fromRow(r)))
 }
 
-export function loadUid (db, uid, avatarIds = null) {
-  const account = getAccount(db, uid)
-  const ids = avatarIds && avatarIds.length ? avatarIds : listAvatarIds(db, uid)
-  return { uid, account, avatars: ids.map(id => loadAvatar(db, uid, id)).filter(Boolean) }
+/*
+ * 读整个玩家：账号 + 角色们（Player 是聚合根）。
+ * 库里连账号带角色都没有 → null，上层据此回 404。
+ * avatarIds 给了就只读那几个（页面按需加载），不给读全部。
+ */
+export function loadPlayer (db, uid, avatarIds = null) {
+  const account = loadAccount(db, uid)
+  const ids = avatarIds && avatarIds.length ? avatarIds : listCharacterIds(db, uid)
+  const characters = ids.map(id => loadCharacter(db, uid, id)).filter(Boolean)
+  if (!account && !characters.length) return null
+  const player = account || new Player({ uid })
+  player.characters = characters
+  return player
 }
 
 export function listUids (db) {

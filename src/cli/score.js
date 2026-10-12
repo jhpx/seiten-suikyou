@@ -71,20 +71,20 @@ const padW = (s, n) => {
    只能当查不到时的兜底）。用 hash 查还有个好处：miao 哪天改了译名也不影响我们。 */
 const charName = (profile, locale) => i18n.avatarName(profile.id, locale) || profile.char.name
 
-function renderCharacter (row, profile, result, locale) {
+function renderCharacter (ch, profile, result, locale) {
   const char = profile.char
   const out = []
   const U = (key) => uiText(key, locale)
-  const dbArtis = new Map((row.artifacts || []).map(a => [a.pos, a]))
+  const artifactsByPos = new Map((ch.artifacts || []).map(a => [a.pos, a]))
 
-  const talent = deriveTalent(char, row.skill_level_map || {})
+  const talent = deriveTalent(char, ch.skillLevelMap || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
   const name = charName(profile, locale)
   /* 和网页一个口径（shape.js 的 weapon.state）：装备了但元数据不认识这把 → 「未知武器」，
      真没装备才是「无武器」。别再写成「（未识别）」—— 那是角色行的词，用在这里会让人
      以为角色没认出来。 */
-  const wname = (row.weapon_item_id ? i18n.weaponName(row.weapon_item_id, locale) : null) ||
-    profile.weapon.name || U(row.weapon_item_id ? 'unknownWeapon' : 'noWeapon')
+  const wname = (ch.weapon.equipped ? i18n.weaponName(ch.weapon.itemId, locale) : null) ||
+    profile.weapon.name || U(ch.weapon.equipped ? 'unknownWeapon' : 'noWeapon')
 
   out.push(`${name} ★${char.star || 5} Lv.${profile.level ?? '?'} ${U('cons')}${profile.cons} ${U('fetter')}${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
   out.push(`  ${U('weapon')}  ${wname} Lv.${profile.weapon.level} ${U('refine')}${profile.weapon.affix}`)
@@ -97,11 +97,11 @@ function renderCharacter (row, profile, result, locale) {
   for (const idx of [1, 2, 3, 4, 5]) {
     const a = result.artis?.[idx]
     if (!a || !a.name) { out.push(`  ${idx} ${slotLabel(idx, locale)}  ——`); continue }
-    const dbRow = dbArtis.get(idx)
+    const art = artifactsByPos.get(idx)
     /* 显示数值优先用 enka 原始值、内核值兜底；见 shape.js 的 attrValueText / enkaNumsOf */
-    const enka = enkaNumsOf(dbRow)
+    const enka = enkaNumsOf(art)
     const { main: rawMain, sub: rawSub } = rawNumsOf(profile.artis?.artis?.[idx])
-    const aname = (dbRow?.name_hash && i18n.name(dbRow.name_hash, locale)) || a.name
+    const aname = (art?.nameHash && i18n.name(art.nameHash, locale)) || a.name
     out.push(`  ${idx} ${slotLabel(idx, locale)}  ${padW(aname, 14)} ★5 Lv.${pad(a.level ?? 0, 2)}   ${pad(a.mark, 6)}  ${a.markClass}`)
     if (a.main && a.main.value !== undefined) {
       out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${attrValueText(a.main.key, a.main.value, rawMain, enka.main)}`)
@@ -134,8 +134,8 @@ async function main () {
     if (!uids.length) { console.log(`库里还没有数据（${dbFile}）`); return 0 }
     console.log(`库里共 ${uids.length} 个 UID（${dbFile}）：`)
     for (const uid of uids) {
-      const acc = repo.getAccount(db, uid)
-      const n = repo.listAvatarIds(db, uid).length
+      const acc = repo.loadAccount(db, uid)
+      const n = repo.listCharacterIds(db, uid).length
       console.log(`  ${uid}  ${acc?.nickname || '?'}  Lv.${acc?.level ?? '?'}  角色 ${n} 个  最后抓取 ${fmtTime(repo.lastFetch(db, uid)?.fetched_at) || '?'}`)
     }
     return 0
@@ -174,12 +174,12 @@ async function main () {
     }
   }
 
-  const uidInDb = uid || ingestSummary?.uid
+  const uidInDb = uid || ingestSummary?.player.uid
   if (!uidInDb) { console.error('没有可打分的 uid'); return 2 }
 
   /* ---- 2. 从库里读回来（刻意的：读回来才算证明存对了） ---- */
-  const { account, avatars } = repo.loadUid(db, uidInDb)
-  if (!avatars.length) {
+  const player = repo.loadPlayer(db, uidInDb)
+  if (!player?.characters.length) {
     console.log(`库里没有 uid ${uidInDb} 的角色数据。`)
     if (!args.offline && !args.file) {
       console.log('可能原因：该玩家没在游戏资料页开启角色展柜，enka 取不到角色。')
@@ -191,21 +191,21 @@ async function main () {
   const locale = i18n.resolveLocale(args.locale || i18n.DEFAULT_LOCALE)
 
   console.log(line())
-  console.log(`${uiText('account', locale)}  ${account?.nickname || '?'}（uid:${uidInDb}）  Lv.${account?.level ?? '?'}  ${uiText('worldLevel', locale)} ${account?.world_level ?? '?'}`)
+  console.log(`${uiText('account', locale)}  ${player?.nickname || '?'}（uid:${uidInDb}）  Lv.${player?.level ?? '?'}  ${uiText('worldLevel', locale)} ${player?.worldLevel ?? '?'}`)
   const src = ingestSummary
     ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.avatarCount} ${uiText('chars', locale)}`
     : uiText('offline', locale)
-  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${avatars.length} ${uiText('chars', locale)}`)
+  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${player.characters.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
   const filter = args.char ? String(args.char) : null
   const results = []
   const skipped = []
-  for (const row of avatars) {
-    const profile = toMiaoProfile(row)
-    if (!profile) { skipped.push(row.avatar_id); continue }
-    profile._raw = row
-    results.push({ row, profile, result: ArtisMark.getMarkDetail(profile, true) })
+  for (const ch of player.characters) {
+    const profile = toMiaoProfile(ch)
+    if (!profile) { skipped.push(ch.avatarId); continue }
+    profile._raw = ch
+    results.push({ ch, profile, result: ArtisMark.getMarkDetail(profile, true) })
   }
   if (skipped.length) {
     console.log(`提示  ${skipped.length} 个角色 miao 元数据里没有（id: ${skipped.join(', ')}），已跳过`)
@@ -221,9 +221,9 @@ async function main () {
   }
 
   /* ---- 4. 输出 ---- */
-  for (const { row, profile, result } of wanted) {
+  for (const { ch, profile, result } of wanted) {
     console.log(line())
-    console.log(renderCharacter(row, profile, result, locale))
+    console.log(renderCharacter(ch, profile, result, locale))
   }
 
   console.log(line())
@@ -261,8 +261,8 @@ async function main () {
   /* --json 走的是和网页端同一个成型出口（view/shape），命令行看到的和接口拿到的是同一份形状。
      额外保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
-    console.log(JSON.stringify(wanted.map(({ row, profile, result }) => ({
-      ...shapeCharacter(row, profile, result, locale),
+    console.log(JSON.stringify(wanted.map(({ ch, profile, result }) => ({
+      ...shapeCharacter(ch, profile, result, locale),
       charWeight: result.charWeight
     })), null, 2))
   }

@@ -5,8 +5,8 @@
 --      存进去就把多语言的门焊死了。
 --   2. 圣遗物只存原始 prop id（main_prop_id / append_prop_ids），
 --      绝不存解析后的属性值 —— 解析是 miao 内核的活，我们跟着它走。
---   3. level 存原始值，读的时候按 source 归一化。各数据源对 level 基数的假设不一样
---      （enka 是 1 基），万一将来发现推断错了，改一行代码就能全量重算，不用重新抓。
+--   3. level 存原始值（enka 是 1 基，5★ 满级 21），出口组装 profile 时减 1 换成内核的 0 基。
+--      万一将来发现推断错了，改那一行就能全量重算，不用重新抓。
 --   4. append_prop_ids 必须保序、保重复：内核就是靠「同一个 id 出现几次」算
 --      「词条数 / 副词条有效率」的，去重就废了。
 --   5. 除了「id」，还额外存「官方文案 key」（*_hash 三列）。它不是名字，是名字的 id ——
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS artifact (
   avatar_id       INTEGER NOT NULL,
   pos             INTEGER NOT NULL,
   item_id         INTEGER NOT NULL,   -- 部位物品 id（5 位数，前两位定套装）
-  level_raw       INTEGER NOT NULL,   -- 原样存，读时按 source 归一化
+  level_raw       INTEGER NOT NULL,   -- enka 原值（1 基）；内核要 0 基，出口处减 1
   star            INTEGER NOT NULL,   -- 星级
   main_prop_id    INTEGER NOT NULL,   -- 主词条 prop id（喂内核算分用的数字 id）
   append_prop_ids TEXT    NOT NULL,   -- JSON 数组，保序保重复
