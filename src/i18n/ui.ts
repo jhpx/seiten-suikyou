@@ -37,6 +37,12 @@ const TABLE: Record<string, Record<string, string>> = {
     sortAdd: '添加', sortRemove: '移除', sortUp: '上移', sortDown: '下移', sortHint: '按从上到下优先级排序，最多 3 项',
     detailTitle: '角色明细', artisRank: '圣遗物评级', artisTotal: '圣遗物总分',
     rule: '评分规则', scoredAt: '数据时间',
+    /* 明细页下侧的伤害计算（miao 同款「伤害计算」表）。敌人名（'小宝'）与署名（'冰翼'）是
+       内核 calc.js 给的中文串、不本地化（同 elemText 的处理）；句子本身按语言给。 */
+    dmgSection: '伤害计算', dmgType: '伤害类型', dmgCrit: '暴击伤害', dmgAvg: '期望伤害',
+    dmgBuff: 'Buff列表', dmgBuffTip: '部分Buff的触发条件以及层数可能影响实际伤害结果',
+    dmgEnemy: '目标为{lv}级{name}', dmgSource: '伤害计算来源：',
+    dmgLoading: '伤害计算中…', dmgFail: '伤害计算失败', dmgNone: '该角色暂无伤害计算',
     /* 上游出图这里还有半句「可使用 #角色名圣遗物 来查看评分详情」—— 那是 QQ 云崽的聊天指令
        （上游模板里写作 {{gameHash}}，渲染出来就是 #），网页版没有这个指令，照抄只会挂一个没头没尾的 #。 */
     artisNotice: '评分为<strong>喵喵版规则</strong>，仅供参考与娱乐。',
@@ -75,6 +81,10 @@ const TABLE: Record<string, Record<string, string>> = {
     sortAdd: '添加', sortRemove: '移除', sortUp: '上移', sortDown: '下移', sortHint: '按從上到下優先級排序，最多 3 項',
     detailTitle: '角色明細', artisRank: '聖遺物評級', artisTotal: '聖遺物總分',
     rule: '評分規則', scoredAt: '資料時間',
+    dmgSection: '傷害計算', dmgType: '傷害類型', dmgCrit: '暴擊傷害', dmgAvg: '期望傷害',
+    dmgBuff: 'Buff列表', dmgBuffTip: '部分Buff的觸發條件以及層數可能影響實際傷害結果',
+    dmgEnemy: '目標為{lv}級{name}', dmgSource: '傷害計算來源：',
+    dmgLoading: '傷害計算中…', dmgFail: '傷害計算失敗', dmgNone: '該角色暫無傷害計算',
     artisNotice: '評分為<strong>喵喵版規則</strong>，僅供參考與娛樂。',
     account: '帳號', data: '資料', weapon: '武器', sets: '套裝', substat: '副',
     scene: '場景', summary: '彙總', chars: '個角色', fetched: '最後抓取',
@@ -111,6 +121,10 @@ const TABLE: Record<string, Record<string, string>> = {
     sortAdd: 'Add', sortRemove: 'Remove', sortUp: 'Up', sortDown: 'Down', sortHint: 'Sorted by priority top to bottom, up to 3 conditions',
     detailTitle: 'Character Details', artisRank: 'Artifact Rank', artisTotal: 'Artifact Score',
     rule: 'Rule', scoredAt: 'Scored at',
+    dmgSection: 'Damage', dmgType: 'Damage Type', dmgCrit: 'Critical Hit', dmgAvg: 'Expected',
+    dmgBuff: 'Buff List', dmgBuffTip: 'Some buffs depend on trigger conditions and stack counts and may affect actual damage',
+    dmgEnemy: 'Target: Lv.{lv} {name}', dmgSource: 'Damage source: ',
+    dmgLoading: 'Calculating damage…', dmgFail: 'Damage calculation failed', dmgNone: 'No damage calculation for this character',
     /* 撇号直接写 ’（U+2019），别写 &rsquo; —— 这段文案走 createTextNode 渲染，HTML 实体没人解码，
        写实体会原样显示成「Miao&rsquo;s rules」 */
     artisNotice: 'Scores follow <strong>Miao’s rules</strong>, for reference and fun only.',
@@ -149,6 +163,10 @@ const TABLE: Record<string, Record<string, string>> = {
     sortAdd: '追加', sortRemove: '削除', sortUp: '上へ', sortDown: '下へ', sortHint: '上から下へ優先順位、最大 3 項目',
     detailTitle: 'キャラ詳細', artisRank: '聖遺物評価', artisTotal: '聖遺物スコア',
     rule: '採点ルール', scoredAt: '取得日時',
+    dmgSection: 'ダメージ計算', dmgType: 'ダメージ種類', dmgCrit: '会心ダメージ', dmgAvg: '期待値',
+    dmgBuff: 'Buffリスト', dmgBuffTip: '一部のBuffは発動条件や重数により実際のダメージに影響する場合があります',
+    dmgEnemy: '目標：Lv.{lv} {name}', dmgSource: 'ダメージ計算提供元：',
+    dmgLoading: 'ダメージ計算中…', dmgFail: 'ダメージ計算に失敗しました', dmgNone: 'このキャラのダメージ計算はありません',
     artisNotice: 'スコアは<strong>喵喵版ルール</strong>に準拠した参考・娯楽用の値です。',
     account: 'アカウント', data: 'ソース', weapon: '武器', sets: 'セット', substat: 'サブ',
     scene: 'シーン', summary: '集計', chars: 'キャラ', fetched: '最終取得',
@@ -185,6 +203,10 @@ const TABLE: Record<string, Record<string, string>> = {
     sortAdd: '추가', sortRemove: '제거', sortUp: '위로', sortDown: '아래로', sortHint: '위에서 아래로 우선순위, 최대 3개',
     detailTitle: '캐릭터 상세', artisRank: '성유물 등급', artisTotal: '성유물 점수',
     rule: '채점 규칙', scoredAt: '수집 시각',
+    dmgSection: '피해 계산', dmgType: '피해 유형', dmgCrit: '치명타 피해', dmgAvg: '기대 피해',
+    dmgBuff: '버프 목록', dmgBuffTip: '일부 버프는 발동 조건과 중첍에 따라 실제 피해에 영향을 줄 수 있습니다',
+    dmgEnemy: '목표: Lv.{lv} {name}', dmgSource: '피해 계산 출처: ',
+    dmgLoading: '피해 계산 중…', dmgFail: '피해 계산 실패', dmgNone: '이 캐릭터의 피해 계산 데이터가 없습니다',
     artisNotice: '점수는 <strong>喵喵 규칙</strong>을 따른 참고·오락용 값입니다.',
     account: '계정', data: '출처', weapon: '무기', sets: '세트', substat: '부옵션',
     scene: '시나리오', summary: '집계', chars: '캐릭터', fetched: '마지막 수집',

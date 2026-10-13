@@ -156,6 +156,7 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 | `GET /api/health` | 库里有几个 uid |
 | `GET /api/uids` | uid 列表（昵称、等级、角色数、最后抓取时间） |
 | `GET /api/uid/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
+| `GET /api/uid/:uid/character/:avatarId/damage` | 单个角色的伤害计算（明细页下侧那张表）。`data` 为 `null` = 这个角色算不出伤害（没配 calc.js 等） |
 | `POST /api/fetch` | `{uid, locale}` 从 enka 现抓一份并入库，直接回视图 |
 | `GET /assets/<路径>` | 图片素材（扩展名白名单 + 目录穿越防护 + 一天缓存） |
 | `GET /` | H5 页面 |

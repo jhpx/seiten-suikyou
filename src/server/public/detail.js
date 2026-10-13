@@ -5,7 +5,7 @@
 
 import {
   $, state, T, el, setBg, rankOf, slotGlyph, backToRoster, richText,
-  weaponFallback, weightClass, W_ATTR_TITLE, reg
+  weaponFallback, weightClass, W_ATTR_TITLE, api, reg
 } from './core.js'
 
 function renderDetail () {
@@ -158,6 +158,12 @@ function renderDetail () {
   pd.append(artis)
 
   cont.append(pd)
+
+  /* 伤害计算（miao 明细页下侧的「伤害计算」表）：先放一个 loading 骨架占位，
+     数据到了再填 —— renderDetail 是同步的（reg 契约），而伤害要跑一遍评分内核。 */
+  const dmgBox = el('div', 'dmg-wrap')
+  cont.append(dmgBox)
+  loadDamage(av, dmgBox)
 
   /* 画布最底下这行原来写的是出处「miao-plugin · 圣遗物评级 SS · 梦见月-星扩散」——
      评级和评分规则在 .arti-stat / .arti-class-title 里各占一块，这行只是把同样的字
@@ -326,6 +332,102 @@ function renderArtiCard (a, cw = {}) {
   }
   c.append(ul)
   return c
+}
+
+/* ───────────────────────── 伤害计算（明细页下侧） ─────────────────────────
+ * 结构照 miao 的 profile-detail.html「伤害表格」块：标题条 + 表格（表头 / 斑马纹数据行）
+ * + 页脚（敌人等级 + 署名），下面再挂一块 Buff 列表。去掉的两样都是网页版没有对应物的：
+ *   · dmg-idx 列（「#XX伤害+序号」指令选第几条用的，评分图里本来就 display:none）
+ *   · 「使用#XX伤害命令可以查看伤害详情」提示（QQ 指令，同 artisNotice 的处理）
+ *
+ * ⚠️ renderDetail 每渲染一次都会调 loadDamage（切语言、回首页再进来都会），而 fetch 是异步的：
+ *    回来时用户可能已经点了另一个角色。所以填之前必须核对还停在同一个角色上
+ *    （state.selectedAvatarId === av.avatarId）—— 否则会把 A 的伤害填进 B 的页面。
+ *    同一个角色重复渲染时旧请求回来也没关系：数据一样，且 box 已被 innerHTML='' 清空重建。
+ */
+async function loadDamage (av, box) {
+  box.append(dmgStatus(T('dmgLoading')))
+  let dmg = null
+  try {
+    dmg = await api(`/api/uid/${av.uid}/character/${av.avatarId}/damage`)
+  } catch (e) {
+    if (state.selectedAvatarId !== av.avatarId) return
+    console.error('[damage] 明细页伤害计算失败:', e)
+    box.innerHTML = ''
+    box.append(dmgStatus(T('dmgFail'), true))
+    return
+  }
+  if (state.selectedAvatarId !== av.avatarId) return
+  box.innerHTML = ''
+  /* data 为 null = 这个角色算不出伤害（没配 calc.js 等）—— 出一行小字说明，不出表 */
+  if (!dmg) { box.append(dmgStatus(T('dmgNone'))); return }
+  box.append(renderDmgList(dmg))
+  if (dmg.buffs?.length) box.append(renderDmgBuffs(dmg.buffs))
+}
+
+/* 骨架 / 失败 / 无数据三种「只有一行字」的状态共用一个外壳 */
+function dmgStatus (text, err = false) {
+  const cont = el('div', 'dmg-cont dmg-list cont')
+  cont.append(el('div', 'cont-title', T('dmgSection')))
+  cont.append(el('div', 'dmg-status' + (err ? ' err' : ''), text))
+  return cont
+}
+
+function dmgHead () {
+  const tr = el('div', 'tr thead')
+  tr.append(el('div', 'title dmg-title', T('dmgType')))
+  tr.append(el('div', '', T('dmgCrit')))
+  tr.append(el('div', '', T('dmgAvg')))
+  return tr
+}
+
+function renderDmgList (dmg) {
+  const cont = el('div', 'dmg-cont dmg-list cont')
+  cont.append(el('div', 'cont-title', T('dmgSection')))
+  const table = el('div', 'cont-table')
+  table.append(dmgHead())
+  for (const e of dmg.rows) {
+    const tr = el('div', 'dmg tr')
+    tr.append(el('div', 'title dmg-title', e.title))
+    if (e.dmg) {
+      tr.append(el('div', 'value', e.dmg + e.unit))
+      tr.append(el('div', 'value', e.avg + e.unit))
+    } else {
+      /* 反应 / 护盾 / 治疗类不吃暴击，没有暴击伤害 —— 期望值跨两列独占一行。
+         行里只发两个单元格（标题 + 期望值），跨列靠 CSS 的 grid-column，不是留个空单元格。 */
+      tr.append(el('div', 'value value-full', e.avg + e.unit))
+    }
+    table.append(tr)
+  }
+  cont.append(table)
+  const foot = el('div', 'cont-footer dmg-desc')
+  foot.append(el('span', '', T('dmgEnemy', { lv: dmg.enemyLv, name: dmg.enemyName })))
+  if (dmg.createdBy) {
+    /* 冒号在文案键里（dmgSource 末尾）—— 各语言的标点不一样，不硬拼 */
+    const by = el('span', 'dmg-created-by')
+    by.append(document.createTextNode(T('dmgSource')))
+    by.append(el('strong', '', dmg.createdBy))
+    foot.append(by)
+  }
+  cont.append(foot)
+  return cont
+}
+
+function renderDmgBuffs (buffs) {
+  const cont = el('div', 'dmg-cont dmg-msg cont')
+  const title = el('div', 'cont-title')
+  title.append(document.createTextNode(T('dmgBuff')))
+  title.append(el('span', '', T('dmgBuffTip')))
+  cont.append(title)
+  const table = el('div', 'cont-table')
+  for (const b of buffs) {
+    const tr = el('div', 'tr')
+    tr.append(el('div', 'th', b.title))
+    tr.append(el('div', 'td', b.desc))
+    table.append(tr)
+  }
+  cont.append(table)
+  return cont
 }
 
 reg.renderDetail = renderDetail

@@ -20,7 +20,7 @@ import { fetchEnka } from '../adapter/enka.ts'
 import type { FetchEnkaOpts } from '../adapter/enka.ts'
 import { ingestPayload } from '../adapter/ingest.ts'
 import type { IngestResult } from '../adapter/ingest.ts'
-import { buildAccountView, fmtTime, weightFilterOptions } from '../view/shape.ts'
+import { buildAccountView, fmtTime, weightFilterOptions, damageOf } from '../view/shape.ts'
 import { createRateGate } from './rate-limit.ts'
 import type { RateRules } from './rate-limit.ts'
 import { argValue, parseArgs } from '../shared/util.ts'
@@ -264,6 +264,27 @@ export function createApp ({
         return
       }
       sendJson(res, 200, { ok: true, data: view })
+      return
+    }
+
+    /* ---- 一个角色的伤害计算（明细页下侧的「伤害计算」表）----
+       data 为 null = 这个角色算不出伤害（没配 calc.js / 脚本崩了 / 元数据不认识），
+       页收到 null 就不出那一块 —— 与「角色不存在」是两件事，所以分开两种 404。 */
+    const mDmg = isGet && pathname.match(/^\/api\/uid\/(\d+)\/character\/(\d+)\/damage$/)
+    if (mDmg) {
+      const uid = Number(mDmg[1])
+      const avatarId = Number(mDmg[2])
+      const account = repo.loadAccountWithCharacters(db, uid)
+      if (!account) {
+        sendError(res, 404, 'no_data', `库里没有 uid ${uid}。先抓一次：POST /api/fetch {"uid":${uid}}`)
+        return
+      }
+      const ch = (account.characters || []).find(c => c.avatarId === avatarId)
+      if (!ch) {
+        sendError(res, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
+        return
+      }
+      sendJson(res, 200, { ok: true, data: await damageOf(ch) })
       return
     }
 

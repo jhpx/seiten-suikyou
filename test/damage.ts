@@ -10,6 +10,7 @@
  *   可莉      命座参数条目（cons 过滤 + params 开关）与固定值条目（basic 模式 dmg(555)）
  *   瓦列里    没配 calc.js 的角色 → null，且不许抛
  *   旅行者火  旅行者按元素分目录的 calc.js + 天赋多段值（a3 的 [低空, 高空] 对）+ 夜魂
+ *   坎蒂丝    带 unit 的条目（「Q提升普攻伤害」只有 avg、单位是 '%'）
  */
 import { Attr, Character } from '../src/index.ts'
 import { calcDamage } from '../src/adapter/damage.ts'
@@ -104,7 +105,15 @@ eq(traveler && traveler.entries.map((e) => ({ title: e.title, avg: num(e.avg) })
 eq(traveler?.createdBy, '冰翼', 'calc.js 署名（旅行者七个元素全是冰翼写的）')
 eq(traveler?.buffs, ['寒息：触发冰元素或水元素相关反应后，攻击力提升20.0%'], 'buff 列表')
 
-console.log('\n=== 5. materialize 桥：域模型 → profile.talent ===')
+console.log('\n=== 5. 坎蒂丝：带 unit 的条目（Q提升普攻伤害是百分比、只有 avg）===')
+const candace = await calcDamage(mkProfile('坎蒂丝', { name: '黑缨枪', affix: 1, level: 90 }))
+eq(candace && candace.entries.map((e) => ({ title: e.title, dmg: num(e.dmg), avg: num(e.avg), unit: e.unit })), [
+  { title: 'E护盾吸收', dmg: null, avg: '112189.8', unit: '' },
+  { title: '蓄力E伤害', dmg: '262375.1', avg: '219283.4', unit: '' },
+  { title: 'Q提升普攻伤害', dmg: null, avg: '289.2', unit: '%' }
+], '三条伤害（前一条护盾值与后一条百分比都只有 avg、不吃暴击，页面排成独占一行）')
+
+console.log('\n=== 6. materialize 桥：域模型 → profile.talent ===')
 /* 天赋等级是伤害计算的必填项（ProfileDmg.talent 读 profile.talent，缺了按 1 级算）。
    域模型存的是 {天赋id: 等级}，materialize 负责换算成 {a/e/q: 等级} —— 这里钉死它。 */
 const domainChar = new DomainCharacter({

@@ -855,3 +855,94 @@
   color: rgba(255, 255, 255, .55);
   text-align: right;
 }
+
+/* ───────────────────────── 伤害计算（明细页下侧，miao 的 dmg-cont） ─────────────────────────
+ * 结构照 miao 的 profile-detail.html「伤害表格」块：标题条 + 表头 / 斑马纹数据行 + 页脚。
+ * 版式从上游 profile-detail.css 搬过来，但**表格没用上游那套 display:table**：
+ *   上游让「不吃暴击」的行把期望值单元格设成 width:200% 来冒充跨两列。display:table 的
+ *   自动布局下，这个 200% 会当成整列的宽度需求 —— 有这种行的角色（迪奥娜护盾/治疗），
+ *   暴击列被撑到 311px、期望列只剩 56px，「期望伤害」四个字直接折成两行（实测截图）。
+ *   这里换成 grid：每行一个同模板 grid（minmax(0,42%) 1fr 1fr），跨列就是
+ *   grid-column: 2 / span 2，列宽稳不受行内容影响。
+ * 另两处网页版适配：标题列允许换行（上游 nowrap，600px 画布里长标题会溢出）；
+ * 数值列右对齐（上游没定对齐，一列数字左对齐没法比大小）。 */
+.dmg-cont {
+  margin: 10px 0;
+  border-radius: 10px;
+  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background-size: auto 100%;
+  box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
+  overflow: hidden;
+  color: #fff;
+  font-size: 16px;
+}
+.dmg-cont .cont-title {
+  background: rgba(0, 0, 0, 0.4);
+  color: #d3bc8e;
+  padding: 10px 20px;
+  text-align: left;
+}
+.dmg-cont .cont-title span {
+  font-size: 12px;
+  color: #aaa;
+  margin-left: 10px;
+  font-weight: normal;
+}
+.dmg-cont .cont-footer {
+  padding: 10px 15px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #ddd;
+}
+/* 每行自成一套同模板 grid —— 行与行之间列宽严格对齐（fraction 分量相同） */
+.dmg-cont .cont-table { display: grid; }
+.dmg-cont .tr {
+  display: grid;
+  grid-template-columns: minmax(0, 42%) 1fr 1fr;
+  align-items: stretch;
+}
+.dmg-cont .tr:nth-child(even) { background: rgba(0, 0, 0, 0.4); }
+.dmg-cont .tr:nth-child(odd) { background: rgba(50, 50, 50, 0.4); }
+.dmg-cont .tr > div {
+  box-shadow: 0 0 1px 0 #fff;
+  padding: 6px 0;
+  min-width: 0;
+}
+.dmg-cont .tr.thead { text-align: center; }
+.dmg-cont .tr.thead > div {
+  color: #d3bc8e;
+  background: rgba(0, 0, 0, 0.4);
+  height: 40px;
+  font-size: 15px;
+}
+.dmg-cont .tr .title,
+.dmg-cont .tr .th {
+  color: #d3bc8e;
+  padding: 6px 15px 6px 5px;
+  text-align: right;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 15px;
+}
+/* 标题列：左对齐、可换行（上游出图里是 nowrap + width:40%，见块首注释） */
+.dmg-cont .tr .title.dmg-title {
+  text-align: left;
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: normal;
+}
+/* 数值列右对齐，留 15px 呼吸（上游没定对齐，见块首注释） */
+.dmg-cont .tr > div.value { text-align: right; padding-right: 15px; }
+/* 不吃暴击的条目：期望值跨「暴击伤害 + 期望伤害」两列，行里只发两个单元格 */
+.dmg-cont .tr > div.value-full { grid-column: 2 / span 2; }
+/* Buff 列表是两列（来源 / 描述），与伤害表不同模板 —— 单独一套 */
+.dmg-cont.dmg-msg .tr { grid-template-columns: minmax(0, 130px) 1fr; }
+.dmg-cont.dmg-msg .tr .th { padding-right: 15px; }
+.dmg-cont.dmg-msg .tr .td { padding: 6px 15px 6px 10px; text-align: left; }
+/* loading / 失败 / 无数据：表格位置里的一行小字 */
+.dmg-status {
+  padding: 14px 20px;
+  font-size: 13px;
+  color: #aaa;
+}
+.dmg-status.err { color: #e8a0a0; }
+.dmg-cont .dmg-created-by { float: right; padding-left: 5px; }

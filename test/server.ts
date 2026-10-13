@@ -357,7 +357,44 @@ console.log('\n=== 9. 武器三态 ===')
  *
  * 测试一律注入假 enka（fetchImpl），不联网；档位用小数字，不真等一分钟。
  */
-console.log('\n=== 10. 限流 ===')
+/* ---------------- 10. 伤害计算接口 ---------------- */
+
+console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
+{
+  const r = await json(`/api/uid/${UID}/character/10000016/damage`)
+  eq(r.ok, true, '接口 ok')
+  ok(!!r.data, '迪卢克算得出伤害')
+  if (r.data) {
+    ok(r.data.rows.length > 0, `伤害 ${r.data.rows.length} 条`)
+    eq(r.data.enemyLv, 103, '敌人等级 103（与上游默认一致）')
+    eq(r.data.enemyName, '小宝', '默认敌人')
+    eq(r.data.createdBy, '喵喵', 'calc.js 署名')
+    eq(r.data.rows.map((x: any) => x.title), ['E三段伤害', 'E三段蒸发', 'Q爆发伤害', '开Q后单次重击'], '四条伤害的标题')
+    /* 数值是 miao 出图口径 Format.comma(v, 0)（千分位、取整），真值由 .tmp/dmg-parity
+       与原版 ProfileDmg 的对拍背书 —— 这里钉死防回归 */
+    eq(r.data.rows[0], { title: 'E三段伤害', dmg: '7,930', avg: '5,829', unit: '' }, '第一条钉真值（暴击/期望）')
+    ok(r.data.rows.every((x: any) => x.dmg === null || /^[\d,]+$/.test(x.dmg)), '暴击伤害是千分位整数串')
+    ok(r.data.rows.every((x: any) => x.avg === '' || /^[\d,]+$/.test(x.avg)), '期望伤害同上')
+    ok(r.data.rows.every((x: any) => typeof x.unit === 'string'), 'unit 恒为串（没有单位就是空串）')
+
+    /* 迪奥娜：护盾量与治疗量不吃暴击 —— dmg 为 null，页面上期望值独占一行 */
+    const diona = (await json(`/api/uid/${UID}/character/10000039/damage`)).data
+    eq(diona.rows.map((x: any) => x.dmg), ['4,029', null, null], '护盾/治疗两条没有暴击伤害')
+    /* buff 串按「来源：描述」拆成两列（内核给的是拼好的整串） */
+    eq(diona.buffs[0], { title: '迪奥娜天赋', desc: '长按E获得75%护盾吸收量加成' }, 'buff 首条钉真值')
+    ok(diona.buffs.every((b: any) => b.title && !b.title.includes('：')), 'buff 拆开后来源里不带冒号')
+  }
+
+  /* 两种 404 语义不同：uid 不存在 ≠ 角色不在这个 uid 下 */
+  const noUid = await get(`/api/uid/123456789/character/10000016/damage`)
+  eq(noUid.status, 404, '不存在的 uid → 404')
+  eq((await readJson(noUid)).error.code, 'no_data', '错误码 no_data')
+  const noChar = await get(`/api/uid/${UID}/character/999999/damage`)
+  eq(noChar.status, 404, 'uid 下没有的角色 → 404')
+  eq((await readJson(noChar)).error.code, 'no_character', '错误码 no_character')
+}
+
+console.log('\n=== 11. 限流 ===')
 {
   const fakeFetch = async (uid: number | string): Promise<unknown> => ({ ...REAL, uid })
   const post = (url: string, uid: number, headers: Record<string, string> = {}): Promise<Response> => fetch(url + '/api/fetch', {
@@ -422,6 +459,8 @@ console.log('\n=== 10. 限流 ===')
     eq((await g(`/api/uid/${UID}`)).status, 200, '  读接口：第 1 次放行')
     eq((await g(`/api/uid/${UID}`)).status, 200, '  第 2 次放行')
     eq((await g(`/api/uid/${UID}`)).status, 429, '  第 3 次被拦（读上限 2）')
+    eq((await g(`/api/uid/${UID}/character/10000016/damage`)).status, 429,
+      '  伤害接口也走读档（要跑内核，不设限能拿它打满 CPU）')
     eq((await g('/api/health')).status, 200, '  /api/health 不限（探活被拦会误报故障）')
     eq((await g('/')).status, 200, '  静态页不限')
     a.server.close()

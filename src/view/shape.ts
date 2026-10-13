@@ -13,6 +13,7 @@
 import { ArtisMark, Artifact as MiaoArtifact, Format, i18n, Weapon } from '../index.ts'
 import { toMiaoProfile, deriveTalent } from '../adapter/materialize.ts'
 import type { MiaoProfile } from '../adapter/materialize.ts'
+import { calcDamage } from '../adapter/damage.ts'
 import { Artifact } from '../domain/artifact.ts'
 import type { Character } from '../domain/character.ts'
 import type { Account } from '../domain/account.ts'
@@ -551,6 +552,64 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     consList,
     artifacts: [1, 2, 3, 4, 5].map(pos =>
       artifactOf(pos, result.artis?.[pos], artifactsByPos.get(pos), loc, profile.artis?.artis?.[pos]))
+  }
+}
+
+/* ───────────────────────── 伤害计算（明细页下侧的「伤害计算」表） ───────────────────────── */
+
+/** 伤害表的一行。dmg 为 null = 这条不吃暴击（反应类伤害），页面上期望值独占整行 */
+export interface DamageRow {
+  title: string
+  dmg: string | null
+  avg: string
+  /** 单位，拼在数值后面（目前只有坎蒂丝的「Q提升普攻伤害」是 '%'） */
+  unit: string
+}
+
+export interface DamageView {
+  rows: DamageRow[]
+  /** buff 列表：「来源：描述」按冒号拆开（内核 msg 原样是拼好的串） */
+  buffs: Array<{ title: string; desc: string }>
+  /** 角色 calc.js 的署名（miao 社区贡献者，比如「冰翼」） */
+  createdBy: string
+  enemyName: string
+  enemyLv: number
+}
+
+/*
+ * 一个角色 → 伤害表视图对象。内部就是 materialize 桥 + calcDamage（见 adapter/damage.ts），
+ * 本函数只做「给页面用的整形」：数值按 miao 出图的口径格式化（Format.comma(v, 0)）、
+ * buff 串按冒号拆成两列。
+ *
+ * 返回 null 的三种情况对页面来说是同一件事（不出这一块）：角色没配 calc.js、
+ * 脚本算崩了（calcDamage 内部已打日志）、或 materialize 搭不出 profile（元数据不认识的角色）。
+ * 语义区别由调用方在调本函数前自己查（server 路由分 404 / 200+null）。
+ *
+ * ⚠️ 这是 shape.ts 里唯一的 async 函数 —— 伤害计算是内核跑一遍，不是纯字符串拼接。
+ * ⚠️ 敌人名（enemyName）只有 miao 的中文（'小宝'），和 elemText 一个情况：内核没给别的语言，
+ *    不为它多同步一轮 i18n。
+ */
+export async function damageOf (ch: Character): Promise<DamageView | null> {
+  const profile = toMiaoProfile(ch)
+  if (!profile) return null
+  const dmg = await calcDamage(profile)
+  if (!dmg) return null
+  return {
+    rows: dmg.entries.map(e => ({
+      title: e.title,
+      dmg: e.dmg === null ? null : Format.comma(e.dmg, 0),
+      avg: e.avg === null ? '' : Format.comma(e.avg, 0),
+      unit: e.unit
+    })),
+    buffs: dmg.buffs.map(msg => {
+      /* buff 串形如「蝶引来生：开E获得2,858.0点攻击力加成」—— 冒号前是来源、后面是描述。
+         照 miao 模板的 split('：') 取 [0]/[1]；没有冒号时整串当来源、描述留空。 */
+      const i = msg.indexOf('：')
+      return i < 0 ? { title: msg, desc: '' } : { title: msg.slice(0, i), desc: msg.slice(i + 1) }
+    }),
+    createdBy: dmg.createdBy,
+    enemyName: dmg.enemyName,
+    enemyLv: dmg.enemyLv
   }
 }
 

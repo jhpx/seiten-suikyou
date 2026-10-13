@@ -197,7 +197,9 @@ export function createRateGate ({ trustProxy = false, rules, now = () => Date.no
     if (req.method === 'POST' && pathname === '/api/fetch') {
       return hit(r.fetch, `ip:${ip}:fetch`) || hit(r.fetchAll, 'all:fetch') || null
     }
-    if (req.method === 'GET' && (pathname === '/api/uids' || /^\/api\/uid\/\d+$/.test(pathname))) {
+    /* 读档纳入「角色伤害计算」：它只读库，但要跑一遍评分内核（比拼视图对象贵一个量级），
+       不设限的话拿这个接口轮询打满 CPU 比扫 uid 还省事。 */
+    if (req.method === 'GET' && (pathname === '/api/uids' || /^\/api\/uid\/\d+(\/character\/\d+\/damage)?$/.test(pathname))) {
       return hit(r.read, `ip:${ip}:read`) || null
     }
     return null

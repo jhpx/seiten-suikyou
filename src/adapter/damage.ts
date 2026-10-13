@@ -20,6 +20,8 @@ export interface DamageEntry {
   dmg: number | null
   /** 期望伤害（按暴击率加权，面板上展示的那个数） */
   avg: number | null
+  /** 单位，拼在数值后面。绝大多数条目没有；目前只有坎蒂丝的「Q提升普攻伤害」是 '%' */
+  unit: string
 }
 
 export interface DamageResult {
@@ -57,7 +59,8 @@ export async function calcDamage (profile: MiaoProfile, opts: { enemyLv?: number
     entries: (ret.ret || []).map((ds: any) => ({
       title: ds.title,
       dmg: typeof ds.dmg === 'number' ? ds.dmg : null,
-      avg: typeof ds.avg === 'number' ? ds.avg : null
+      avg: typeof ds.avg === 'number' ? ds.avg : null,
+      unit: typeof ds.unit === 'string' ? ds.unit : ''
     })),
     buffs: ret.msg || [],
     createdBy: ret.createdBy,
