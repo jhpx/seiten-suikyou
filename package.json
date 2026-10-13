@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=22.5"
+    "node": ">=22.18"
   },
   "imports": {
     "#miao": "./vendor/miao/components/index.js",
@@ -22,19 +22,24 @@
     "sync:miao": "python tools/sync.py miao",
     "sync:i18n": "python tools/sync.py i18n",
     "sync:assets": "python tools/sync.py assets",
-    "list:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.mjs",
+    "list:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.ts",
     "check:docs": "python tools/check_docs.py",
-    "score": "node --disable-warning=ExperimentalWarning src/cli/score.js",
-    "server": "node --disable-warning=ExperimentalWarning src/server/index.js",
-    "test": "node test/smoke.mjs && node test/arch.mjs && node test/enka.mjs && node --disable-warning=ExperimentalWarning test/pipeline.mjs && node test/i18n.mjs && node --disable-warning=ExperimentalWarning test/server.mjs && node --disable-warning=ExperimentalWarning test/cli.mjs && node test/regression.mjs && node test/verify.mjs",
-    "smoke": "node test/smoke.mjs",
-    "arch": "node test/arch.mjs",
-    "enka": "node test/enka.mjs",
-    "pipeline": "node --disable-warning=ExperimentalWarning test/pipeline.mjs",
-    "server:test": "node --disable-warning=ExperimentalWarning test/server.mjs",
-    "cli:test": "node --disable-warning=ExperimentalWarning test/cli.mjs",
-    "regression": "node test/regression.mjs",
-    "verify": "node test/verify.mjs",
-    "i18n": "node test/i18n.mjs"
+    "typecheck": "tsc --noEmit",
+    "score": "node --disable-warning=ExperimentalWarning src/cli/score.ts",
+    "server": "node --disable-warning=ExperimentalWarning src/server/index.ts",
+    "test": "npm run typecheck && node test/smoke.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/verify.ts",
+    "smoke": "node test/smoke.ts",
+    "arch": "node test/arch.ts",
+    "enka": "node test/enka.ts",
+    "pipeline": "node --disable-warning=ExperimentalWarning test/pipeline.ts",
+    "server:test": "node --disable-warning=ExperimentalWarning test/server.ts",
+    "cli:test": "node --disable-warning=ExperimentalWarning test/cli.ts",
+    "regression": "node test/regression.ts",
+    "verify": "node test/verify.ts",
+    "i18n": "node test/i18n.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
   }
 }

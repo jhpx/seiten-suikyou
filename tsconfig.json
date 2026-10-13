@@ -1,0 +1,34 @@
+{
+  /*
+   * 类型检查配置。**没有构建产物** —— 运行时由 Node 原生剥类型（22.18+ 默认开），
+   * 本文件只服务 `tsc --noEmit` 这一个动作。
+   *
+   * 为什么三处关键设定：
+   *   - allowImportingTsExtensions：Node 要求相对 import 写全 `.ts`（写 `.js` 会
+   *     ERR_MODULE_NOT_FOUND），TS 默认反过来要求写 `.js` —— 这条让两边对齐。
+   *     它要求 noEmit（我们本来就不产出）。
+   *   - erasableSyntaxOnly：Node 的剥离**只剥不转**，只认「可擦除」语法。开了这条，
+   *     enum / namespace / 构造函数参数属性 会在 tsc 阶段就报错，不会等到运行时才炸。
+   *   - allowJs + checkJs:false：vendor/miao 是 .js 且不归我们管，只读进来解析、不检查。
+   */
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+
+    "allowJs": true,
+    "checkJs": false,
+
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "tools/**/*.ts"]
+}

@@ -189,7 +189,7 @@ npm run server -- --no-rate-limit                  # 本地调试时整个关掉
 
 用 `node:http` 手写，不引框架 —— 这里要的东西很薄（几个 JSON 接口 + 几个静态文件），
 不值得为省一张路由表把依赖撑大。运行时依赖只有两个：`lodash`（miao 内核本来就要）和
-`limiter`（限流的令牌桶，零传递依赖）。`test/arch.mjs` 盯着这个清单 —— 加依赖前先算账：
+`limiter`（限流的令牌桶，零传递依赖）。`test/arch.ts` 盯着这个清单 —— 加依赖前先算账：
 省下的行数配不配得上它的体积。
 
 ## 多语言
@@ -207,7 +207,7 @@ I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 g
 > 再传一遍会让子脚本的 argparse 报「未知参数」）。要带参数就调子脚本本身，或用 `I18N_LOCALES`。
 
 文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
-（`src/i18n/ui.js`，手写 69 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
+（`src/i18n/ui.ts`，手写 69 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
 我们自己页面的说法。两张表为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
 
 表不在时**静默降级**成只有中文（页面会给出提示），不会崩。
@@ -217,7 +217,7 @@ I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 g
 用 miao 的官方入口，不自己拼：
 
 ```js
-import { ArtisMark } from './src/index.js'
+import { ArtisMark } from './src/index.ts'
 
 const ret = ArtisMark.getMarkDetail(profile, withDetail)
 // ret: { classTitle, mark, markClass, artis: {1..5}, sets, names, charWeight }
@@ -228,7 +228,7 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 
 - `char` 必须是**真 `Character` 对象**（规则里读 `char.name` / `char.isGs`）
 - `artis` 必须是**真 `Artis` 实例**（规则里调 `artis.is('绝缘4')`、读 `artis.sets`）
-- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/adapter/materialize.js` 里就是这么做的）
+- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/adapter/materialize.ts` 里就是这么做的）
 - `weapon` 只要 `{ name, level, promote, affix }`，**`name` 必须是中文**（内核拿中文名查 `weaponCfg`）
 
 **圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
@@ -257,10 +257,10 @@ npm test
 
 几条约定：
 
-- **测试只 import `src/index.js` 的出口 API，不碰内部路径**。这样 vendor 内部怎么搬、别名怎么解析，
+- **测试只 import `src/index.ts` 的出口 API，不碰内部路径**。这样 vendor 内部怎么搬、别名怎么解析，
   对测试都透明 —— 内部重构不必改测试。
   （`cli` 那套是例外：它跑子进程，测的就是进程边界本身。）
-- **`verify.mjs` 的 stdout 就是基线**，断言只在失败时打印、通过时静默：
+- **`verify.ts` 的 stdout 就是基线**，断言只在失败时打印、通过时静默：
 
   ```bash
   npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt   # 逐字为空才算没跑偏
@@ -275,7 +275,7 @@ npm test
   而进程退出码当时还是 0。所以它断言的是「汇总段 / 面板对拍段在不在」。
   单独跑：`npm run cli:test`。
 
-改动前端样式后想验收，用 `tools/probe.mjs` 直读真实 DOM（尺寸 / 折行 / 计算样式），
+改动前端样式后想验收，用 `tools/probe.ts` 直读真实 DOM（尺寸 / 折行 / 计算样式），
 别去数截图像素 —— 截到立绘的深色衣服会以为是背景色，会得出错的结论（实测踩过两次）。
 
 ## 目录结构
@@ -283,23 +283,23 @@ npm test
 ```
 seiten-suikyou/
 ├── src/
-│   ├── index.js              # 内核出口：注册元数据 + 原样导出评分模块
+│   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分模块
 │   ├── store/                # 本地库（SQLite）
 │   │   ├── schema.sql        #   表结构（权威定义）
-│   │   ├── db.js             #   连接 / 结构版本迁移（node:sqlite）
-│   │   └── repo.js           #   读写：合并式 upsert、按 uid 取、文案 key 清单
+│   │   ├── db.ts             #   连接 / 结构版本迁移（node:sqlite）
+│   │   └── repo.ts           #   读写：合并式 upsert、按 uid 取、文案 key 清单
 │   ├── adapter/              # enka ↔ 本项目 的转换
-│   │   ├── enka.js           #   按 uid 取原始响应（把 HTTP 码翻译成人话）
-│   │   ├── ingest.js         #   原始响应 → 库行（挑字段、带文案 key，不解析属性）
-│   │   ├── materialize.js    #   库行 → miao profile（id → 中文名/对象 + 算面板）
-│   │   └── panel-check.js    #   拿游戏给的面板对拍，验证数据没翻错
-│   ├── view/shape.js         # 视图成型：库行 + 评分结果 → 页面/接口/CLI 共用的对象
+│   │   ├── enka.ts           #   按 uid 取原始响应（把 HTTP 码翻译成人话）
+│   │   ├── ingest.ts         #   原始响应 → 库行（挑字段、带文案 key，不解析属性）
+│   │   ├── materialize.ts    #   库行 → miao profile（id → 中文名/对象 + 算面板）
+│   │   └── panel-check.ts    #   拿游戏给的面板对拍，验证数据没翻错
+│   ├── view/shape.ts         # 视图成型：库行 + 评分结果 → 页面/接口/CLI 共用的对象
 │   ├── i18n/
-│   │   ├── index.js          #   多语言：hash/id → 游戏文案（读 vendor/i18n/names.json）
-│   │   └── ui.js             #   界面文字手写表（按钮/标题/提示，官方表里没有）
-│   ├── cli/score.js          # 命令行评分入口
+│   │   ├── index.ts          #   多语言：hash/id → 游戏文案（读 vendor/i18n/names.json）
+│   │   └── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
+│   ├── cli/score.ts          # 命令行评分入口
 │   └── server/
-│       ├── index.js          #   node:http 路由（API + 静态页），零新依赖
+│       ├── index.ts          #   node:http 路由（API + 静态页），零新依赖
 │       └── public/           #   页面：原生 JS，无框架无 CDN
 │           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚）
 │           ├── app.js        #     渲染 + 交互（首页网格、明细画布、缩放、i18n）
@@ -314,10 +314,10 @@ seiten-suikyou/
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
 │   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）
-│   ├── list_assets.mjs       # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
+│   ├── list_assets.ts        # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
 │   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
-│   ├── probe.mjs             # 在真实页面跑 JS 量布局（改样式后的验收工具）
-│   ├── shot.mjs              # headless chrome 截图
+│   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）
+│   ├── shot.ts               # headless chrome 截图
 │   └── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
 ├── test/                     # 见「测试」一节
 ├── docs/                     # 设计文档 + 参考稿

@@ -40,7 +40,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 
 `components/_local/` 下两个文件是本项目手写的（不是上游内容），同步时自动生成。
 （上表说的是**内核**的依赖怎么处置。**本项目自己**的依赖另有一套口径：
-`test/arch.mjs` 盯着 `dependencies` 清单，当前两项 —— `lodash`（内核要的）与
+`test/arch.ts` 盯着 `dependencies` 清单，当前两项 —— `lodash`（内核要的）与
 `limiter`（限流的令牌桶，零传递依赖）。原则是**代码最精简 + 依赖量最小**，
 允许加轻量第三方库，但加之前先算账：省下的行数配不配得上它的体积。）
 
@@ -53,7 +53,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 | `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则文件里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
 | `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21 MB，评分用不到，全不搬。 |
 
-另外 `src/index.js` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
+另外 `src/index.ts` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
 对应模型就会静默返回 `false`（我们踩过一次 —— `Weapon.get()` 全返回 null，界面上武器显示「未识别」）。
 
 ### 同步产出
@@ -84,7 +84,7 @@ git log -p -- vendor/miao                          # 逐行看改了什么
 
 早期用 Node 的 ESM loader hook 在运行时劫持 import 指向外部 miao-plugin 目录。已废弃，因为：
 项目依赖一个外部目录才能跑、边界模糊、IDE 跳转和静态分析全部失效、必须用 `--import` 启动。
-现在**仓库自包含**：`node test/verify.mjs` 直接跑。
+现在**仓库自包含**：`node test/verify.ts` 直接跑。
 
 ---
 
@@ -152,7 +152,7 @@ enka 原始响应
 | 参考稿 | 管什么 | 怎么量 |
 |---|---|---|
 | `角色列表页.jpg` | 首页网格版式（原魔工具箱「角色展柜」中间那块） | 卡片填充色做 mask，行/列投影量卡宽与间距 |
-| `miao结果图参考.jpeg` | 明细页对拍基准（奥黛塔 248.0 / ACE） | 用 `tools/shot.mjs` 出图后人工对照 |
+| `miao结果图参考.jpeg` | 明细页对拍基准（奥黛塔 248.0 / ACE） | 用 `tools/shot.ts` 出图后人工对照 |
 
 ### 首页（账号头 + 筛选条 + 网格）
 
@@ -194,7 +194,7 @@ enka 原始响应
 - **只下库里实际出现的角色和套装**，避免一上来就拖几百 MB。
 - **「页面要什么」由页面自己回答** —— 素材的目录名是**中文**（角色名 / 套装名），而库里存的是数字 id。
   早先脚本自己拿 id 去几张元数据表反查名字，三张表各有各的缺口，总有零星图片漏下载，页面出现空框。
-  现在改成先用页面同一套 `buildAccountView` 跑一遍、把吐出来的图片 URL 收齐（`tools/list_assets.mjs`），
+  现在改成先用页面同一套 `buildAccountView` 跑一遍、把吐出来的图片 URL 收齐（`tools/list_assets.ts`），
   再交给下载脚本 —— 不再依赖任何猜测。
 - 元素符号不在 miao 仓库里（那边只有背景底图，不含符号本身），改从社区素材库 paimon-moe 取。
 - 404 / 缺图不报错，页面回退到 CSS 色块占位。
@@ -205,7 +205,7 @@ enka 原始响应
 
 `src/i18n/` 分两张表，因为它们的**来源和性质完全不同**：
 
-| | `vendor/i18n/names.json` | `src/i18n/ui.js` |
+| | `vendor/i18n/names.json` | `src/i18n/ui.ts` |
 |---|---|---|
 | 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：刷新、搜索角色、面板属性、命之座… |
 | 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
@@ -251,16 +251,16 @@ enka 原始响应
 4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
    所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
 5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
-   所以 `src/adapter/materialize.js` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
+   所以 `src/adapter/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
    库里存的是原始值 + 来源，万一推断错了改这一行就能全量重算，不用重新抓。
-6. **`test/fixtures.mjs` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
+6. **`test/fixtures.ts` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
    （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 小生命是 `hpPlus`、大生命才是 `hp`；
    羽毛的主词条同理应是 `atkPlus`）。因为 1/2 号位的主词条不参与评分、且胡桃的大小生命/攻击权重相同，
    所以基线数字没受影响，但它不是一份「规范数据」。要扩测试建议先改规范并重生成基线。
 7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
    若想版本化，建议单独 `git clone` 一份作为上游源。
 8. **改库结构必须同时加迁移**：`schema.sql` 全是 `CREATE TABLE IF NOT EXISTS`，
-   对**已存在**的表一列也不会加。改完要 +1 `SCHEMA_VERSION` 并在 `db.js` 的 `MIGRATIONS`
+   对**已存在**的表一列也不会加。改完要 +1 `SCHEMA_VERSION` 并在 `db.ts` 的 `MIGRATIONS`
    里补一版 `ALTER`，否则老库会静默不升级、跑起来报「no such column」。
    缺某一版迁移函数时 `openDb` 会直接抛错拒绝启动（降级处理会静默丢数据）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
@@ -272,15 +272,15 @@ enka 原始响应
     （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。离库打分时 `--offline --check` 会提示做不了。
 11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。
     不提交的话，它只能告诉你「自上次提交以来没变」，看不出这一轮到底搬了什么。
-12. **测 CLI 要断言「该打印的段落在不在」，光看退出码不够**。`test/cli.mjs` 就是干这个的。
-    来历：`src/cli/score.js` 的汇总段曾用了未定义的 `r`（正确写法 `for (const r of sorted)`），
+12. **测 CLI 要断言「该打印的段落在不在」，光看退出码不够**。`test/cli.ts` 就是干这个的。
+    来历：`src/cli/score.ts` 的汇总段曾用了未定义的 `r`（正确写法 `for (const r of sorted)`），
     异常被外层 `catch` 吞掉后**提前返回**，后面的面板对拍整段不执行 —— 而进程退出码当时还是 0，
     `npm test` 全绿，只有真跑一遍命令行才看得见。所以那套测试必须把「汇总」「面板对拍」这些
     段落本身钉住，不能只断言 `code === 0`。
 13. **评分权重表不是每个角色都有的**。上游 `artis-mark.js` 的 `usefulAttr` 收录不全时，
     内核拿通用表兜底（`ArtisMarkCfg.js:99`：`atk75/cpct100/cdmg100/dmg100/phy100`），
     但标题照旧拼 `${char.abbr}-通用` —— 看着像上游给这个角色定过一套权重。
-    所以内核在 `getCfg` 里透出 `isDefaultWeight`，view 层（`shape.js` 的 `classTitleOf`）
+    所以内核在 `getCfg` 里透出 `isDefaultWeight`，view 层（`shape.ts` 的 `classTitleOf`）
     据此把前缀换成「默认」：**默认-通用**。只换前缀、保留场景词（通用/护摩/绝缘4），
     「用的哪套权重」和「命中哪个场景」仍然分得开。
     同步上游会自然消掉这件事（沃雅妮莎、薇斯纳就是 2026-10-06 同步时补进来的），
@@ -312,7 +312,7 @@ enka 原始响应
 
 1. 把多语言覆盖到**剩余的中文字面**：`classTitle`（`胡桃-护摩` 这类场景名，是 miao 自己的中文串）、
    元素名、以及目前个别还没进表的新武器/角色名（比如「寒息」在英/日文页仍是中文）。
-   前两个要给 i18n 表再补两类条目（`test/cli.mjs` 里也留了备注：`--locale en` 的输出里
+   前两个要给 i18n 表再补两类条目（`test/cli.ts` 里也留了备注：`--locale en` 的输出里
    仍会出现中文，正是 `classTitle` 这一项，不是回归）。
 2. 首页角色卡的进一步还原（排列/密度可调），以及明细页与 miao 出图的逐像素对拍。
 3. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。
