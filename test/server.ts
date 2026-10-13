@@ -5,7 +5,7 @@
  * 这几件事在真网络栈上是通的。用内存库 + 一份真实 enka 响应播种，
  * 所以断言里可以直接出现「Diluc」「Crimson Witch of Flames」这种真数据。
  *
- * 与 pipeline.mjs 的分工：pipeline 管「数据有没有被搞坏」，本文件管「接口给的东西对不对」。
+ * 与 pipeline.ts 的分工：pipeline 管「数据有没有被搞坏」，本文件管「接口给的东西对不对」。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -89,7 +89,7 @@ console.log('\n=== 2. uid 列表 ===')
   eq(r.data[0].uid, UID, 'uid 对得上')
   eq(r.data[0].avatarCount, summary.avatarCount, '角色数与 ingest 一致')
 
-  /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 shape.js 的 fmtTime）。
+  /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 shape.ts 的 fmtTime）。
      断言刻意写成与时区无关 —— 换台机器跑也得过，所以拆成两条：
        ① 格式：没有 T/Z，就是「YYYY-MM-DD HH:mm:ss」
        ② 换算：把结果按本地时间解析回去，应当与库里那个 UTC 时刻**同一毫秒**

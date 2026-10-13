@@ -1,9 +1,8 @@
 /*
  * HTTP 服务 —— 把 store + materialize + i18n 串成一个能看的页面和一组接口
  *
- * 为什么用 node:http 手写而不是引框架：`test/arch.mjs` 锁死了「运行时依赖只有 lodash」，
- * 而这里要的东西很薄（几个 JSON 接口 + 几个静态文件），不值得为省一张路由表把那条线破掉。
- *
+ * 为什么用 node:http 手写而不引框架：`test/arch.ts` 锁死了「运行时依赖只有 lodash」，而这里要的东西
+ * 很薄（几个 JSON 接口 + 几个静态文件），不值得为省一张路由表把那条线破掉。
  * 分层：这一层只做「HTTP ⇄ 视图对象」的翻译，不碰 SQL、不碰评分算法。
  */
 import http from 'node:http'
@@ -93,10 +92,7 @@ function sendFile (res: ServerResponse, file: string, { cache = 'no-cache' }: { 
   res.end(buf)
 }
 
-/*
- * 请求体 JSON —— 客户端给的东西，形状由各接口自己认（这里只保证「是个对象」）。
- * 调用方按需断言自己那几个字段的类型；空体回 {}，坏 JSON 抛错。
- */
+/* 请求体 JSON —— 形状由各接口自己认（这里只保证「是个对象」）。空体回 {}，坏 JSON 抛错。 */
 function readBody (req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let size = 0
@@ -137,14 +133,7 @@ function serveAsset (res: ServerResponse, pathname: string): void {
 
 /* ---------------- 应用 ---------------- */
 
-/**
- * 组装一个服务实例（不开监听），方便测试直接拿来做内存请求。
- * @param {string} opts.dbFile      SQLite 文件，默认 data/gs.db
- * @param {Function} opts.fetchImpl 允许替换 enka 抓取（测试用）
- * @param {boolean} opts.trustProxy 认不认转发头（挂在反向代理后面时开），默认 false
- * @param {object|false} opts.rateLimit 覆盖限流档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流
- */
-/** createApp / startServer 的选项 */
+/** createApp / startServer 的选项（后三个都能直接透传，加选项不用改两处签名） */
 export interface AppOptions {
   /** SQLite 文件，默认 data/gs.db */
   dbFile?: string
@@ -156,6 +145,7 @@ export interface AppOptions {
   rateLimit?: Partial<RateRules> | false
 }
 
+/** 组装一个服务实例（不开监听），方便测试直接拿来做内存请求 */
 export function createApp ({
   dbFile = path.join('data', 'gs.db'),
   fetchImpl = fetchEnka,
@@ -300,13 +290,11 @@ export function createApp ({
 }
 
 /**
- * 起监听。其余选项（dbFile / fetchImpl / trustProxy / rateLimit）原样转给 createApp，
- * 加选项时不用在两处签名里同时改。
+ * 起监听。其余选项原样转给 createApp。
  *
- * host 默认**回环**而不是 0.0.0.0：这个函数的调用方有两类，一类是「已经想清楚要暴露到哪」的
- * （文件末尾的 CLI 入口，显式传 0.0.0.0），另一类是测试和脚本 —— 后者不传 host 时，
- * 不该在不知情的情况下开着一个局域网端口（测试的内存库里有真实 UID 数据）。
- * 对外服务是正式入口的显式决定，不是库的默认。
+ * host 默认**回环**而不是 0.0.0.0：调用方有两类 —— 一类是已经想清楚要暴露到哪的（文件末尾的 CLI
+ * 入口，显式传 0.0.0.0），另一类是测试和脚本，后者不传 host 时不该在不知情的情况下开一个局域网端口
+ * （测试的内存库里有真实 UID 数据）。对外服务是正式入口的显式决定，不是库的默认。
  */
 export function startServer ({ port = 8787, host = '127.0.0.1', ...appOpts }: { port?: number; host?: string } & AppOptions = {}): Promise<ReturnType<typeof createApp> & { port: number; url: string }> {
   const app = createApp(appOpts)

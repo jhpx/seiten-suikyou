@@ -1,7 +1,7 @@
 /*
  * 命令行测试 —— 把 CLI 当成黑盒跑子进程，断言它「没崩、也没少打印」。
  *
- * 为什么非要单开一套：七套测试原来一套都不跑 CLI，而 `src/cli/score.js` 真崩过一次 ——
+ * 为什么非要单开一套：七套测试原来一套都不跑 CLI，而 `src/cli/score.ts` 真崩过一次 ——
  * 汇总段用了未定义的 `r`，被外层 try/catch 吞掉后**直接 return**，后面的面板对拍一起不执行。
  * 进程退出码还是 0、`npm test` 全绿，只有人肉跑一遍才看得见。
  * 所以这里的断言不能只看退出码，必须看**输出里该有的段落在不在**。
@@ -41,7 +41,7 @@ const rmDb = (f: string): void => { for (const s of ['', '-wal', '-shm']) fs.rmS
    **spawnSync + 管道 stdin 会让子进程根本起不来**（r.status=null、r.error.code='EBUSY'、
    stderr 全空），于是整套 cli 测试齐刷刷报 `code=null` —— 与被测代码无关，
    看着却像 CLI 全崩了。CLI 从不读 stdin，ignore 掉既修好这里也不改变被测行为。
-   （同一个坑也踩在 tools/shot.mjs 上，那边写得更细。） */
+   （同一个坑也踩在 tools/shot.ts 上，那边写得更细。） */
 function cli (...args: string[]): { code: number | null; out: string; err: string } {
   const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, ...args],
     { encoding: 'utf8', env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] })

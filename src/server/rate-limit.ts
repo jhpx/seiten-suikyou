@@ -1,33 +1,25 @@
 /*
  * 限流 —— 闸门整体在这里，主服务只问一句「这次放不放行」
  *
- * 对外只有一个入口 `createRateGate()`，返回的对象拿去在路由最前面拦一道：
+ * 对外只有一个入口 createRateGate()：
  *   const gate = createRateGate({ trustProxy, rules: rateLimit })   // rules 传 false = 整个关掉
- *   const wait = gate.check(req, pathname)      // 放行返回 null；拦下返回「还要等几秒」
- * 这样主服务里限流只占三行，档位、取 IP、429 该等多久都不用它操心。
+ *   const wait = gate.check(req, pathname)                          // 放行 null；拦下 = 还要等几秒
+ * 于是主服务里限流只占三行，档位、取 IP、429 该等多久都不用它操心。
  *
- * 为什么不连计数一起自己写：用户定的约束是「代码最精简 + 依赖量最小，允许轻量第三方库」。
- * `limiter` 是零传递依赖、103KB、原生 ESM，正好够轻，而令牌桶自己写要处理补充速率和
- * 边界取整，交给它更划算（2026-10-08 定）。
+ * 为什么用令牌桶而不是「整分钟清零」：固定窗口在边界上能翻倍（第 59 秒打满、第 61 秒又能打满，
+ * 两秒里放了两次配额）。令牌桶匀速补充、没这个缝，同时允许短时突发（桶满时可一次取光），
+ * 对「玩家连着换几次展柜再刷新」更友好。
  *
- * 库管不了的、只能自己写的两件事：
- *   1. **按什么分桶** —— 库一个实例只管一条流，而我们要按「IP + 接口类型」动态开桶；
- *   2. **桶的回收** —— 每个来过的 IP 一个桶，不回收就是内存泄漏（有人换着 IP 来能撑爆）。
+ * ⚠️ **用 TokenBucket，不要用同库的 RateLimiter**（2026-10-11 踩出来的）。RateLimiter 名字像令牌桶，
+ *    其实是「令牌桶 + 每窗口次数上限」两层（它自己的类注释就写着 "a token bucket plus an additional
+ *    check to limit how many tokens we can remove each interval"）—— 窗口里打满 N 次后，哪怕令牌桶
+ *    3 秒就补回 1 个，也得干等整个窗口翻页：实测桶将空时 getWaitTime(1) 返回 59997ms。我们只要令牌桶。
  *
- * 为什么是令牌桶而不是「整分钟清零」：固定窗口在边界上能翻倍 —— 第 59 秒打满、
- * 第 61 秒又能打满，实际两秒里放了两次配额。令牌桶按速率匀速补充，没这个缝，
- * 同时允许短时突发（桶满时可以一次取光），这对「玩家连着换几次展柜再刷新」更友好。
+ * 依赖策略：`limiter` 零传递依赖、103KB、原生 ESM，比自己写补充速率与边界取整划算（2026-10-08 定）。
+ * 库管不了的只有两件事，都在这儿：**按什么分桶**（库一个实例只管一条流，我们要按「IP + 接口类型」
+ * 动态开桶）与**桶的回收**（每个来过的 IP 一个桶，不回收就是内存泄漏 —— 有人换着 IP 来能撑爆）。
  *
- * ⚠️ **用 `TokenBucket`，不要用同库的 `RateLimiter`**（2026-10-11 踩出来的）。
- * `RateLimiter` 名字像令牌桶，其实是「令牌桶 + 每窗口次数上限」两层 —— 它的类注释自己写着
- * "a token bucket plus an additional check to limit how many tokens we can remove each interval"，
- * `tryRemoveTokens()` 里就有一句 `count > tokensPerInterval - tokensThisInterval → false`。
- * 于是窗口里打满 N 次之后，哪怕令牌桶 3 秒就补回 1 个，也得干等整个窗口翻页：
- * 实测桶将空时 `getWaitTime(1)` 返回 59997ms，`Retry-After` 跟着报 53 秒 ——
- * 上面那段「匀速补充、没这个缝」的论证被这层固定窗口整个推翻了。我们只要令牌桶这一件事。
- *
- * ⚠️ 生效范围只有**单进程**。多实例部署（Serverless、多容器）各数各的，
- * 那种场景得换成外部存储（Redis 之类）。本项目是一个长期跑的单进程服务，够用。
+ * ⚠️ 生效范围只有**单进程**。多实例部署（Serverless、多容器）各数各的，那种场景得换成外部存储（Redis）。
  */
 import type { IncomingMessage } from 'node:http'
 import { TokenBucket } from 'limiter'
@@ -76,15 +68,11 @@ function rateRules (overrides?: Partial<RateRules> | null): RateRules {
 /*
  * 限流按 IP 分桶，所以「谁算这个 IP」是整套机制的底座。
  *
- * 为什么默认**不信** `X-Forwarded-For`：那只是个请求头，谁都能伪造。
- * 服务直接暴露时（默认绑 0.0.0.0 给局域网用）根本没人在前面替我们盖这个头，
- * 此时谁伪造一个就能绕过限流 —— 所以默认只看 TCP 连接的对端地址。
- *
- * 什么时候该开：服务挂在反向代理后面时，对端地址永远是代理自己
- * （走 Cloudflare Tunnel 时全是 127.0.0.1），不认转发头就等于没限流。
- * 那种拓扑下由部署方显式开 TRUST_PROXY=1 / --trust-proxy，含义是
- * 「我确认前面有代理，而且它会盖掉客户端自带的那个头」——
- * Cloudflare 给的 `CF-Connecting-IP` 正是这种头，所以优先认它。
+ * ⚠️ 为什么默认**不信** `X-Forwarded-For`：那只是个请求头，谁都能伪造。服务直接暴露时（默认绑 0.0.0.0
+ * 给局域网用）根本没人在前面盖这个头，此时谁伪造一个就能绕过限流 —— 所以默认只看 TCP 对端地址。
+ * 挂在反向代理后面时对端永远是代理自己（走 Cloudflare Tunnel 时全是 127.0.0.1），不认头等于没限流；
+ * 那种拓扑下由部署方显式开 TRUST_PROXY=1 / --trust-proxy，含义是「我确认前面有代理，而且它会盖掉
+ * 客户端自带的那个头」—— Cloudflare 给的 `CF-Connecting-IP` 正是这种头，所以优先认它。
  */
 function clientIp (req: IncomingMessage, trustProxy: boolean): string {
   if (trustProxy) {
@@ -112,14 +100,9 @@ const SWEEP_INTERVAL_MS = 60 * 1000
 /* 一个桶这么久没请求过就删掉。实际窗口都是分钟级，一小时足够保守 */
 const STALE_MS = 60 * 60 * 1000
 
-/**
- * 一堆按 key 动态开的令牌桶。
- *
- * @param {Function} [opts.now] 时间源，默认 Date.now()。只用于判断桶要不要回收；
- *   令牌桶自己的走时由 limiter 内部负责，所以测试要验证「窗口过后恢复」得真等一小会儿
- *   （把 windowMs 设成几百毫秒即可）。
- */
-/** 一个桶：令牌桶本体 + 最后一次被取用的时刻（回收用） */
+/** 一个桶：令牌桶本体 + 最后一次被取用的时刻（回收用）。
+ *  `now` 时间源只用于判断桶要不要回收 —— 令牌桶自己的走时由 limiter 内部负责，所以测试想验证
+ *  「窗口过后恢复」得真等一小会儿（把 windowMs 设成几百毫秒即可）。 */
 interface Bucket { limiter: TokenBucket; lastSeen: number }
 
 /** `take()` 的结果：放行 / 拦下（拦下时给「还要等几毫秒」，用来填 Retry-After） */
@@ -144,15 +127,8 @@ function createBuckets ({ now = () => Date.now() }: { now?: () => number } = {})
     return b
   }
 
-  /**
-   * 记一次请求。
-   *
-   * @param {string} key      桶名（谁在干什么，比如 `ip:1.2.3.4:fetch`）
-   * @param {number} limit    一个窗口里最多放行多少次
-   * @param {number} windowMs 窗口多长（毫秒）
-   * @returns {{ok:true} | {ok:false, retryAfterMs:number}}
-   *   放行 / 拦下；拦下时带「还要多久（毫秒）才能再来」，用来填 Retry-After 头。
-   */
+  /* 记一次请求：key 是桶名（谁在干什么，如 `ip:1.2.3.4:fetch`），limit/windowMs 是这一档的配额。
+     放行返回 {ok:true}；拦下带「还要多久（毫秒）才能再来」，用来填 Retry-After 头。 */
   function take (key: string, limit: number, windowMs: number): TakeResult {
     const b = bucketFor(key, limit, windowMs)
     if (!b.limiter.tryRemoveTokens(1)) {
@@ -191,15 +167,8 @@ function createBuckets ({ now = () => Date.now() }: { now?: () => number } = {})
 
 /* ---------------- 对外：闸门 ---------------- */
 
-/**
- * 造一个限流闸门。
- *
- * @param {boolean} opts.trustProxy 认不认转发头（挂在反向代理后面时开），默认 false
- * @param {object|false} opts.rules 覆盖档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流，
- *   此时本函数返回 null，调用方只要判一下有没有闸门就行，不用处处写 if。
- * @param {Function} [opts.now] 时间源（测试用）
- * @returns {{rules:object, check:Function, size:number}|null}
- */
+/** 造一个限流闸门。`rules` 传 false = 不限流，此时返回 null —— 调用方只要判一下有没有闸门就行。
+ *  trustProxy 含义见 clientIp；now 是时间源（测试用）。 */
 export interface RateGate {
   rules: RateRules
   check: (req: IncomingMessage, pathname: string) => number | null
@@ -221,13 +190,7 @@ export function createRateGate ({ trustProxy = false, rules, now = () => Date.no
     return t.ok ? 0 : Math.max(1, Math.ceil(t.retryAfterMs / 1000))
   }
 
-  /**
-   * 这次请求放不放行。
-   *
-   * @param {import('node:http').IncomingMessage} req
-   * @param {string} pathname
-   * @returns {number|null} null = 放行；数字 = 拦下，且还要等这么多秒
-   */
+  /* 这次请求放不放行：null = 放行；数字 = 拦下，且还要等这么多秒 */
   function check (req: IncomingMessage, pathname: string): number | null {
     const ip = clientIp(req, trustProxy)
     /* 抓取要连过两档才算过 —— 本 IP 一档、全局一档（保护 enka 上游） */

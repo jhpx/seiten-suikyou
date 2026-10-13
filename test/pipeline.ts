@@ -24,7 +24,6 @@ import type { MiaoProfile } from '../src/adapter/materialize.ts'
 import { shapeCharacter } from '../src/view/shape.ts'
 import type { AttrRow, MarkDetail } from '../src/view/shape.ts'
 import { Artifact } from '../src/domain/artifact.ts'
-import type { ArtifactRow } from '../src/domain/artifact.ts'
 /* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
    本文件两个都要用，所以把**我们的**那个按仓库惯例（materialize.ts 用 Miao* 前缀）
    反过来标成 Domain*，`Character` 依旧指 miao 的图鉴类。 */
@@ -230,33 +229,33 @@ ok(fakeArtifact(4, 3).quality() === 3,
 
 console.log('\n=== 2. ingest：enka 响应 → 领域模型 ===')
 const ingested = ingestPayload(payload, { source: 'enka' })
-const av0 = ingested.player.characters[0]
+const directCharacter = ingested.player.characters[0]
 /* 后面到处拿它查库。解析对不对由下面那条断言守着，这里只做「必然非空」的收窄。 */
 const uid = ingested.player.uid!
 
 ok(ingested.player.uid === 900000001, 'uid 解析正确')
-ok(av0.avatarId === 10000046, 'avatarId 解析正确')
-ok(av0.level === 90 && av0.promote === 6, '等级 / 突破解析正确')
-ok(av0.cons === 3, '命座数 = talentIdList.length')
-ok(av0.weapon.itemId === weaponId, '武器按 itemId 存')
-ok(av0.weapon.affix === 1, '精炼等级：enka 的 0 → 精1')
-ok(av0.weapon.nameHash === 800766043, '武器名文案 key 带下来了（多语言靠它）',
-  `实际 ${av0.weapon.nameHash}`)
-ok(av0.artifacts.length === 5, '圣遗物 5 件')
-ok(av0.artifacts.map(a => a.pos).join(',') === '1,2,3,4,5', '位置按 1花2羽3沙4杯5头 映射')
-ok(av0.artifacts[0].levelRaw === 21, 'level 存原始值（不在这儿归一化）')
-ok(av0.artifacts.every(a => a.nameHash) && new Set(av0.artifacts.map(a => a.nameHash)).size === 5,
+ok(directCharacter.avatarId === 10000046, 'avatarId 解析正确')
+ok(directCharacter.level === 90 && directCharacter.promote === 6, '等级 / 突破解析正确')
+ok(directCharacter.cons === 3, '命座数 = talentIdList.length')
+ok(directCharacter.weapon.itemId === weaponId, '武器按 itemId 存')
+ok(directCharacter.weapon.affix === 1, '精炼等级：enka 的 0 → 精1')
+ok(directCharacter.weapon.nameHash === 800766043, '武器名文案 key 带下来了（多语言靠它）',
+  `实际 ${directCharacter.weapon.nameHash}`)
+ok(directCharacter.artifacts.length === 5, '圣遗物 5 件')
+ok(directCharacter.artifacts.map(a => a.pos).join(',') === '1,2,3,4,5', '位置按 1花2羽3沙4杯5头 映射')
+ok(directCharacter.artifacts[0].levelRaw === 21, 'level 存原始值（不在这儿归一化）')
+ok(directCharacter.artifacts.every(a => a.nameHash) && new Set(directCharacter.artifacts.map(a => a.nameHash)).size === 5,
   '5 件的部件名文案 key 各不相同')
-ok(new Set(av0.artifacts.map(a => a.setHash)).size === 1,
+ok(new Set(directCharacter.artifacts.map(a => a.setHash)).size === 1,
   '同一套的 5 件共用同一个套装名文案 key',
-  `实际 ${JSON.stringify(av0.artifacts.map(a => a.setHash))}`)
-ok(av0.artifacts[0].appendPropIds.length === 4, 'appendPropIds 条数正确')
+  `实际 ${JSON.stringify(directCharacter.artifacts.map(a => a.setHash))}`)
+ok(directCharacter.artifacts[0].appendPropIds.length === 4, 'appendPropIds 条数正确')
 /* 词条数是内核按 key 分组数出来的（ArtisAttr 里 tmp[key].upNum++），
    同一次 key 的多次 roll 可能是不同的 id（id 里编了数值档位），
    所以这里真正要守的是「原样保留每一次 roll，不许聚合、不许去重」 */
-const cdmgRolls = av0.artifacts[0].appendPropIds.filter(id => artiMeta.attrIdMap[id]?.key === 'cdmg')
+const cdmgRolls = directCharacter.artifacts[0].appendPropIds.filter(id => artiMeta.attrIdMap[id]?.key === 'cdmg')
 ok(cdmgRolls.length === 3, '同 key 的多次 roll 一条不少（这是词条数的唯一来源）',
-  `实际 ${JSON.stringify(av0.artifacts[0].appendPropIds)}`)
+  `实际 ${JSON.stringify(directCharacter.artifacts[0].appendPropIds)}`)
 const 中文字 = JSON.stringify(ingested.player.characters)
 ok(!/[\u4e00-\u9fa5]/.test(中文字), '库行里没有中文名（存储层只存 id）',
   (中文字.match(/[\u4e00-\u9fa5]+/) || [])[0])
@@ -293,7 +292,7 @@ dirtyDb.prepare(`UPDATE artifact
   SET sub_stats = '[{"prop":"FIGHT_PROP_HP_PERCENT","value":"46.6"}]'
   WHERE pos = 1`).run()
 /* 读一行走 db.ts 的 getRow：SQLite 出来的东西没有类型，「按哪个行形状断言」只在那一处发生。 */
-const rowBack = Artifact.fromRow(getRow<ArtifactRow>(dirtyDb, 'SELECT * FROM artifact WHERE pos = 1')!)
+const rowBack = Artifact.fromRow(getRow(dirtyDb, 'SELECT * FROM artifact WHERE pos = 1')!)
 ok(rowBack.subStats[0].value === 46.6,
   'JSON 列里的字符串数值 → number（fromRow 复用同一个 constructor）',
   `实际 ${JSON.stringify(rowBack.subStats[0].value)}`)
@@ -308,18 +307,18 @@ const back = repo.loadPlayer(db, uid)!
 ok(back.nickname === '测试号', '账号读回正确')
 ok(back.characters.length === 1, '角色读回正确')
 
-const a0 = back.characters[0]
-const g0 = av0.artifacts[0]
-const b0 = a0.artifacts[0]
-ok(JSON.stringify(b0.appendPropIds) === JSON.stringify(g0.appendPropIds),
+const viaDbCharacter = back.characters[0]
+const directArtifact = directCharacter.artifacts[0]
+const viaDbArtifact = viaDbCharacter.artifacts[0]
+ok(JSON.stringify(viaDbArtifact.appendPropIds) === JSON.stringify(directArtifact.appendPropIds),
   'appendPropIds 读回逐字一致（含顺序与每一次 roll）',
-  `写入 ${JSON.stringify(g0.appendPropIds)}\n        读回 ${JSON.stringify(b0.appendPropIds)}`)
-ok(b0.mainPropId === g0.mainPropId && b0.itemId === g0.itemId && b0.levelRaw === g0.levelRaw,
+  `写入 ${JSON.stringify(directArtifact.appendPropIds)}\n        读回 ${JSON.stringify(viaDbArtifact.appendPropIds)}`)
+ok(viaDbArtifact.mainPropId === directArtifact.mainPropId && viaDbArtifact.itemId === directArtifact.itemId && viaDbArtifact.levelRaw === directArtifact.levelRaw,
   '主词条 id / 部件 id / level 读回一致')
-ok(JSON.stringify(a0.skillLevelMap) === JSON.stringify(av0.skillLevelMap), '天赋表读回一致')
-ok(b0.nameHash === g0.nameHash && b0.setHash === g0.setHash,
+ok(JSON.stringify(viaDbCharacter.skillLevelMap) === JSON.stringify(directCharacter.skillLevelMap), '天赋表读回一致')
+ok(viaDbArtifact.nameHash === directArtifact.nameHash && viaDbArtifact.setHash === directArtifact.setHash,
   '文案 key 读回一致（没有它，多语言就得重新抓一遍 enka）')
-ok(a0.weapon.nameHash === av0.weapon.nameHash, '武器文案 key 读回一致')
+ok(viaDbCharacter.weapon.nameHash === directCharacter.weapon.nameHash, '武器文案 key 读回一致')
 
 /* ---------------- 6. 两条路算出的分必须一样 ---------------- */
 
@@ -330,8 +329,8 @@ const scoreOf = (row: DomainCharacter): MarkDetail | null => {
   const p = toMiaoProfile(row)
   return p ? ArtisMark.getMarkDetail(p, true) as MarkDetail : null
 }
-const viaDb = scoreOf(a0)
-const direct = scoreOf(av0)
+const viaDb = scoreOf(viaDbCharacter)
+const direct = scoreOf(directCharacter)
 ok(!!viaDb, '能算出分（角色被 miao 认识、圣遗物解析成功）')
 ok(viaDb?.mark === direct?.mark, `过库得分 ${viaDb?.mark} == 直接得分 ${direct?.mark}`)
 ok(viaDb?.classTitle === direct?.classTitle, `场景一致：${viaDb?.classTitle}`)
@@ -403,7 +402,7 @@ ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).player.character
 /* ---------------- 10. 老库升级 ---------------- */
 /*
  * 已经落地的库是 v1（没有那三列文案 key、也没有 enka 原始数值那两列），
- * CREATE TABLE IF NOT EXISTS 不会给老表补列，全靠 db.js 里的 ALTER 迁移。
+ * CREATE TABLE IF NOT EXISTS 不会给老表补列，全靠 db.ts 里的 ALTER 迁移。
  * 这段就是守住那条路：造一个「v1 形状的库」，再打开，必须自动补齐且老数据一条不丢。
  */
 

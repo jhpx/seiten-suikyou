@@ -1,20 +1,16 @@
 /*
  * ui —— 界面文字（按钮、分组标题、提示语）
  *
- * 和 names.json 的区别：names.json 是**游戏内文案**，从官方 TextMap 抽的，
- * 几千条、机器生成、跟着游戏版本走。这里的界面文字官方表里根本没有
- * （「刷新」「圣遗物」这种是我们自己页面的说法），所以只能手写。
- *
+ * 与 names.json 的区别：那是**游戏内文案**（官方 TextMap 抽的，几千条、机器生成、跟着游戏版本走）；
+ * 这里的界面文字官方表里根本没有（「刷新」「圣遗物」是我们自己页面的说法），只能手写。
  * 量很小（二十来条 × 5 种语言），就放在代码里，不值得再开一条同步管线。
  * 缺某门语言时回落到英文 —— 界面上出现英文总比出现空白好认。
- *
- * 占位符用 {n} / {uid} / {loc} 这种 {名字} 的写法，渲染时逐个替换。
+ * 占位符写成 `{名字}`，渲染时逐个替换。
  */
 import { DEFAULT_LOCALE } from './index.ts'
 
-/* 每种语言一张表。chs 是全量，其它语言缺的键由 fallback 补。
-   类型标成「语言 → 键 → 文字」：键不做字面量约束（chs 是全量、别的语言是子集，
-   逐键建联合类型得不偿失），只保证「查出来一定是 string」。 */
+/* 每种语言一张表，chs 是全量、其它语言缺的键由 fallback 补。类型标成「语言 → 键 → 文字」：
+   键不做字面量约束（chs 全量、别的语言是子集，逐键建联合得不偿失），只保证「查出来一定是 string」。 */
 const TABLE: Record<string, Record<string, string>> = {
   chs: {
     title: '星天水镜', subtitle: '圣遗物评分',
@@ -28,22 +24,18 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchDone: '刷新完成：本次取得 {n} 个角色', fetchFail: '刷新失败：{msg}', fetchHardFail: '刷新失败。',
     panelSection: '面板属性', artiSection: '圣遗物',
     noWeapon: '无武器', unknownWeapon: '未知武器', cons: '命之座', fetter: '好感', talent: '天赋', refine: '精',
-    /* 卡片 hover 提示的标签。等级**不能复用 level** —— 那个键给的是顶部账号行
-       的「冒险等阶」（en=Adventure、ja=冒険ランク），跟角色/武器等级不是一回事。 */
+    /* 卡片 hover 提示的标签。等级**不能复用 level** —— 那个键给的是顶部账号行的「冒险等阶」
+       （en=Adventure、ja=冒険ランク），跟角色/武器等级不是一回事。 */
     tipLevel: '等级', tipScore: '评分', tipScoreTier: '评分等级', tipRefineTier: '精炼等级',
     talentA: '普攻', talentE: '战技', talentQ: '爆发',
     mainStat: '主词条', notEquipped: '未装备',
-    /* 上面原来那行「rosterTitle 角色大全」删掉了（首页标题没了），
-       back / tapToView 是在同一行里被一起带走的，这里补回来 —— 键按用途分行放，别再挤一行。 */
     back: '返回', tapToView: '点击查看',
     filterAll: '全部', filterSearch: '搜索角色', noMatch: '没有符合筛选条件的角色。',
     filterElem: '元素', filterRank: '等级', filterWeight: '权重',
     detailTitle: '角色明细', artisRank: '圣遗物评级', artisTotal: '圣遗物总分',
     rule: '评分规则', scoredAt: '数据时间',
-    /* 上游出图这里还有半句「可使用 #角色名圣遗物 来查看评分详情」——
-       那是 QQ 云崽的聊天指令（上游模板里写作 {{gameHash}}，渲染出来就是 #），
-       网页版根本没有这个指令，照抄只会让页面上挂一个没头没尾的 #神里绫华圣遗物。
-       所以只留「评分为喵喵版规则」这半句。 */
+    /* 上游出图这里还有半句「可使用 #角色名圣遗物 来查看评分详情」—— 那是 QQ 云崽的聊天指令
+       （上游模板里写作 {{gameHash}}，渲染出来就是 #），网页版没有这个指令，照抄只会挂一个没头没尾的 #。 */
     artisNotice: '评分为<strong>喵喵版规则</strong>，仅供参考与娱乐。',
     /* CLI 也用这张表 —— 命令行和网页不该各说各话 */
     account: '账号', data: '数据', weapon: '武器', sets: '套装', substat: '副',
@@ -78,7 +70,6 @@ const TABLE: Record<string, Record<string, string>> = {
     detailTitle: '角色明細', artisRank: '聖遺物評級', artisTotal: '聖遺物總分',
     rule: '評分規則', scoredAt: '資料時間',
     artisNotice: '評分為<strong>喵喵版規則</strong>，僅供參考與娛樂。',
-    /* CLI 也用這張表 —— 命令行和網頁不該各說各話 */
     account: '帳號', data: '資料', weapon: '武器', sets: '套裝', substat: '副',
     scene: '場景', summary: '彙總', chars: '個角色', fetched: '最後抓取',
     offline: '庫中資料（未聯網）', thisFetch: '本次取得', none: '（無）', notFound: '（未識別）',
@@ -114,7 +105,6 @@ const TABLE: Record<string, Record<string, string>> = {
     /* 撇号直接写 ’（U+2019），别写 &rsquo; —— 这段文案走 createTextNode 渲染，HTML 实体没人解码，
        写实体会原样显示成「Miao&rsquo;s rules」 */
     artisNotice: 'Scores follow <strong>Miao’s rules</strong>, for reference and fun only.',
-    /* CLI uses this table too — terminal and page should not disagree */
     account: 'Account', data: 'Source', weapon: 'Weapon', sets: 'Sets', substat: 'Sub',
     scene: 'Scenario', summary: 'Summary', chars: 'characters', fetched: 'last fetch',
     offline: 'local database (offline)', thisFetch: 'fetched this run', none: '(none)', notFound: '(unknown)',
@@ -148,7 +138,6 @@ const TABLE: Record<string, Record<string, string>> = {
     detailTitle: 'キャラ詳細', artisRank: '聖遺物評価', artisTotal: '聖遺物スコア',
     rule: '採点ルール', scoredAt: '取得日時',
     artisNotice: 'スコアは<strong>喵喵版ルール</strong>に準拠した参考・娯楽用の値です。',
-    /* CLI もこのテーブルを使う —— コマンドラインとページで言い換えを増やさない */
     account: 'アカウント', data: 'ソース', weapon: '武器', sets: 'セット', substat: 'サブ',
     scene: 'シーン', summary: '集計', chars: 'キャラ', fetched: '最終取得',
     offline: 'ローカル DB（オフライン）', thisFetch: '今回取得', none: '（なし）', notFound: '（不明）',
@@ -182,7 +171,6 @@ const TABLE: Record<string, Record<string, string>> = {
     detailTitle: '캐릭터 상세', artisRank: '성유물 등급', artisTotal: '성유물 점수',
     rule: '채점 규칙', scoredAt: '수집 시각',
     artisNotice: '점수는 <strong>喵喵 규칙</strong>을 따른 참고·오락용 값입니다.',
-    /* CLI도 이 표를 쓴다 —— 터미널과 페이지가 서로 다르게 말하면 안 된다 */
     account: '계정', data: '출처', weapon: '무기', sets: '세트', substat: '부옵션',
     scene: '시나리오', summary: '집계', chars: '캐릭터', fetched: '마지막 수집',
     offline: '로컬 DB(오프라인)', thisFetch: '이번 수집', none: '(없음)', notFound: '(미확인)',
@@ -197,10 +185,8 @@ const TABLE: Record<string, Record<string, string>> = {
 }
 
 /**
- * 取一条界面文字，并把 {占位符} 换掉。
- * 查表顺序：要的语言 → 英文 → 中文，界面上出现英文好过出现空白。
- * `locale` 是语言代码（已解析过或未解析都行，这里只做查表）；
- * `vars` 形如 `{ n: 3 }`，值一律原样塞进去。
+ * 取一条界面文字，并把 {占位符} 换掉。查表顺序：要的语言 → 英文 → 中文（出现英文好过出现空白）。
+ * `locale` 只用于查表（已解析或未解析都行）；`vars` 形如 `{ n: 3 }`，值一律原样塞进去。
  */
 export function t (key: string, locale = DEFAULT_LOCALE, vars: Record<string, unknown> | null = null): string {
   let s = TABLE[locale]?.[key] ?? TABLE.en?.[key] ?? TABLE.chs[key] ?? key
@@ -212,9 +198,7 @@ export function t (key: string, locale = DEFAULT_LOCALE, vars: Record<string, un
   return s
 }
 
-/** 整张表给前端（前端一次拿全，切语言不用再问后端） */
+/** 整张表给前端（一次拿全，切语言不用再问后端） */
 export function all (locale = DEFAULT_LOCALE): Record<string, string> {
   return { ...(TABLE[locale] || TABLE.en) }
 }
-
-export default { t, all }

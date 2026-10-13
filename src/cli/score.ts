@@ -2,7 +2,7 @@
 /*
  * 命令行评分入口 —— 端到端链路：取数 → 入库 → 从库里读回来 → 打分 → 打印
  *
- * 用法：node src/cli/score.js --help
+ * 用法：node src/cli/score.ts --help
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,7 +22,7 @@ import type { Character } from '../domain/character.ts'
 import type { EnkaPayload } from '../domain/enka.ts'
 import { argValue, parseArgs } from '../shared/util.ts'
 
-/* 界面文字 / 部位名 / 词条名都复用网页端那两张表，免得两处各写一套、加语言时漏改 */
+/* 界面文字 / 部位名 / 词条名复用网页端那两张表，免得两处各写一套、加语言时漏改 */
 const uiText = i18n.uiText
 
 const USAGE = `
@@ -45,70 +45,68 @@ const USAGE = `
 /* ---------------- 输出小工具 ---------------- */
 
 const line = (n: number = 60): string => '─'.repeat(n)
-const pad = (s: unknown, n: number): string => String(s ?? '').padStart(n, ' ')
+const pad = (value: unknown, cols: number): string => String(value ?? '').padStart(cols, ' ')
 
 /* 等宽对齐用的宽度：中文按两个字符算 */
-function width (s: unknown): number {
+function width (value: unknown): number {
   let w = 0
-  for (const ch of String(s)) w += /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 2 : 1
+  for (const ch of String(value)) w += /[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 2 : 1
   return w
 }
-const padW = (s: unknown, n: number): string => {
-  const str = String(s)
-  return str + ' '.repeat(Math.max(0, n - width(str)))
+const padW = (value: unknown, cols: number): string => {
+  const text = String(value)
+  return text + ' '.repeat(Math.max(0, cols - width(text)))
 }
 
-/* 名字一律从库行的 id/hash 查 i18n 表，不拿 miao 给的中文名反查（它只有中文，
-   只能当查不到时的兜底）。用 hash 查还有个好处：miao 哪天改了译名也不影响我们。 */
+/* 名字一律从库行的 id/hash 查 i18n 表，不拿 miao 给的中文名反查（它只有中文，只能当兜底） */
 const charName = (profile: MiaoProfile, locale: string): string =>
   i18n.avatarName(profile.id, locale) || profile.char.name
 
-function renderCharacter (ch: Character, profile: MiaoProfile, result: MarkDetail, locale: string): string {
+function renderCharacter (character: Character, profile: MiaoProfile, result: MarkDetail, locale: string): string {
   const char = profile.char
   const out: string[] = []
-  const U = (key: string): string => uiText(key, locale)
-  const artifactsByPos = new Map((ch.artifacts || []).map(a => [a.pos, a] as const))
+  const ui = (key: string): string => uiText(key, locale)
+  const artifactByPos = new Map((character.artifacts || []).map(artifact => [artifact.pos, artifact] as const))
 
-  const talent = deriveTalent(char, ch.skillLevelMap || {})
+  const talent = deriveTalent(char, character.skillLevelMap || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
   const name = charName(profile, locale)
-  /* 和网页一个口径（shape.js 的 weapon.state）：装备了但元数据不认识这把 → 「未知武器」，
-     真没装备才是「无武器」。别再写成「（未识别）」—— 那是角色行的词，用在这里会让人
-     以为角色没认出来。 */
-  const wname = (ch.weapon.equipped ? i18n.weaponName(ch.weapon.itemId, locale) : null) ||
-    profile.weapon.name || U(ch.weapon.equipped ? 'unknownWeapon' : 'noWeapon')
+  /* 与网页一个口径（shape.ts 的 weapon.state）：装备了但元数据不认识 → 「未知武器」，
+     真没装备才是「无武器」。别写成「（未识别）」—— 那是角色行的词，用在这里会被读成角色没认出来。 */
+  const wname = (character.weapon.equipped ? i18n.weaponName(character.weapon.itemId, locale) : null) ||
+    profile.weapon.name || ui(character.weapon.equipped ? 'unknownWeapon' : 'noWeapon')
 
-  out.push(`${name} ★${char.star || 5} Lv.${profile.level ?? '?'} ${U('cons')}${profile.cons} ${U('fetter')}${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
-  out.push(`  ${U('weapon')}  ${wname} Lv.${profile.weapon.level} ${U('refine')}${profile.weapon.affix}`)
+  out.push(`${name} ★${char.star || 5} Lv.${profile.level ?? '?'} ${ui('cons')}${profile.cons} ${ui('fetter')}${profile.fetter ?? '?'} ${profile.elem || char.elem}${talentStr ? '  ' + talentStr : ''}`)
+  out.push(`  ${ui('weapon')}  ${wname} Lv.${profile.weapon.level} ${ui('refine')}${profile.weapon.affix}`)
 
   /* 套装名 miao 给的是官方中文全名，换语言得反查（i18n.fromZh） */
   const setStr = Object.entries(result.sets || {})
-    .map(([n, c]) => `${i18n.fromZh(n, locale) || n}×${c}`).join(' ')
-  out.push(`  ${U('sets')}  ${setStr || U('none')}`)
+    .map(([setName, count]) => `${i18n.fromZh(setName, locale) || setName}×${count}`).join(' ')
+  out.push(`  ${ui('sets')}  ${setStr || ui('none')}`)
 
-  for (const idx of [1, 2, 3, 4, 5]) {
-    const a = result.artis?.[idx]
-    if (!a || !a.name) { out.push(`  ${idx} ${slotLabel(idx, locale)}  ——`); continue }
-    const art = artifactsByPos.get(idx)
-    /* 显示数值优先用 enka 原始值、内核值兜底；见 shape.js 的 attrValueText / enkaNumsOf */
-    const enka = enkaNumsOf(art)
-    const { main: rawMain, sub: rawSub } = rawNumsOf(profile.artis?.artis?.[idx])
-    const aname = (art?.nameHash && i18n.name(art.nameHash, locale)) || a.name
-    out.push(`  ${idx} ${slotLabel(idx, locale)}  ${padW(aname, 14)} ★5 Lv.${pad(a.level ?? 0, 2)}   ${pad(a.mark, 6)}  ${a.markClass}`)
-    if (a.main && a.main.value !== undefined) {
-      out.push(`       ${U('mainStat')}  ${statLabel(a.main.key, locale)} ${attrValueText(a.main.key, a.main.value, rawMain, enka.main)}`)
+  for (const pos of [1, 2, 3, 4, 5]) {
+    const entry = result.artis?.[pos]
+    if (!entry || !entry.name) { out.push(`  ${pos} ${slotLabel(pos, locale)}  ——`); continue }
+    const artifact = artifactByPos.get(pos)
+    /* 显示数值优先用 enka 原始值、内核值兜底（见 shape.ts 的 attrValueText / enkaNumsOf） */
+    const enka = enkaNumsOf(artifact)
+    const { main: rawMain, sub: rawSub } = rawNumsOf(profile.artis?.artis?.[pos])
+    const aname = (artifact?.nameHash && i18n.name(artifact.nameHash, locale)) || entry.name
+    out.push(`  ${pos} ${slotLabel(pos, locale)}  ${padW(aname, 14)} ★5 Lv.${pad(entry.level ?? 0, 2)}   ${pad(entry.mark, 6)}  ${entry.markClass}`)
+    if (entry.main && entry.main.value !== undefined) {
+      out.push(`       ${ui('mainStat')}  ${statLabel(entry.main.key, locale)} ${attrValueText(entry.main.key, entry.main.value, rawMain, enka.main)}`)
     }
-    const subs = (a.attrs || []).filter(x => x.key)
+    const subs = (entry.attrs || []).filter(sub => sub.key)
     if (subs.length) {
-      out.push(`       ${U('substat')}  ` + subs.map(x =>
-        `${statLabel(x.key, locale)} ${attrValueText(x.key, x.value, rawSub.get(x.key), enka.sub.get(x.key))}${(x.upNum ?? 0) > 1 ? `×${x.upNum}` : ''}`
+      out.push(`       ${ui('substat')}  ` + subs.map(sub =>
+        `${statLabel(sub.key, locale)} ${attrValueText(sub.key, sub.value, rawSub.get(sub.key), enka.sub.get(sub.key))}${(sub.upNum ?? 0) > 1 ? `×${sub.upNum}` : ''}`
       ).join('  '))
     }
   }
 
-  out.push(`  ${U('panelSection')}  ${panelText(profile.attr, locale)}`)
-  out.push(`  ${U('scene')}  ${result.classTitle}`)
-  out.push(`  ${U('total')}  ${result.mark}  ${result.markClass}`)
+  out.push(`  ${ui('panelSection')}  ${panelText(profile.attr, locale)}`)
+  out.push(`  ${ui('scene')}  ${result.classTitle}`)
+  out.push(`  ${ui('total')}  ${result.mark}  ${result.markClass}`)
   return out.join('\n')
 }
 
@@ -126,9 +124,9 @@ async function main () {
     if (!uids.length) { console.log(`库里还没有数据（${dbFile}）`); return 0 }
     console.log(`库里共 ${uids.length} 个 UID（${dbFile}）：`)
     for (const uid of uids) {
-      const acc = repo.loadAccount(db, uid)
-      const n = repo.listCharacterIds(db, uid).length
-      console.log(`  ${uid}  ${acc?.nickname || '?'}  Lv.${acc?.level ?? '?'}  角色 ${n} 个  最后抓取 ${fmtTime(repo.lastFetch(db, uid)?.fetched_at) || '?'}`)
+      const account = repo.loadAccount(db, uid)
+      const charCount = repo.listCharacterIds(db, uid).length
+      console.log(`  ${uid}  ${account?.nickname || '?'}  Lv.${account?.level ?? '?'}  角色 ${charCount} 个  最后抓取 ${fmtTime(repo.lastFetch(db, uid)?.fetched_at) || '?'}`)
     }
     return 0
   }
@@ -152,7 +150,7 @@ async function main () {
 
   /* ---- 1. 取数据：--file 读本地、--offline 跳过、否则联网 ---- */
   const file = argValue(args.file)
-  /* 上面已挡掉「既没 --uid 又没 --file」→ 走到非 file 分支时 uid 必非空。 */
+  /* 上面已挡掉「既没 --uid 又没 --file」→ 走到非 file 分支时 uid 必非空 */
   const payload = (file
     ? JSON.parse(fs.readFileSync(file, 'utf8'))
     : (args.offline ? null : await fetchEnka(uid as number))) as EnkaPayload | null
@@ -188,45 +186,45 @@ async function main () {
 
   console.log(line())
   console.log(`${uiText('account', locale)}  ${player?.nickname || '?'}（uid:${uidInDb}）  Lv.${player?.level ?? '?'}  ${uiText('worldLevel', locale)} ${player?.worldLevel ?? '?'}`)
-  const src = ingestSummary
+  const sourceText = ingestSummary
     ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.avatarCount} ${uiText('chars', locale)}`
     : uiText('offline', locale)
-  console.log(`${uiText('data', locale)}  ${src}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${player.characters.length} ${uiText('chars', locale)}`)
+  console.log(`${uiText('data', locale)}  ${sourceText}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${player.characters.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
-  const filter = argValue(args.char)
-  const results: Array<{ ch: Character; profile: MiaoProfile; result: MarkDetail }> = []
+  const charFilter = argValue(args.char)
+  const results: Array<{ character: Character; profile: MiaoProfile; result: MarkDetail }> = []
   const skipped: Array<number | null> = []
-  for (const ch of player.characters) {
-    const profile = toMiaoProfile(ch)
-    if (!profile) { skipped.push(ch.avatarId); continue }
-    results.push({ ch, profile, result: ArtisMark.getMarkDetail(profile, true) as MarkDetail })
+  for (const character of player.characters) {
+    const profile = toMiaoProfile(character)
+    if (!profile) { skipped.push(character.avatarId); continue }
+    results.push({ character, profile, result: ArtisMark.getMarkDetail(profile, true) as MarkDetail })
   }
   if (skipped.length) {
     console.log(`提示  ${skipped.length} 个角色 miao 元数据里没有（id: ${skipped.join(', ')}），已跳过`)
   }
 
-  const wanted = filter
-    ? results.filter(r => r.profile.char.name === filter || String(r.profile.id) === filter)
+  const wanted = charFilter
+    ? results.filter(entry => entry.profile.char.name === charFilter || String(entry.profile.id) === charFilter)
     : results
 
-  if (filter && !wanted.length) {
-    console.error(`没找到角色「${filter}」。库里有：${results.map(r => r.profile.char.name).join('、')}`)
+  if (charFilter && !wanted.length) {
+    console.error(`没找到角色「${charFilter}」。库里有：${results.map(entry => entry.profile.char.name).join('、')}`)
     return 1
   }
 
   /* ---- 4. 输出 ---- */
-  for (const { ch, profile, result } of wanted) {
+  for (const { character, profile, result } of wanted) {
     console.log(line())
-    console.log(renderCharacter(ch, profile, result, locale))
+    console.log(renderCharacter(character, profile, result, locale))
   }
 
   console.log(line())
   const sorted = [...wanted].sort((a, b) => (b.result._mark ?? 0) - (a.result._mark ?? 0))
   console.log(`${uiText('summary', locale)}（按总分降序，共 ${sorted.length} ${uiText('chars', locale)}）`)
-  for (const r of sorted) {
-    const cname = charName(r.profile, locale)
-    console.log(`  ${pad(r.result.mark, 6)}  ${String(r.result.markClass).padEnd(4)} ${String(cname).padEnd(10)} ${r.result.classTitle}`)
+  for (const entry of sorted) {
+    const cname = charName(entry.profile, locale)
+    console.log(`  ${pad(entry.result.mark, 6)}  ${String(entry.result.markClass).padEnd(4)} ${String(cname).padEnd(10)} ${entry.result.classTitle}`)
   }
   console.log(line())
 
@@ -235,29 +233,29 @@ async function main () {
     if (!payload) {
       console.log('面板对拍需要一个原始响应（联网抓，或者用 --file），离库打分做不了 —— 我们故意不把面板存进库。')
     } else {
-      const byId = new Map(results.map(r => [r.profile.id, r.profile] as const))
-      const cmp = diffPanels(payload, byId)
+      const profileById = new Map(results.map(entry => [entry.profile.id, entry.profile] as const))
+      const panelCmp = diffPanels(payload, profileById)
       console.log(`\n面板对拍：游戏 fightPropMap（标准答案） vs miao 计算面板`)
       console.log(`容差 绝对值 ≤${ABS_TOL} 或 相对 ≤${(REL_TOL * 100).toFixed(1)}%`)
-      for (const d of cmp.list) {
-        const bad = d.rows.filter(r => !r.ok)
-        console.log(`  ${d.ok ? '一致' : '不符'}  ${padW(d.name, 12)} ${String(d.rows.length).padStart(2)} 项  最大偏差 ${(d.worst.rel * 100).toFixed(4)}%（${d.worst.key}）`)
-        for (const r of bad) {
-          console.log(`        × ${r.key} 游戏 ${r.game.toFixed(4)} vs 我们 ${r.ours.toFixed(4)}（差 ${r.diff.toFixed(4)}）`)
+      for (const panel of panelCmp.list) {
+        const bad = panel.rows.filter(row => !row.ok)
+        console.log(`  ${panel.ok ? '一致' : '不符'}  ${padW(panel.name, 12)} ${String(panel.rows.length).padStart(2)} 项  最大偏差 ${(panel.worst.rel * 100).toFixed(4)}%（${panel.worst.key}）`)
+        for (const row of bad) {
+          console.log(`        × ${row.key} 游戏 ${row.game.toFixed(4)} vs 我们 ${row.ours.toFixed(4)}（差 ${row.diff.toFixed(4)}）`)
         }
       }
-      if (cmp.worst) {
-        console.log(`  全局最大偏差 ${(cmp.worst.rel * 100).toFixed(4)}%（${cmp.worst.key}）→ ${cmp.ok ? '链路正常' : '有属性对不上，查 materialize'}`)
+      if (panelCmp.worst) {
+        console.log(`  全局最大偏差 ${(panelCmp.worst.rel * 100).toFixed(4)}%（${panelCmp.worst.key}）→ ${panelCmp.ok ? '链路正常' : '有属性对不上，查 materialize'}`)
       }
-      if (!cmp.ok) return 1
+      if (!panelCmp.ok) return 1
     }
   }
 
   /* --json 走的是和网页端同一个成型出口（view/shape），命令行看到的和接口拿到的是同一份形状。
      额外保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
-    console.log(JSON.stringify(wanted.map(({ ch, profile, result }) => ({
-      ...shapeCharacter(ch, profile, result, locale),
+    console.log(JSON.stringify(wanted.map(({ character, profile, result }) => ({
+      ...shapeCharacter(character, profile, result, locale),
       charWeight: result.charWeight
     })), null, 2))
   }

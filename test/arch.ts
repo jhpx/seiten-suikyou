@@ -1,7 +1,7 @@
 /*
  * 架构契约测试 —— 锁住「源码内嵌 + 别名解析」这套组装方式
  *
- * 与 regression.mjs 的分工：
+ * 与 regression.ts 的分工：
  *   regression 管「分数算得对不对」，本文件管「内核是怎么拼起来的」。
  *   评分逻辑一行没动、但边界被无声破坏（改了 package.json 的 imports、
  *   手工动过 vendor/、悄悄引进了新依赖），regression 照样全绿。
@@ -242,7 +242,7 @@ ok(/stroke-width="\.3"/.test(fs.readFileSync(path.join(SVG_DIR, 'icon_ice_add_hu
 // ─────────────────────────────── 7. 领域层不许反向依赖外层；共用件零依赖
 console.log('\n=== 7. 领域层（src/domain）只描述「是什么」，不依赖任何外层 ===')
 
-/* 领域模型是最内层（domain/artifact.js、domain/stat.js）。它存在的意义正是
+/* 领域模型是最内层（domain/artifact.ts、domain/stat.ts）。它存在的意义正是
    「让内存里的形状不再由 DB 列名决定」，所以它**不许**反过来知道：
    DB 列名（store）、enka 的响应（adapter）、miao 内核、页面渲染（view）。
    一旦引了，它就退化成「跟着存储列名走的数据袋」—— 那正是它要解决的问题。

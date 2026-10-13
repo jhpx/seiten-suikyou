@@ -17,19 +17,19 @@ const SCHEMA_FILE = path.join(HERE, 'schema.sql')
 
 /*
  * ── 「库里 ↔ 程序」的**类型边界** ──────────────────────────────
- * SQLite 取出来的东西没有类型（`Record<string, SQLOutputValue>`，还带 bigint/Uint8Array），
- * 而我们的行形状是模型声明的那几列。所以凡是查库都走这三个函数，
- * 「断言成调用方声明的行形状」就只发生在这一处，不散到 repo 每个查询上。
+ * SQLite 取出来的东西没有类型（`Record<string, SQLOutputValue>`，还带 bigint/Uint8Array）。所以凡是查库
+ * 都走这三个函数：断言只发生在这一处，不散到 repo 每个查询上。默认行形状就是「一行原始值」，
+ * 由模型的 fromRow 自己按列名取值；要别的形状（比如只需一两个列）就显式传类型参数。
  */
 export type { DatabaseSync }
 
 /** 取一行 → 调用方声明的行形状；没有 → undefined */
-export function getRow<T> (db: DatabaseSync, sql: string, ...args: SQLInputValue[]): T | undefined {
+export function getRow<T = Record<string, unknown>> (db: DatabaseSync, sql: string, ...args: SQLInputValue[]): T | undefined {
   return db.prepare(sql).get(...args) as unknown as T | undefined
 }
 
 /** 取多行 → 调用方声明的行形状数组 */
-export function allRows<T> (db: DatabaseSync, sql: string, ...args: SQLInputValue[]): T[] {
+export function allRows<T = Record<string, unknown>> (db: DatabaseSync, sql: string, ...args: SQLInputValue[]): T[] {
   return db.prepare(sql).all(...args) as unknown as T[]
 }
 
