@@ -4,14 +4,16 @@
  * 与 miao 的 Character 同名但不同物：miao 那份是「图鉴 + 内核」（角色长什么样、怎么算分），
  * 这一份是「玩家把它练成什么样」（等级 / 命座 / 天赋 / 武器 / 圣遗物）—— 一个是静态配置，一个是动态实例。
  *
- * 落库：avatar 表那一行 + 它的 5 件圣遗物（artifact 表）。武器 1:1，五列直接嵌进这一行（weapon_*），
- * 所以 COLS 把 Weapon.COLS 接在中间。
+ * 落库：character 表那一行 + 它的 1 把武器（weapon 表）+ 5 件圣遗物（artifact 表）——
+ * 三张表都以 (uid, avatar_id) 为键，各张表的列由各自的模型负责映射，Character 只管自己那一行。
  *
  * ⚠️ 三条不变量（跟评分有关，改错了分就变）：库里只存 id 与**原始值**，不存名字、不存解析后的属性
  * （见 docs/DESIGN-DATA-MODEL.md）；`skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推、
  * 这里不猜；圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
  */
-import { encodeJson, num, parseJson } from '../shared/util.ts'
+import { num } from '../shared/util.ts'
+import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
+import type { Field } from './fields.ts'
 import { Weapon } from './weapon.ts'
 import { Artifact } from './artifact.ts'
 import type { EnkaAvatarInfo } from './enka.ts'
@@ -36,17 +38,16 @@ export class Character {
     uid, avatarId, level, promote, cons, fetter, costume,
     skillLevelMap = null, weapon = Weapon.none(), artifacts = [], source = 'enka', fetchedAt = null
   }: {
-    /* 标量外部来源、故意 unknown；num() 在这儿归一到 number|null（唯一的一次），
-       出了 constructor 类型就固定，ofEnka / fromRow 只是字段名映射。
+    /* 标量外部来源、故意 unknown；num() 在这儿归一到 number|null（唯一的一次）。
        字符串/数组字段本就有明确类型，照实声明。 */
     uid?: unknown; avatarId?: unknown; level?: unknown; promote?: unknown; cons?: unknown
     fetter?: unknown; costume?: unknown; source?: string; fetchedAt?: string | null
     skillLevelMap?: Record<string, number> | null; weapon?: Weapon; artifacts?: Artifact[]
   }) {
     this.uid = num(uid)
-    this.avatarId = num(avatarId)        // 角色的稳定数字 id
+    this.avatarId = num(avatarId)        // 角色的稳定数字 id（enka/官方叫 avatarId）
     this.level = num(level)
-    this.promote = num(promote)          // 突破等级
+    this.promote = num(promote)          // 「突破等级」0~6（enka propMap['1002']，决定等级上限）
     this.cons = num(cons) ?? 0           // 命座数 = talentIdList.length
     this.fetter = num(fetter)            // 好感等级
     this.costume = num(costume) ?? 0     // 皮肤 id，0 = 无
@@ -57,34 +58,29 @@ export class Character {
     this.fetchedAt = fetchedAt
   }
 
-  /* avatar 表的列，**顺序与 toValues 严格一致**；武器那几列从 Weapon.COLS 接进来 —— 列名只写一遍 */
-  static COLS: string[] = ['uid', 'avatar_id', 'level', 'promote', 'cons', 'fetter', 'costume',
-    'skill_level_map', ...Weapon.COLS, 'source', 'fetched_at']
+  /* character 表的列 ↔ 领域字段（顺序 = 建表顺序）。
+     武器与圣遗物各自另有表，所以这里没有它们 —— Character 只描述自己那一行。 */
+  static FIELDS: Field[] = [
+    ['uid', 'uid'], ['avatar_id', 'avatarId'], ['level', 'level'], ['promote', 'promote'],
+    ['cons', 'cons'], ['fetter', 'fetter'], ['costume', 'costume'],
+    ['skill_level_map', 'skillLevelMap', 'json'], ['source', 'source'], ['fetched_at', 'fetchedAt']
+  ]
 
-  /** 按 COLS 顺序的各列值（写 avatar 行用）；JSON 列在这儿编码，stamp 覆盖 fetched_at */
+  static COLS: string[] = colsOf(Character.FIELDS)
+
+  /** 按 FIELDS 顺序的各列值（写 character 行用）；JSON 列在 FIELDS 里标了，stamp 覆盖 fetched_at */
   toValues (stamp?: string): unknown[] {
-    return [this.uid, this.avatarId, this.level, this.promote, this.cons, this.fetter,
-      this.costume, encodeJson(this.skillLevelMap),
-      ...this.weapon.toValues(), this.source, stamp ?? this.fetchedAt]
+    return rowValuesOf(this, Character.FIELDS, { fetchedAt: stamp ?? this.fetchedAt })
   }
 
-  /** avatar 行 + 它的圣遗物们 → Character。列名只在这里出现（一次），右边就是它喂的领域字段 */
-  static fromRow (row: Record<string, unknown> | null | undefined, artifacts: Artifact[] = []): Character | null {
+  /** character 行 + 它的武器行 + 圣遗物行 → Character（后两者是别的表，调用方读好传进来） */
+  static fromRow (
+    row: Record<string, unknown> | null | undefined,
+    artifacts: Artifact[] = [],
+    weapon: Weapon = Weapon.none()
+  ): Character | null {
     if (!row) return null
-    return new Character({
-      uid: row.uid,
-      avatarId: row.avatar_id,
-      level: row.level,
-      promote: row.promote,
-      cons: row.cons,
-      fetter: row.fetter,
-      costume: row.costume,
-      skillLevelMap: parseJson<Record<string, number>>(row.skill_level_map),
-      weapon: Weapon.fromRow(row),
-      artifacts,
-      source: row.source as string,
-      fetchedAt: row.fetched_at as string | null
-    })
+    return new Character({ ...rowArgsOf(row, Character.FIELDS), weapon, artifacts })
   }
 
   /** enka 的一个 avatarInfo → Character（含武器与圣遗物） */

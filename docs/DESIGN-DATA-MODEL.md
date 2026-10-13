@@ -103,14 +103,16 @@ enka 原始响应 (JSON)
 
 | 模型 | 对应 | 说明 |
 |---|---|---|
-| `Player` | account 行 + 它名下的角色 | 聚合根；账号信息分批变，写库时对「本次没给值」的列用 COALESCE 保留旧值 |
-| `Character` | avatar 行 + 武器 + 5 件圣遗物 | 玩家实例（练成什么样），与 miao 的同名「图鉴 + 内核」模型不是一回事 |
-| `Weapon` | avatar 行里的 `weapon_*` 五列 | 1:1 嵌进角色行，不单独落表；`COLS` 由 `Character.COLS` 接进去 |
+| `Account` | account 行 + 它名下的角色 | 聚合根；账号信息分批变，写库时对「本次没给值」的列用 COALESCE 保留旧值 |
+| `Character` | character 行 + 武器 + 5 件圣遗物 | 玩家实例（练成什么样），与 miao 的同名「图鉴 + 内核」模型不是一回事 |
+| `Weapon` | weapon 行 | 1:1 独立落表，键同 artifact 的 `(uid, avatar_id)` —— 列名因此不用带 `weapon_` 前缀，`Character` 也不必把列拆成三段拼 |
 | `Artifact` | artifact 行 | 保证 `appendPropIds` 保序保重复（内核靠它算词条数） |
 
-每个模型自己声明列名、自己序列化/反序列化（`COLS` / `toValues` / `fromRow`），
-所以「改一列要动几个文件」变成「改一个模型」；`ingest` 只做编排，
-挑字段与「enka 长什么样 → 模型」的映射都交给各模型的 `ofEnka`。
+每个模型只声明**一张**「列名 ↔ 领域字段」对照表（`FIELDS`，工具在 `src/domain/fields.ts`）：
+`COLS`（拼 SQL 的列名清单）/ `toValues`（写库取值）/ `fromRow`（读行入参）全由它派生。
+加一列因此只动两处 —— 模型的 `FIELDS` + `schema.sql`（DDL 省不掉）。以前这三份是分开写的、
+顺序一致只靠注释约束；`test/pipeline.ts` 第 8 节现在把「空库的列 == FIELDS」与「迁移后的列 == FIELDS」
+两个方向都断言了，写歪即红。`ingest` 只做编排，「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`。
 
 ⚠️ 模型**不许引外层**（`test/arch.ts` 第 7 节）—— 只许两种 import：同目录的 `./xxx.ts`，
 以及更底一层的共用件 `../shared/util.ts`。不许 import store / adapter / view / miao / 三方包。
@@ -183,8 +185,17 @@ enka 原始响应 (JSON)
   必须这么做——`CREATE TABLE IF NOT EXISTS` 对**已存在**的表一列也不会加，只跑它就是静默不升级。
 - 缺某一版的迁移函数时**直接抛错拒绝启动**，而不是降级处理（降级会静默丢数据）。
 
-已用过一次：v1 → v2 补上三个 `*_hash` 列（§5），`test/pipeline.ts` 第 8 节用
-「造一个 v1 形状的库再打开」的方式守着这条路。
+已用过四次：v1 → v2 补三个 `*_hash` 列（§5）、v2 → v3 补两列 enka 原始数值、v3 → v4 把 `avatar` 表
+改名为 `character` 并删掉 `i18n_text` 死表、v4 → v5 把武器五列拆成独立的 `weapon` 表。
+`test/pipeline.ts` 第 8 节用「造一个 v1 形状的库再打开」的方式守着整条路 —— 连升级后的列顺序都对着
+模型的 `COLS` 断言。
+
+v4 是**整表重建**（建新表 → 按显式列名搬数据 → 丢旧表），不是 `ALTER ... RENAME`：老库的列顺序是
+历年 ALTER 追加出来的（`*_hash` / `main_stat_value` / `sub_stats` 全吊在表尾），RENAME 改不了顺序，
+而重建能让老库与新库结构逐字一致。v5 反过来只用 `ALTER ... DROP COLUMN` —— 它不关心列序（读写都点名列），
+所以「建 weapon 表 → 按列名搬 → 丢掉 character 里那五列」就够了，不必再重建一次。
+迁移里的 DDL 是**冻结快照**，故意不读 `schema.sql`、也不引模型的 `COLS` —— 迁移是历史记录，
+写的是什么就永远做什么；跟着现码走会在下次改结构时重复加同一列。
 
 ---
 
@@ -205,7 +216,7 @@ flat.setNameTextMapHash    // 套装名（同套装 5 件共用同一个值）
 所以对圣遗物/武器名，我们**不需要自己翻译、也不需要自己维护 id→名字映射**：
 存下 hash，将来挂上官方文案表就一次性拿到全部语言。
 
-因此 `artifact.name_hash` / `artifact.set_hash` / `avatar.weapon_name_hash` 三列是**现在就必须存的**：
+因此 `artifact.name_hash` / `artifact.set_hash` / `weapon.name_hash` 三列是**现在就必须存的**：
 enka 正好白给，丢了以后要补只能重抓（我们做缓存的全部意义就是不重抓）。它仍然符合「存 id 不存名字」——
 hash 是名字的 id。
 
@@ -215,7 +226,10 @@ hash 是名字的 id。
 
 `avatarInfo` 里**只有 `avatarId`，没有 `nameTextMapHash`**（实测确认）。所以角色名的多语言必须另配一份
 `avatarId → 文案 key` 映射（这份映射从官方数据表里来，是静态的，一次配好即可）。
-`i18n_text` 表按 `kind` 区分两种主键：`'text'`（用 hash），`'avatar'`（用 avatarId）。
+
+文案**不落库**：`tools/sync_i18n.py` 把官方 TextMap 提取成 `vendor/i18n/names.json`
+（hash / avatarId / itemId / setId → 各语言文本），进程启动时读进内存查表 —— 多语言是展示层的事，
+数据层只存 id。schema 里曾经挂过一张 `i18n_text` 占位表，v4 迁移删掉了（零引用、零数据）。
 
 ### 5.3 计算时方向反过来
 

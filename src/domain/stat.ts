@@ -10,8 +10,8 @@
  *
  * ⚠️ 方向坑（本项目踩过）：**不带 _PERCENT 的是固定值** —— `FIGHT_PROP_HP` 是固定生命（满级花主词条
  *    4780）、对应 miao 的 `hpPlus`（小生命）；`FIGHT_PROP_HP_PERCENT`（46.6%）才对应 `hp`（大生命）。
- *    atk / def 同理，三对都这样。别拿 src/i18n/index.ts 的 `STAT_PROP` 对数值 —— 它方向是**反的**，
- *    只用于查官方文案名（而官方这两条都叫「生命值」，所以查名上看不出错）；对数值的判据是 miao 自己的
+ *    atk / def 同理，三对都这样。反着记（hp → FIGHT_PROP_HP）不会报错、查名也照样对（官方这两条都叫
+ *    「生命值」），但一旦拿它对数值，大生命就被指到固定值那一列上了。对数值的判据是 miao 自己的
  *    `mainIdMap`（14001 → hpPlus、15002 → hp）。
  *
  * ⚠️ 这张表**只用于对数值 / 查名**，不参与算分 —— 评分 100% 走内核，内核自己从 id 解析。
@@ -45,12 +45,16 @@ const STAT_TYPES = {
 export const StatType = Object.fromEntries(
   Object.entries(STAT_TYPES).map(([name, t]) => [name, t.prop]))
 
-/* enka prop → miao key（20 项）。「同一个词条在两套词汇里叫什么」是词条本身的性质，不是存储的性质 */
+/* enka prop → miao key。「同一个词条在两套词汇里叫什么」是词条本身的性质，不是存储的性质。
+   这 20 项 = miao `Meta.getMeta('gs','arti')` 里 mainIdMap + attrIdMap 的全集。 */
 export const ENKA_PROP_TO_KEY = Object.fromEntries(
   Object.values(STAT_TYPES).map(t => [t.prop, t.key]))
 
-/* miao key → enka prop（反查，给「按 key 判断口径」用） */
-const KEY_TO_PROP = Object.fromEntries(
+/* miao key → enka prop。两个消费者：本文件的 isIntegerStatKey（判整数口径）、
+   src/i18n/index.ts 的 statName（拿 prop 去官方文案表查名）。
+   ⚠️ 这个方向是**唯一正确**的（hp → ..._PERCENT）；反着写（hp → FIGHT_PROP_HP）不会报错、
+   查名也照样对（官方这两条都叫「生命值」），但一旦拿它对数值就把大生命指到了固定值那一列。 */
+export const KEY_TO_PROP = Object.fromEntries(
   Object.values(STAT_TYPES).map(t => [t.key, t.prop]))
 
 /** enka 字符串 prop → miao 短 key；认不出返回 null（不猜） */

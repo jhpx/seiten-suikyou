@@ -127,7 +127,7 @@ enka 原始响应
    好消息是**文案主键不用自己造**：enka 的 `flat` 里直接带着官方的 `nameTextMapHash` /
    `setNameTextMapHash`（实测 uid 101242308 的响应里有 132 处），那就是官方全语言文案表的主键
    —— 存下 hash，接上官方 `TextMap` 就一次性拿到全部语言，不需要我们自己翻译。
-   所以这三个 hash 列（`artifact.name_hash` / `artifact.set_hash` / `avatar.weapon_name_hash`）
+   所以这三个 hash 列（`artifact.name_hash` / `artifact.set_hash` / `weapon.name_hash`）
    在 ingest 阶段就存下来：enka 白给的东西，丢了要补只能重抓。
    唯一例外是**角色名**：`avatarInfo` 里只有 `avatarId`，没有 hash，得另配一份静态映射。
 

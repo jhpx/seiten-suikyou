@@ -24,6 +24,8 @@ import type { MiaoProfile } from '../src/adapter/materialize.ts'
 import { shapeCharacter } from '../src/view/shape.ts'
 import type { AttrRow, MarkDetail } from '../src/view/shape.ts'
 import { Artifact } from '../src/domain/artifact.ts'
+import { Weapon } from '../src/domain/weapon.ts'
+import { Account } from '../src/domain/account.ts'
 /* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
    本文件两个都要用，所以把**我们的**那个按仓库惯例（materialize.ts 用 Miao* 前缀）
    反过来标成 Domain*，`Character` 依旧指 miao 的图鉴类。 */
@@ -193,7 +195,7 @@ const coreLevelOf = (enkaLevel: number) => {
   const only = equip(1, 'hpPlus', [])
   only.reliquary.level = enkaLevel
   one.avatarInfoList![0].equipList = [only]
-  return toMiaoProfile(ingestPayload(one, { source: 'enka' }).player.characters[0])?.artis?.artis?.['1']?.level
+  return toMiaoProfile(ingestPayload(one, { source: 'enka' }).account.characters[0])?.artis?.artis?.['1']?.level
 }
 ok(coreLevelOf(21) === 20, 'enka 的 21（满级）→ 内核 20', `实际 ${coreLevelOf(21)}`)
 ok(coreLevelOf(13) === 12, 'enka 的 13 → 内核 12', `实际 ${coreLevelOf(13)}`)
@@ -229,11 +231,11 @@ ok(fakeArtifact(4, 3).quality() === 3,
 
 console.log('\n=== 2. ingest：enka 响应 → 领域模型 ===')
 const ingested = ingestPayload(payload, { source: 'enka' })
-const directCharacter = ingested.player.characters[0]
+const directCharacter = ingested.account.characters[0]
 /* 后面到处拿它查库。解析对不对由下面那条断言守着，这里只做「必然非空」的收窄。 */
-const uid = ingested.player.uid!
+const uid = ingested.account.uid!
 
-ok(ingested.player.uid === 900000001, 'uid 解析正确')
+ok(ingested.account.uid === 900000001, 'uid 解析正确')
 ok(directCharacter.avatarId === 10000046, 'avatarId 解析正确')
 ok(directCharacter.level === 90 && directCharacter.promote === 6, '等级 / 突破解析正确')
 ok(directCharacter.cons === 3, '命座数 = talentIdList.length')
@@ -256,7 +258,7 @@ ok(directCharacter.artifacts[0].appendPropIds.length === 4, 'appendPropIds 条�
 const cdmgRolls = directCharacter.artifacts[0].appendPropIds.filter(id => artiMeta.attrIdMap[id]?.key === 'cdmg')
 ok(cdmgRolls.length === 3, '同 key 的多次 roll 一条不少（这是词条数的唯一来源）',
   `实际 ${JSON.stringify(directCharacter.artifacts[0].appendPropIds)}`)
-const 中文字 = JSON.stringify(ingested.player.characters)
+const 中文字 = JSON.stringify(ingested.account.characters)
 ok(!/[\u4e00-\u9fa5]/.test(中文字), '库行里没有中文名（存储层只存 id）',
   (中文字.match(/[\u4e00-\u9fa5]+/) || [])[0])
 
@@ -303,7 +305,7 @@ console.log('\n=== 3. 落库 → 读回（JSON 序列化不丢东西）===')
 const db = openDb(':memory:')
 repo.saveFetch(db, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
 
-const back = repo.loadPlayer(db, uid)!
+const back = repo.loadAccountWithCharacters(db, uid)!
 ok(back.nickname === '测试号', '账号读回正确')
 ok(back.characters.length === 1, '角色读回正确')
 
@@ -387,7 +389,7 @@ dirty.avatarInfoList![0].equipList!.push({
 let dirtyScore = null
 let dirtyThrew = false
 try {
-  dirtyScore = scoreOf(ingestPayload(dirty, { source: 'enka' }).player.characters[0])
+  dirtyScore = scoreOf(ingestPayload(dirty, { source: 'enka' }).account.characters[0])
 } catch (e) {
   dirtyThrew = true
   console.log('        ' + errMessage(e))
@@ -396,7 +398,7 @@ ok(!dirtyThrew, '认不出的部件 id 不会抛异常')
 ok(!!dirtyScore, '脏数据仍能算出分（坏的那件跳过）')
 
 const unknownChar = { ...structuredClone(payload), avatarInfoList: [{ avatarId: 999999999, propMap: {}, equipList: [] }] }
-ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).player.characters[0]) === null,
+ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).account.characters[0]) === null,
   'miao 不认识的角色返回 null，不抛异常')
 
 /* ---------------- 10. 老库升级 ---------------- */
@@ -404,6 +406,8 @@ ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).player.character
  * 已经落地的库是 v1（没有那三列文案 key、也没有 enka 原始数值那两列），
  * CREATE TABLE IF NOT EXISTS 不会给老表补列，全靠 db.ts 里的 ALTER 迁移。
  * 这段就是守住那条路：造一个「v1 形状的库」，再打开，必须自动补齐且老数据一条不丢。
+ * v1 之后结构动过四次（v2 补 hash、v3 补 enka 数值、v4 改名重建、v5 拆出 weapon 表），
+ * 所以「退回 v1」也得把这四次逐个倒回去。
  */
 
 console.log('\n=== 8. 老库（v1）能自动升到最新版，数据不丢 ===')
@@ -420,30 +424,60 @@ ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('ma
   '新库直接就有 name_hash / main_stat_value 列')
 repo.saveFetch(d, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
 
-/* 手工退回 v1：删掉 v2 加的三列 + v3 加的两列、版本号改回 1 */
+/* 手工退回 v1 形状。分两段，倒着来：
+   ① 先把 v5 拆出去的武器搬回 character、删掉 weapon 表 —— 列名按 v1 叫，所以又带上 weapon_ 前缀；
+   ② 再删掉 v2 加的三列 + v3 加的两列、表名改回 v1 的 avatar、版本号改回 1。
+   表名要一起退 —— v1 那时候这张表就叫 avatar，迁移 1 的 ALTER 是照着它写的。
+   列顺序不用管：迁移全程按显式列名搬（ALTER 只加列、v4 重建时 INSERT ... SELECT 也点名列），
+   所以这里 ADD COLUMN 追加在尾巴上不影响结果。 */
+d.exec(`
+  ALTER TABLE character ADD COLUMN weapon_item_id INTEGER;
+  ALTER TABLE character ADD COLUMN weapon_level   INTEGER;
+  ALTER TABLE character ADD COLUMN weapon_promote INTEGER;
+  ALTER TABLE character ADD COLUMN weapon_affix   INTEGER;
+  UPDATE character SET
+    weapon_item_id = (SELECT item_id FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
+    weapon_level   = (SELECT level   FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
+    weapon_promote = (SELECT promote FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
+    weapon_affix   = (SELECT affix   FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id);
+  DROP TABLE weapon;
+`)
 d.exec('ALTER TABLE artifact DROP COLUMN name_hash')
 d.exec('ALTER TABLE artifact DROP COLUMN set_hash')
-d.exec('ALTER TABLE avatar DROP COLUMN weapon_name_hash')
 d.exec('ALTER TABLE artifact DROP COLUMN main_stat_value')
 d.exec('ALTER TABLE artifact DROP COLUMN sub_stats')
+d.exec('ALTER TABLE character RENAME TO avatar')
 d.exec('PRAGMA user_version = 1')
 ok(!cols(d, 'artifact').includes('name_hash') && !cols(d, 'artifact').includes('main_stat_value'),
   '已退回 v1 形状（两批加列确实都没了）')
 d.close()
 
-/* 重新打开 → 应该自动补列（跑 v1→v2→v3 两级迁移） */
+/* 重新打开 → 自动升级（v1→v2→v3 补列，v4 按最新命名重建，v5 把武器拆进 weapon 表） */
 d = openDb(tmpDb)
+ok(cols(d, 'avatar').length === 0 && cols(d, 'character').length > 0, 'v4 把表名 avatar 改成了 character')
 ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('set_hash'),
   '打开老库时自动补上 artifact 的两列文案 key')
-ok(cols(d, 'avatar').includes('weapon_name_hash'), '自动补上 avatar 的 weapon_name_hash')
 ok(cols(d, 'artifact').includes('main_stat_value') && cols(d, 'artifact').includes('sub_stats'),
   '自动补上 v3 的两列 enka 原始数值')
+/* v5：武器五列从 character 挪进 weapon 表，character 里不该再有 weapon_* */
+ok(cols(d, 'character').length > 0 && !cols(d, 'character').some(c => c.startsWith('weapon_')),
+  'v5 后 character 里没有 weapon_* 列了', `实际 ${JSON.stringify(cols(d, 'character'))}`)
+ok(JSON.stringify(cols(d, 'weapon')) === JSON.stringify(Weapon.COLS),
+  'v5 建出的 weapon 列 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'weapon'))}`)
+/* v4 是「拿 schema.sql 重建」，所以老库的列顺序也和新库逐字一样 —— 这条钉住「结构不漂移」 */
+ok(JSON.stringify(cols(d, 'character')) === JSON.stringify(DomainCharacter.COLS),
+  '老库的 character 列顺序 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'character'))}`)
+ok(JSON.stringify(cols(d, 'artifact')) === JSON.stringify(Artifact.COLS),
+  '老库的 artifact 列顺序 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'artifact'))}`)
 ok(d.prepare('PRAGMA user_version').get()?.user_version === SCHEMA_VERSION,
   `user_version 升到 ${SCHEMA_VERSION}`)
 
-const after = repo.loadPlayer(d, uid)!
+const after = repo.loadAccountWithCharacters(d, uid)!
 ok(after.characters.length === 1 && after.characters[0].artifacts.length === 5,
   '升级后老数据一条不丢（1 个角色 5 件圣遗物）')
+ok(after.characters[0].weapon.itemId === directCharacter.weapon.itemId &&
+  after.characters[0].weapon.affix === directCharacter.weapon.affix,
+  '升级后武器还在（v5 是从 character 搬进 weapon 表的，别搬丢了）')
 const stillScores = scoreOf(after.characters[0])
 ok(stillScores?.mark === viaDb!.mark, `升级后照旧能算出同一个分（${stillScores?.mark}）`)
 ok(after.characters[0].artifacts[0].nameHash === null, '老行补出来的新列是 NULL（不是 0，也别拿 0 充数）')
@@ -453,6 +487,22 @@ ok(!!oldView.artifacts[0].main, '老库（无 enka 数值）主词条照样显�
 d.close()
 
 for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: true })
+
+/* 空库走 schema.sql（不跑迁移），所以两个方向都得钉：
+   「空库的列 == 模型的 FIELDS」+「迁移后的列 == 模型的 FIELDS」（上一节）。列定义只写一遍
+   （模型的 FIELDS），schema.sql 那份要是写歪了 / 少一列 / 顺序不对，这几条必红。 */
+{
+  const fresh = openDb(':memory:')
+  ok(JSON.stringify(cols(fresh, 'account')) === JSON.stringify(Account.COLS),
+    '空库 account 列 == Account.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'account'))}`)
+  ok(JSON.stringify(cols(fresh, 'character')) === JSON.stringify(DomainCharacter.COLS),
+    '空库 character 列 == Character.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'character'))}`)
+  ok(JSON.stringify(cols(fresh, 'weapon')) === JSON.stringify(Weapon.COLS),
+    '空库 weapon 列 == Weapon.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'weapon'))}`)
+  ok(JSON.stringify(cols(fresh, 'artifact')) === JSON.stringify(Artifact.COLS),
+    '空库 artifact 列 == Artifact.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'artifact'))}`)
+  fresh.close()
+}
 
 /* ---------------- 11. 文案 key 清单 ---------------- */
 
@@ -479,7 +529,7 @@ const realRaw = JSON.parse(fs.readFileSync(path.join('test', 'data', 'enka-real.
 const realIn = ingestPayload(realRaw, { source: 'enka' })
 const realDb = openDb(':memory:')
 repo.saveFetch(realDb, { ...realIn, stamp: '2026-01-04T00:00:00.000Z' })
-const realBack = repo.loadPlayer(realDb, realIn.player.uid!)!
+const realBack = repo.loadAccountWithCharacters(realDb, realIn.account.uid!)!
 
 ok(realBack.characters.length === 3, `真实响应 3 个角色全部入库（实际 ${realBack.characters.length}）`)
 ok(realBack.characters.every(a => a.artifacts.length === 5 || a.artifacts.length === 0),
@@ -914,7 +964,7 @@ console.log('\n=== 14. 圣遗物显示用 enka 原始数值（不走内核重算
   /* 用一份干净的库，别受前面几节改库的影响 */
   const vdb = openDb(':memory:')
   repo.saveFetch(vdb, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
-  const row = repo.loadPlayer(vdb, uid)!.characters.find(a => a.avatarId === 10000046)!
+  const row = repo.loadAccountWithCharacters(vdb, uid)!.characters.find(a => a.avatarId === 10000046)!
   const a1 = row.artifacts.find(a => a.pos === 1)!
   ok(Number.isFinite(a1?.mainStatValue), '主词条数值落库了（mainStatValue）',
     `实际 ${a1?.mainStatValue}`)

@@ -15,7 +15,7 @@ import { toMiaoProfile, deriveTalent } from '../adapter/materialize.ts'
 import type { MiaoProfile } from '../adapter/materialize.ts'
 import { Artifact } from '../domain/artifact.ts'
 import type { Character } from '../domain/character.ts'
-import type { Player } from '../domain/player.ts'
+import type { Account } from '../domain/account.ts'
 import { isIntegerStatKey } from '../domain/stat.ts'
 import { num } from '../shared/util.ts'
 
@@ -495,7 +495,7 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
   return {
     uid: profile.uid,
     avatarId: profile.id,
-    /* 这个角色**自己**上一次被同步的时刻（avatar 表那行），不是整个 UID 的最后一次抓取 —— 展柜是子集、
+    /* 这个角色**自己**上一次被同步的时刻（character 表那行），不是整个 UID 的最后一次抓取 —— 展柜是子集、
        每次只覆盖展柜里那几个，所以角色之间能差好几天（实测本库有 10-11 与 10-06 并存）。列表页页脚报的
        是 UID 级时间（见 buildAccountView 的 fetchedAt），两处语义不同，别混。 */
     fetchedAt: fmtTime(ch.fetchedAt),
@@ -569,15 +569,15 @@ export function fmtTime (iso: string | null | undefined): string | null {
 /** 一整包 → 视图对象（页面/接口的最终形状），内部把 materialize + 打分 + 本地化串起来。
  *  不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 —— 新角色先于 miao 更新是常态。
  *  fetchedAt 是 UID 级（= 上次同步 enka，通常取 fetch_log 最新一条）；角色各自的在 shapeCharacter 里出。 */
-export function buildAccountView ({ player, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }: {
-  player: Player | null
+export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }: {
+  account: Account | null
   locale?: string
   fetchedAt?: string | null
 }) {
   const loc = i18n.resolveLocale(locale)
   const avatars: Array<ReturnType<typeof shapeCharacter>> = []
   const skipped: Array<number | null> = []
-  for (const ch of player?.characters || []) {
+  for (const ch of account?.characters || []) {
     const profile = toMiaoProfile(ch)
     if (!profile) { skipped.push(ch.avatarId); continue }
     avatars.push(shapeCharacter(ch, profile, ArtisMark.getMarkDetail(profile, true) as MarkDetail, loc))
@@ -585,13 +585,13 @@ export function buildAccountView ({ player, locale = i18n.DEFAULT_LOCALE, fetche
   return {
     locale: loc,
     fetchedAt: fmtTime(fetchedAt),
-    account: player
+    account: account
       ? {
-          uid: player.uid,
-          nickname: player.nickname,
-          level: player.level,
-          worldLevel: player.worldLevel,
-          signature: player.signature
+          uid: account.uid,
+          nickname: account.nickname,
+          level: account.level,
+          worldLevel: account.worldLevel,
+          signature: account.signature
         }
       : null,
     count: avatars.length,

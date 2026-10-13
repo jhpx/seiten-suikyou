@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { allRows, openDb } from '../src/store/db.ts'
-import { loadPlayer } from '../src/store/repo.ts'
+import { loadAccountWithCharacters } from '../src/store/repo.ts'
 import { buildAccountView } from '../src/view/shape.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
@@ -28,9 +28,9 @@ const uids = allRows<{ uid: number }>(db, 'SELECT uid FROM account').map(row => 
 
 const wanted = new Set<string | null>()
 for (const uid of uids) {
-  const player = loadPlayer(db, uid)
-  if (!player) continue
-  const view = buildAccountView({ player, locale: 'chs' })
+  const account = loadAccountWithCharacters(db, uid)
+  if (!account) continue
+  const view = buildAccountView({ account, locale: 'chs' })
   for (const avatar of view.avatars) {
     wanted.add(urlToRel(avatar.splash))
     /* 首页角色网格用的正面大头照，和明细页的立绘是两张不同的图 */

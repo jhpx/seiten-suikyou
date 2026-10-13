@@ -39,6 +39,7 @@ export interface EnkaEquip {
 
 /** avatarInfoList 里的一项 */
 export interface EnkaAvatarInfo {
+  /** enka 官方字段名，角色 id（如 10000039）—— 官方数据里角色就叫 **Avatar**，不是我们的命名 */
   avatarId?: number
   /** 等级在 '4001'、突破在 '1002'（enka 的数字字符串键） */
   propMap?: Record<string, { val?: number | string }>

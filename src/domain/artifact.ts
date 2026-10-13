@@ -10,7 +10,9 @@
  */
 import { Stat } from './stat.ts'
 import type { EnkaEquip } from './enka.ts'
-import { encodeJson, num, parseJson } from '../shared/util.ts'
+import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
+import type { Field } from './fields.ts'
+import { num } from '../shared/util.ts'
 
 /* 装备槽位名 → 位置（与上游 EnkaData.js 的 artisIdxMap 一致） */
 const POS_BY_EQUIP_TYPE: Record<string, number> = {
@@ -41,11 +43,11 @@ export class Artifact {
     pos, itemId, levelRaw, star, mainPropId, appendPropIds,
     mainStatValue, subStats, nameHash, setHash
   }: {
-    /* 外部原始值一律 unknown（enka JSON、DB 列、被手工改过的库什么都可能给）；num() 在这儿归一到
-       number|null，**唯一的一次** —— 出了 constructor 字段类型就固定，ofEnka / fromRow 只是字段名映射。
-       两个数组字段的元素类型有归属，照实声明。 */
+    /* 外部原始值一律 unknown（enka JSON、库行、被手工改过的库什么都可能给）；num() 在这儿归一到
+       number|null，**唯一的一次**。两个数组字段（enka 给 Stat 实例、库行给普通对象）因此收两种形状。 */
     pos?: unknown; itemId?: unknown; levelRaw?: unknown; star?: unknown; mainPropId?: unknown
-    appendPropIds?: number[]; mainStatValue?: unknown; subStats?: Stat[]
+    appendPropIds?: number[]; mainStatValue?: unknown
+    subStats?: Array<Stat | { prop: string; value: unknown }>
     nameHash?: unknown; setHash?: unknown
   }) {
     this.pos = num(pos)                          // 1 花 2 羽 3 沙 4 杯 5 头
@@ -55,43 +57,32 @@ export class Artifact {
     this.mainPropId = num(mainPropId)            // 主词条数字 id → 喂内核
     this.appendPropIds = appendPropIds || []     // 副词条逐次 roll 的 id → 喂内核（保序保重复）
     this.mainStatValue = num(mainStatValue)      // enka 原始主词条数值 → 显示
-    this.subStats = subStats || []               // enka 合并后的副词条 → 显示，不喂内核
+    /* 副词条 → 显示，不喂内核。库行读回来的是普通对象、enka 给的是 Stat —— 一律换成 Stat */
+    this.subStats = (subStats || []).map(s => (s instanceof Stat ? s : new Stat(s.prop, s.value)))
     this.nameHash = num(nameHash)                // 本件名字的官方文案 key
     this.setHash = num(setHash)                  // 套装名文案 key（同套 5 件共用一个）
   }
 
-  /* 落库的列，**顺序与 toValues 严格一致**（改一个必须动另一个，所以紧挨着放）。
-     列名与序列化都由模型自己出，repo 不再需要一份「哪列是 JSON」的清单。 */
-  static COLS: string[] = ['uid', 'avatar_id', 'pos', 'item_id', 'level_raw', 'star',
-    'main_prop_id', 'append_prop_ids', 'main_stat_value', 'sub_stats', 'name_hash', 'set_hash']
+  /* artifact 表的列 ↔ 领域字段（顺序 = 建表顺序）。列名与序列化都由模型自己出，
+     repo 不需要一份「哪列是 JSON」的清单 —— FIELDS 里标了。 */
+  static FIELDS: Field[] = [
+    ['pos', 'pos'], ['item_id', 'itemId'], ['level_raw', 'levelRaw'], ['star', 'star'],
+    ['main_prop_id', 'mainPropId'], ['append_prop_ids', 'appendPropIds', 'json'],
+    ['main_stat_value', 'mainStatValue'], ['sub_stats', 'subStats', 'json'],
+    ['name_hash', 'nameHash'], ['set_hash', 'setHash']
+  ]
 
-  /* 按 COLS 顺序的各列值（INSERT 用），JSON 列在这儿编码。
-     uid / avatarId 是「哪一行」的键、取自父对象，不是本件圣遗物的字段。 */
+  /* uid / avatar_id 是「哪一行」的键、取自父对象，不是本件圣遗物的字段，所以不在 FIELDS 里，拼在前面 */
+  static COLS: string[] = ['uid', 'avatar_id', ...colsOf(Artifact.FIELDS)]
+
+  /** 按 COLS 顺序的各列值（INSERT 用）；uid / avatarId 由父对象给 */
   toValues (uid: number | null, avatarId: number | null): unknown[] {
-    return [
-      uid, avatarId, this.pos, this.itemId, this.levelRaw, this.star,
-      this.mainPropId, encodeJson(this.appendPropIds),
-      this.mainStatValue,
-      encodeJson(this.subStats.map(s => ({ prop: s.prop, value: s.value }))),
-      this.nameHash, this.setHash
-    ]
+    return [uid, avatarId, ...rowValuesOf(this, Artifact.FIELDS)]
   }
 
-  /** 库里的一行 → Artifact。列名只在这里出现（一次），右边就是它喂的领域字段 —— 两列 JSON 在这儿解开 */
+  /** 库里的一行 → Artifact；列名 → 字段、两列 JSON 的解码都在 FIELDS 里 */
   static fromRow (row: Record<string, unknown>): Artifact {
-    return new Artifact({
-      pos: row.pos,
-      itemId: row.item_id,
-      levelRaw: row.level_raw,
-      star: row.star,
-      mainPropId: row.main_prop_id,
-      appendPropIds: parseJson<number[]>(row.append_prop_ids) || [],
-      mainStatValue: row.main_stat_value,
-      subStats: (parseJson<Array<{ prop: string; value: unknown }>>(row.sub_stats) || [])
-        .map(s => new Stat(s.prop, s.value)),
-      nameHash: row.name_hash,
-      setHash: row.set_hash
-    })
+    return new Artifact(rowArgsOf(row, Artifact.FIELDS))
   }
 
   /** enka 的一件装备 → Artifact；不是圣遗物（比如武器）、或位置认不出 → null */

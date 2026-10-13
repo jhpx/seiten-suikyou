@@ -33,7 +33,7 @@ function eq (a: unknown, b: unknown, label: string): void {
 /* 播种：把真实响应过一遍 ingest 落进内存库 */
 const summary = ingestPayload(REAL, { source: 'enka' })
 /* 夹具是真实响应，uid 必然在（ingest 那边找不到就直接抛了）—— 后面到处拿它拼 URL / 查库。 */
-const UID = summary.player.uid!
+const UID = summary.account.uid!
 
 const app = await startServer({ port: 0, dbFile: ':memory:' })
 repo.saveFetch(app.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
@@ -87,7 +87,7 @@ console.log('\n=== 2. uid 列表 ===')
   const r = await json('/api/uids')
   eq(r.data.length, 1, '/api/uids 有 1 条')
   eq(r.data[0].uid, UID, 'uid 对得上')
-  eq(r.data[0].avatarCount, summary.avatarCount, '角色数与 ingest 一致')
+  eq(r.data[0].avatarCount, summary.characterCount, '角色数与 ingest 一致')
 
   /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 shape.ts 的 fmtTime）。
      断言刻意写成与时区无关 —— 换台机器跑也得过，所以拆成两条：
@@ -109,7 +109,7 @@ let chsView = null
 {
   const r = await json(`/api/uid/${UID}?locale=chs`)
   chsView = r.data
-  eq(r.data.count, summary.avatarCount, '角色数一致')
+  eq(r.data.count, summary.characterCount, '角色数一致')
   eq(r.data.locale, 'chs', '回显语言')
   eq(r.data.skipped, [], '没有被跳过的角色')
   ok(!!r.data.account.nickname, `账号昵称拿得到（${r.data.account.nickname}）`)
@@ -133,17 +133,17 @@ let chsView = null
      再请求一次：角色级要跟着变，UID 级（来自 fetch_log）必须纹丝不动。
      注意夹具里所有角色共用同一个 stamp，所以「改了迪卢克、其它人不变」才算真证明。 */
   const seed = '2026-01-02T03:04:05.000Z'
-  app.db.prepare('UPDATE avatar SET fetched_at = ? WHERE avatar_id = ?').run(seed, diluc.avatarId)
+  app.db.prepare('UPDATE character SET fetched_at = ? WHERE avatar_id = ?').run(seed, diluc.avatarId)
   const again = (await json(`/api/uid/${UID}?locale=chs`)).data
   const d2 = again.avatars.find((a: any) => a.avatarId === diluc.avatarId)
   ok(!!d2?.fetchedAt, '角色视图带自己的数据时间')
   eq(new Date(String(d2?.fetchedAt).replace(' ', 'T')).getTime(), new Date(seed).getTime(),
-    '角色时间是它自己那次同步的时刻（avatar.fetched_at）')
+    '角色时间是它自己那次同步的时刻（character.fetched_at）')
   ok(again.avatars.filter((a: any) => a.avatarId !== diluc.avatarId)
     .every((a: any) => a.fetchedAt !== d2?.fetchedAt),
     '同 UID 的其它角色不受影响（各是各的时间）')
   eq(again.fetchedAt, chsView.fetchedAt,
-    'UID 级时间不变（它来自 fetch_log，与 avatar 表无关）')
+    'UID 级时间不变（它来自 fetch_log，与 character 表无关）')
 }
 
 /* ---------------- 4. 视图：其它语言（这一层是本次的重点）---------------- */
@@ -227,8 +227,8 @@ console.log('\n=== 7. POST /api/fetch（用假 enka，不联网）===')
   })
   const body = await readJson(res)
   eq(res.status, 200, '抓取成功')
-  eq(body.meta.fetched, summary.avatarCount, 'meta.fetched 是本轮抓到的角色数')
-  eq(body.data.count, summary.avatarCount, '抓完直接能返回视图')
+  eq(body.meta.fetched, summary.characterCount, 'meta.fetched 是本轮抓到的角色数')
+  eq(body.data.count, summary.characterCount, '抓完直接能返回视图')
   ok(repo.listUids(app2.db).includes(UID), '抓完数据确实落库了')
 
   /* 上游报错要变成 502 + 人话，而不是 500 堆栈 */
@@ -321,7 +321,7 @@ console.log('\n=== 9. 武器三态 ===')
     const sum = ingestPayload(raw, { source: 'enka' })
     const a = await startServer({ port: 0, dbFile: ':memory:' })
     repo.saveFetch(a.db, { ...sum, stamp: '2026-09-13T00:00:00.000Z' })
-    const view = await readJson(await fetch(a.url + `/api/uid/${sum.player.uid}`))
+    const view = await readJson(await fetch(a.url + `/api/uid/${sum.account.uid}`))
     const w = view.data.avatars.find((x: any) => x.avatarId === 10000016).weapon
     a.server.close()
 

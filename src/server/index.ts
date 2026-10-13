@@ -160,9 +160,9 @@ export function createApp ({
 
   /* 库里的数据 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
   function viewOf (uid: number, locale: string) {
-    const player = repo.loadPlayer(db, uid)
-    if (!player) return null
-    return buildAccountView({ player, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
+    const account = repo.loadAccountWithCharacters(db, uid)
+    if (!account) return null
+    return buildAccountView({ account, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
   }
 
   function handleFetch (uid: number): Promise<IngestResult> {
@@ -267,7 +267,7 @@ export function createApp ({
         sendJson(res, 200, {
           ok: true,
           data: viewOf(uid, locale),
-          meta: { fetched: summary.avatarCount, source: summary.source }
+          meta: { fetched: summary.characterCount, source: summary.source }
         })
       } catch (e) {
         /* enka 的业务错误（未公开 / 查不到 / 太频繁）在 message 里已经是人话了，

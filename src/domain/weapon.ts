@@ -1,8 +1,8 @@
 /*
  * Weapon —— 一把武器（值对象）
  *
- * 它**不单独落表**：一个角色一把武器（1:1），五列挂在 avatar 表上 —— 所以这里的 COLS 是
- * 「avatar 表里属于武器的列」，由 Character.toValues 接在后面。
+ * 独立落 `weapon` 表：一个角色一把（1:1），键是 (uid, avatar_id) —— 和 artifact 一样是挂在角色下的子行，
+ * 各张表各管自己的列（早先这五列挂在 character 行上，列名得加 `weapon_` 前缀避重名）。
  *
  * 三件事别搞混：
  *   · itemId   是**数字** id，名字 / 图标由 miao 元数据 + i18n 表按它查（库里不存名字）。
@@ -14,6 +14,8 @@
  *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（view/shape.ts）。
  */
 import { num } from '../shared/util.ts'
+import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
+import type { Field } from './fields.ts'
 import type { EnkaEquip } from './enka.ts'
 
 export class Weapon {
@@ -33,29 +35,31 @@ export class Weapon {
     this.itemId = num(itemId)       // 武器物品 id；null = 没装备
     this.nameHash = num(nameHash)   // 武器名文案 key
     this.level = num(level)
-    this.promote = num(promote)     // 突破等级
+    this.promote = num(promote)     // 「突破等级」0~6（enka 的 weapon.promoteLevel）
     this.affix = num(affix)         // 精炼等级（1~5）
   }
 
-  /* avatar 表里属于武器的列，**顺序与 toValues 严格一致**（改一个必须动另一个） */
-  static COLS: string[] = ['weapon_item_id', 'weapon_name_hash', 'weapon_level', 'weapon_promote', 'weapon_affix']
+  /* weapon 表的列 ↔ 领域字段（顺序 = 建表顺序） */
+  static FIELDS: Field[] = [
+    ['item_id', 'itemId'], ['name_hash', 'nameHash'],
+    ['level', 'level'], ['promote', 'promote'], ['affix', 'affix']
+  ]
+
+  /* uid / avatar_id 是「哪一行」的键、取自父对象，不是武器自己的字段，所以不在 FIELDS 里，拼在前面（同 Artifact） */
+  static COLS: string[] = ['uid', 'avatar_id', ...colsOf(Weapon.FIELDS)]
 
   /* 「没装备武器」的那一个 —— 全 null，别拿 0 充数（0 级 / 精 0 都不是合法状态）。
      出口要显示默认值时自己 `?? 1`（见 adapter/materialize.ts）。 */
   static none (): Weapon { return new Weapon() }
 
-  /** 按 COLS 顺序的各列值（插进 avatar 行用） */
-  toValues (): Array<number | null> { return [this.itemId, this.nameHash, this.level, this.promote, this.affix] }
+  /** 按 COLS 顺序的各列值（INSERT 用）；uid / avatarId 由父对象给 */
+  toValues (uid: number | null, avatarId: number | null): unknown[] {
+    return [uid, avatarId, ...rowValuesOf(this, Weapon.FIELDS)]
+  }
 
-  /** avatar 行里那五列 → Weapon。列名只在这里出现（一次） */
+  /** 库里的一行 → Weapon */
   static fromRow (row: Record<string, unknown>): Weapon {
-    return new Weapon({
-      itemId: row.weapon_item_id,
-      nameHash: row.weapon_name_hash,
-      level: row.weapon_level,
-      promote: row.weapon_promote,
-      affix: row.weapon_affix
-    })
+    return new Weapon(rowArgsOf(row, Weapon.FIELDS))
   }
 
   /* 到底装没装 —— 只看 itemId 有没有值（装备着但名字查不到 ≠ 没装：前者 enka 照样给 level/promote/affix） */

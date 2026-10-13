@@ -12,6 +12,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { t as uiT, all as uiAll } from './ui.ts'
+import { KEY_TO_PROP } from '../domain/stat.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TABLE = path.join(HERE, '..', '..', 'vendor', 'i18n', 'names.json')
@@ -84,31 +85,6 @@ export function uiTable (locale: string | null = DEFAULT_LOCALE): Record<string,
   return uiAll(resolveLocale(locale))
 }
 
-/* miao 的词条短名 → 官方的 FIGHT_PROP_* 枚举名（手写：miao 那边只有短名，而官方文案按 FIGHT_PROP_*
-   组织）。这 20 个 key 就是 miao `Meta.getMeta('gs','arti')` 里 mainIdMap + attrIdMap 的全集。 */
-const STAT_PROP: Record<string, string> = {
-  hp: 'FIGHT_PROP_HP',
-  hpPlus: 'FIGHT_PROP_HP_PERCENT',
-  atk: 'FIGHT_PROP_ATTACK',
-  atkPlus: 'FIGHT_PROP_ATTACK_PERCENT',
-  def: 'FIGHT_PROP_DEFENSE',
-  defPlus: 'FIGHT_PROP_DEFENSE_PERCENT',
-  mastery: 'FIGHT_PROP_ELEMENT_MASTERY',
-  recharge: 'FIGHT_PROP_CHARGE_EFFICIENCY',
-  cpct: 'FIGHT_PROP_CRITICAL',
-  cdmg: 'FIGHT_PROP_CRITICAL_HURT',
-  heal: 'FIGHT_PROP_HEAL_ADD',
-  dmg: 'FIGHT_PROP_ADD_HURT',
-  phy: 'FIGHT_PROP_PHYSICAL_ADD_HURT',
-  pyro: 'FIGHT_PROP_FIRE_ADD_HURT',
-  electro: 'FIGHT_PROP_ELEC_ADD_HURT',
-  hydro: 'FIGHT_PROP_WATER_ADD_HURT',
-  dendro: 'FIGHT_PROP_GRASS_ADD_HURT',
-  anemo: 'FIGHT_PROP_WIND_ADD_HURT',
-  geo: 'FIGHT_PROP_ROCK_ADD_HURT',
-  cryo: 'FIGHT_PROP_ICE_ADD_HURT'
-}
-
 /** 从一行多语言文案里挑一条：要的语言 → 英文 → 中文 → 放弃 */
 const pick = (row: Record<string, string> | undefined, locale: string): string | null =>
   (row ? row[locale] ?? row.en ?? row.chs ?? null : null)
@@ -146,9 +122,10 @@ export function slotName (pos: number | string, locale: string = DEFAULT_LOCALE)
   return pick(load().slots[String(pos)], resolveLocale(locale))
 }
 
-/** 词条：吃 miao 的短名（cpct / cdmg / hpPlus …） */
+/** 词条：吃 miao 的短名（cpct / cdmg / hpPlus …）。key → FIGHT_PROP_* 的映射在 domain/stat.ts
+ *  （那边是对数值用的正确方向，这儿只是拿去官方文案表查名）。 */
 export function statName (miaoKey: string, locale: string = DEFAULT_LOCALE): string | null {
-  const prop = STAT_PROP[miaoKey]
+  const prop = KEY_TO_PROP[miaoKey]
   return prop ? pick(load().stats[prop], resolveLocale(locale)) : null
 }
 

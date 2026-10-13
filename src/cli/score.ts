@@ -163,17 +163,17 @@ async function main () {
     const saveRaw = argValue(args['save-raw'])
     if (saveRaw) {
       fs.mkdirSync(saveRaw, { recursive: true })
-      fs.writeFileSync(path.join(saveRaw, `${uid || ingestSummary.player.uid}.json`),
+      fs.writeFileSync(path.join(saveRaw, `${uid || ingestSummary.account.uid}.json`),
         JSON.stringify(payload, null, 2))
     }
   }
 
-  const uidInDb = uid || ingestSummary?.player.uid
+  const uidInDb = uid || ingestSummary?.account.uid
   if (!uidInDb) { console.error('没有可打分的 uid'); return 2 }
 
   /* ---- 2. 从库里读回来（刻意的：读回来才算证明存对了） ---- */
-  const player = repo.loadPlayer(db, uidInDb)
-  if (!player?.characters.length) {
+  const account = repo.loadAccountWithCharacters(db, uidInDb)
+  if (!account?.characters.length) {
     console.log(`库里没有 uid ${uidInDb} 的角色数据。`)
     if (!args.offline && !args.file) {
       console.log('可能原因：该玩家没在游戏资料页开启角色展柜，enka 取不到角色。')
@@ -185,17 +185,17 @@ async function main () {
   const locale = i18n.resolveLocale(argValue(args.locale) || i18n.DEFAULT_LOCALE)
 
   console.log(line())
-  console.log(`${uiText('account', locale)}  ${player?.nickname || '?'}（uid:${uidInDb}）  Lv.${player?.level ?? '?'}  ${uiText('worldLevel', locale)} ${player?.worldLevel ?? '?'}`)
+  console.log(`${uiText('account', locale)}  ${account?.nickname || '?'}（uid:${uidInDb}）  Lv.${account?.level ?? '?'}  ${uiText('worldLevel', locale)} ${account?.worldLevel ?? '?'}`)
   const sourceText = ingestSummary
-    ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.avatarCount} ${uiText('chars', locale)}`
+    ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.characterCount} ${uiText('chars', locale)}`
     : uiText('offline', locale)
-  console.log(`${uiText('data', locale)}  ${sourceText}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${player.characters.length} ${uiText('chars', locale)}`)
+  console.log(`${uiText('data', locale)}  ${sourceText}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${account.characters.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
   const charFilter = argValue(args.char)
   const results: Array<{ character: Character; profile: MiaoProfile; result: MarkDetail }> = []
   const skipped: Array<number | null> = []
-  for (const character of player.characters) {
+  for (const character of account.characters) {
     const profile = toMiaoProfile(character)
     if (!profile) { skipped.push(character.avatarId); continue }
     results.push({ character, profile, result: ArtisMark.getMarkDetail(profile, true) as MarkDetail })

@@ -42,7 +42,7 @@ export function runSql (db: DatabaseSync, sql: string, values: unknown[] = []): 
 }
 
 /* 结构版本。改了 schema.sql 就 +1，migrate 会把老库升上来。 */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 5
 
 /*
  * 增量迁移表：MIGRATIONS[v] 把「版本 v」的库升到「版本 v+1」。
@@ -50,6 +50,9 @@ export const SCHEMA_VERSION = 3
  * 为什么需要这张表：schema.sql 全是 CREATE TABLE IF NOT EXISTS，对空库没问题，
  * 但表已经存在时它一列也不会加。所以老库只能靠 ALTER 逐版本补。
  * 新库不走这里 —— 空库直接跑 schema.sql 就已经是最新结构。
+ *
+ * ⚠️ 迁移里的 DDL 与列名是**冻结快照**：故意不读 schema.sql、也不引模型的 COLS。
+ *    迁移是历史记录，写的是什么就永远做什么；跟着现码走，下次改结构时会重复加同一列。
  */
 const MIGRATIONS: Record<number, (db: DatabaseSync) => void> = {
   /* v1 → v2：补上数据源自带的「官方文案 key」（多语言用） */
@@ -64,6 +67,110 @@ const MIGRATIONS: Record<number, (db: DatabaseSync) => void> = {
   2: (db) => {
     db.exec('ALTER TABLE artifact ADD COLUMN main_stat_value REAL')
     db.exec('ALTER TABLE artifact ADD COLUMN sub_stats TEXT')
+  },
+  /*
+   * v3 → v4：表名与领域类对齐（avatar → character），顺带删掉从没被用过的 i18n_text 死表。
+   *
+   * 为什么整表重建而不是 `ALTER ... RENAME`：老库的列顺序是历年 ALTER 追加出来的
+   * （name_hash / set_hash / main_stat_value / sub_stats 全吊在 artifact 尾巴上、
+   * weapon_name_hash 吊在 character 尾巴上），RENAME 改不了顺序。重建之后**老库与新库结构逐字一致**，
+   * 那次「列顺序漂移」也就一并消掉。数据一条不丢：建新表 → 按显式列名搬 → 丢旧表。
+   *
+   * 关 foreign_keys 是为了让 RENAME 不去改写 artifact 的 REFERENCES 子句（两张表反正都要丢掉重建）。
+   */
+  3: (db) => {
+    db.exec('PRAGMA foreign_keys = OFF')
+    tx(db, () => db.exec(`
+      ALTER TABLE artifact RENAME TO _old_artifact;
+      ALTER TABLE avatar   RENAME TO _old_avatar;
+
+      CREATE TABLE character (
+        uid              INTEGER NOT NULL,
+        avatar_id        INTEGER NOT NULL,
+        level            INTEGER,
+        promote          INTEGER,
+        cons             INTEGER,
+        fetter           INTEGER,
+        costume          INTEGER,
+        skill_level_map  TEXT,
+        weapon_item_id   INTEGER,
+        weapon_name_hash INTEGER,
+        weapon_level     INTEGER,
+        weapon_promote   INTEGER,
+        weapon_affix     INTEGER,
+        source           TEXT    NOT NULL,
+        fetched_at       TEXT    NOT NULL,
+        PRIMARY KEY (uid, avatar_id)
+      );
+
+      CREATE TABLE artifact (
+        uid             INTEGER NOT NULL,
+        avatar_id       INTEGER NOT NULL,
+        pos             INTEGER NOT NULL,
+        item_id         INTEGER NOT NULL,
+        level_raw       INTEGER NOT NULL,
+        star            INTEGER NOT NULL,
+        main_prop_id    INTEGER NOT NULL,
+        append_prop_ids TEXT    NOT NULL,
+        main_stat_value REAL,
+        sub_stats       TEXT,
+        name_hash       INTEGER,
+        set_hash        INTEGER,
+        PRIMARY KEY (uid, avatar_id, pos),
+        FOREIGN KEY (uid, avatar_id) REFERENCES character (uid, avatar_id) ON DELETE CASCADE
+      );
+
+      INSERT INTO character (uid, avatar_id, level, promote, cons, fetter, costume, skill_level_map,
+        weapon_item_id, weapon_name_hash, weapon_level, weapon_promote, weapon_affix, source, fetched_at)
+        SELECT uid, avatar_id, level, promote, cons, fetter, costume, skill_level_map,
+          weapon_item_id, weapon_name_hash, weapon_level, weapon_promote, weapon_affix, source, fetched_at
+        FROM _old_avatar;
+
+      INSERT INTO artifact (uid, avatar_id, pos, item_id, level_raw, star, main_prop_id, append_prop_ids,
+        main_stat_value, sub_stats, name_hash, set_hash)
+        SELECT uid, avatar_id, pos, item_id, level_raw, star, main_prop_id, append_prop_ids,
+          main_stat_value, sub_stats, name_hash, set_hash
+        FROM _old_artifact;
+
+      DROP TABLE _old_artifact;
+      DROP TABLE _old_avatar;
+      DROP TABLE IF EXISTS i18n_text;
+
+      CREATE INDEX IF NOT EXISTS idx_character_uid ON character (uid);
+      CREATE INDEX IF NOT EXISTS idx_artifact_uid  ON artifact (uid, avatar_id);
+    `))
+    db.exec('PRAGMA foreign_keys = ON')
+  },
+  /*
+   * v4 → v5：武器从 character 里拆出来，独立成 weapon 表（模型层同步：Weapon 的字段回归、Character 不再拼三段）。
+   *
+   * 这里不用整表重建 —— 只是「挪走 5 列 + 建一张表」，列的顺序本来就不关心（两边都按显式列名读写），
+   * 所以 `DROP COLUMN` 就够了。武器行**每个角色都写**（没装备就是全 NULL），所以这里直接对着 character 全量搬。
+   */
+  4: (db) => {
+    tx(db, () => db.exec(`
+      CREATE TABLE weapon (
+        uid        INTEGER NOT NULL,
+        avatar_id  INTEGER NOT NULL,
+        item_id    INTEGER,
+        name_hash  INTEGER,
+        level      INTEGER,
+        promote    INTEGER,
+        affix      INTEGER,
+        PRIMARY KEY (uid, avatar_id),
+        FOREIGN KEY (uid, avatar_id) REFERENCES character (uid, avatar_id) ON DELETE CASCADE
+      );
+
+      INSERT INTO weapon (uid, avatar_id, item_id, name_hash, level, promote, affix)
+        SELECT uid, avatar_id, weapon_item_id, weapon_name_hash, weapon_level, weapon_promote, weapon_affix
+        FROM character;
+
+      ALTER TABLE character DROP COLUMN weapon_item_id;
+      ALTER TABLE character DROP COLUMN weapon_name_hash;
+      ALTER TABLE character DROP COLUMN weapon_level;
+      ALTER TABLE character DROP COLUMN weapon_promote;
+      ALTER TABLE character DROP COLUMN weapon_affix;
+    `))
   }
 }
 

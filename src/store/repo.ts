@@ -6,11 +6,14 @@
  *
  * 进出都走领域模型：列名、JSON 编解码、扁列 ↔ 字段名的对应全在模型里（`X.COLS` + `toValues` / `fromRow`），
  * 这里只做两件事 —— 拿模型出的值拼 SQL，把查到的行交回模型解。
+ *
+ * 表名与领域类一一对应：account ↔ Account、character ↔ Character、artifact ↔ Artifact。
  */
 import { tx, getRow, allRows, runSql } from './db.ts'
 import type { DatabaseSync } from './db.ts'
-import { Player } from '../domain/player.ts'
+import { Account } from '../domain/account.ts'
 import { Character } from '../domain/character.ts'
+import { Weapon } from '../domain/weapon.ts'
 import { Artifact } from '../domain/artifact.ts'
 
 /* 列名只写一遍（表结构改动只需动模型），ON CONFLICT 那份由这里生成。
@@ -30,13 +33,18 @@ function upsertModel (
 
 /* ---------------- 写 ---------------- */
 
-export function savePlayer (db: DatabaseSync, player: Player, stamp?: string): void {
-  upsertModel(db, 'account', Player.COLS, ['uid'], player.toValues(stamp), Player.KEEP)
+export function saveAccount (db: DatabaseSync, account: Account, stamp?: string): void {
+  upsertModel(db, 'account', Account.COLS, ['uid'], account.toValues(stamp), Account.KEEP)
 }
 
-/* 一个角色：先写角色行（武器那几列由 Character.toValues 一并给出），再整体换掉它的 5 件圣遗物 */
+/* 一个角色三张表：character 那一行、它的 1 把武器（weapon）、它的 5 件圣遗物（artifact，整体换掉） */
 export function saveCharacter (db: DatabaseSync, character: Character, stamp?: string): void {
-  upsertModel(db, 'avatar', Character.COLS, ['uid', 'avatar_id'], character.toValues(stamp), [])
+  upsertModel(db, 'character', Character.COLS, ['uid', 'avatar_id'], character.toValues(stamp), [])
+
+  /* 武器总是写一行 —— 没装备就是 Weapon.none() 那行全 NULL。写成「有装备才写」的话，
+     卸了武器就会把上一把的旧行留在库里（upsert 只覆盖、不删行）。 */
+  upsertModel(db, 'weapon', Weapon.COLS, ['uid', 'avatar_id'],
+    character.weapon.toValues(character.uid, character.avatarId))
 
   runSql(db, 'DELETE FROM artifact WHERE uid = ? AND avatar_id = ?', [character.uid, character.avatarId])
   const insert = `INSERT INTO artifact (${Artifact.COLS.join(', ')})
@@ -62,7 +70,7 @@ function logFetch (db: DatabaseSync, { uid, source, stamp, ok, avatarIds = null,
 }
 
 export interface SaveFetchArgs {
-  player: Player
+  account: Account
   source?: string
   stamp?: string
   ttl?: number | null
@@ -71,13 +79,13 @@ export interface SaveFetchArgs {
 
 /** 一次抓取落库：账号 + 角色们 + 流水，包在一个事务里。返回落库的角色数 */
 export function saveFetch (db: DatabaseSync, {
-  player, source = 'enka', stamp = new Date().toISOString(), ttl = null, note = ''
+  account, source = 'enka', stamp = new Date().toISOString(), ttl = null, note = ''
 }: SaveFetchArgs): number {
   return tx(db, () => {
-    if (player) savePlayer(db, player, stamp)
-    const characters = player?.characters || []
+    if (account) saveAccount(db, account, stamp)
+    const characters = account?.characters || []
     for (const character of characters) saveCharacter(db, character, stamp)
-    logFetch(db, { uid: player.uid, source, stamp, ok: 1, avatarIds: characters.map(c => c.avatarId), ttl, note })
+    logFetch(db, { uid: account.uid, source, stamp, ok: 1, avatarIds: characters.map(c => c.avatarId), ttl, note })
     return characters.length
   })
 }
@@ -95,37 +103,42 @@ export function logFailure (db: DatabaseSync, { uid, source = 'enka', note = '',
 
 /* ---------------- 读 ---------------- */
 
-export function loadAccount (db: DatabaseSync, uid: number): Player | null {
-  return Player.fromRow(getRow(db, 'SELECT * FROM account WHERE uid = ?', uid)) || null
+/** 只读账号那一行（不带角色）。视图页脚 / 列表页只要昵称等级时用它 */
+export function loadAccount (db: DatabaseSync, uid: number): Account | null {
+  return Account.fromRow(getRow(db, 'SELECT * FROM account WHERE uid = ?', uid)) || null
 }
 
 export function listCharacterIds (db: DatabaseSync, uid: number): number[] {
-  return allRows<{ avatar_id: number }>(db, 'SELECT avatar_id FROM avatar WHERE uid = ? ORDER BY avatar_id', uid)
+  return allRows<{ avatar_id: number }>(db, 'SELECT avatar_id FROM character WHERE uid = ? ORDER BY avatar_id', uid)
     .map(row => row.avatar_id)
 }
 
-/** 读一个角色，带上它的圣遗物（圣遗物行交回 Artifact 自己解，JSON 列在模型里解码） */
+/** 读一个角色，带上它的武器与圣遗物（子行交回各自的模型解，JSON 列在模型里解码） */
 export function loadCharacter (db: DatabaseSync, uid: number, avatarId: number): Character | null {
-  const row = getRow(db, 'SELECT * FROM avatar WHERE uid = ? AND avatar_id = ?', uid, avatarId)
+  const row = getRow(db, 'SELECT * FROM character WHERE uid = ? AND avatar_id = ?', uid, avatarId)
   if (!row) return null
+  /* 武器行理论上一定有（saveCharacter 总是写），但手工动过库就别炸了 —— 缺行按「没装备」算 */
+  const weapon = getRow(db, 'SELECT * FROM weapon WHERE uid = ? AND avatar_id = ?', uid, avatarId)
   const artifacts = allRows(db, 'SELECT * FROM artifact WHERE uid = ? AND avatar_id = ? ORDER BY pos', uid, avatarId)
-  return Character.fromRow(row, artifacts.map(row => Artifact.fromRow(row)))
+  return Character.fromRow(
+    row, artifacts.map(row => Artifact.fromRow(row)), weapon ? Weapon.fromRow(weapon) : Weapon.none()
+  )
 }
 
 /*
- * 读整个玩家：账号 + 角色们（Player 是聚合根）。库里连账号带角色都没有 → null，上层据此回 404。
+ * 读整个账号：账号行 + 名下的角色们（Account 是聚合根）。库里连账号带角色都没有 → null，上层据此回 404。
  * avatarIds 给了就只读那几个（页面按需加载），不给读全部。
  */
-export function loadPlayer (db: DatabaseSync, uid: number, avatarIds: number[] | null = null): Player | null {
+export function loadAccountWithCharacters (db: DatabaseSync, uid: number, avatarIds: number[] | null = null): Account | null {
   const account = loadAccount(db, uid)
   const ids = avatarIds && avatarIds.length ? avatarIds : listCharacterIds(db, uid)
   const characters = ids
     .map(id => loadCharacter(db, uid, id))
     .filter((c): c is Character => c !== null)
   if (!account && !characters.length) return null
-  const player = account || new Player({ uid })
-  player.characters = characters
-  return player
+  const merged = account || new Account({ uid })
+  merged.characters = characters
+  return merged
 }
 
 export function listUids (db: DatabaseSync): number[] {
@@ -150,16 +163,16 @@ export function lastFetch (db: DatabaseSync, uid: number): FetchLogRow | null {
 }
 
 /* 库里实际用到过哪些「官方文案 key」—— 接多语言文案表时不用把几十万条全导进来，
-   拿这张清单去找那几百条就够了。avatar 那组没有 hash（enka 不给角色名 hash），单独按 avatarId 列出来。 */
+   拿这张清单去找那几百条就够了。角色那种没有 hash（enka 不给角色名 hash），单独按 avatarId 列出来。 */
 export function listTextKeys (db: DatabaseSync): { hash: number[]; avatars: number[] } {
   const hash = allRows<{ h: number }>(db, `
     SELECT DISTINCT name_hash AS h FROM artifact WHERE name_hash IS NOT NULL
     UNION
     SELECT DISTINCT set_hash  FROM artifact WHERE set_hash  IS NOT NULL
     UNION
-    SELECT DISTINCT weapon_name_hash FROM avatar WHERE weapon_name_hash IS NOT NULL
+    SELECT DISTINCT name_hash FROM weapon  WHERE name_hash IS NOT NULL
   `).map(row => row.h)
-  const avatars = allRows<{ avatar_id: number }>(db, 'SELECT DISTINCT avatar_id FROM avatar ORDER BY avatar_id')
+  const avatars = allRows<{ avatar_id: number }>(db, 'SELECT DISTINCT avatar_id FROM character ORDER BY avatar_id')
     .map(row => row.avatar_id)
   return { hash, avatars }
 }
