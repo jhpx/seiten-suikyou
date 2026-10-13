@@ -37,7 +37,7 @@ if (!fs.existsSync(SHELL)) {
 const EXPR = fs.readFileSync(EXPR_FILE, 'utf8')
 const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chs-probe-'))
 
-const child = spawn(SHELL, ['--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+const child = spawn(SHELL, ['--disable-gpu', '--no-sandbox', '--hide-scrollbars', '--no-proxy-server',
   `--user-data-dir=${profileDir}`, `--remote-debugging-port=${PORT}`, `--window-size=${WIN}`,
   'about:blank'], { stdio: 'ignore' })
 

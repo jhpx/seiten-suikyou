@@ -32,13 +32,7 @@ const ASSETS_DIR = path.join(PUBLIC, 'assets')
 const ASSETS_ROOT = path.resolve(ASSETS_DIR)
 
 /* 静态页白名单。不做通用静态服务 —— 几个文件而已，白名单顺手把目录穿越也解决了。 */
-const STATIC: Record<string, string> = {
-  '/': 'index.html',
-  '/index.html': 'index.html',
-  '/app.js': 'app.js',
-  '/style.css': 'style.css',
-  '/miao.css': 'miao.css'      /* 评分卡样式（miao 结果图移植版），和外壳样式分开管 */
-}
+/* 静态页走通用托管，见 servePublic（前端拆成多个 ES 模块，写死白名单会 404） */
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -131,6 +125,26 @@ function serveAsset (res: ServerResponse, pathname: string): void {
   sendFile(res, filePath, { cache: 'public, max-age=86400' })
 }
 
+/* 通用静态页：按扩展名安全托管整个 public 目录（前端拆成多个 ES 模块后，写死白名单会 404）。
+   目录穿越防护 + 扩展名白名单 + 不存在即 404，与 serveAsset 同一套思路。 */
+function servePublic (res: ServerResponse, pathname: string): void {
+  const rel = decodeURIComponent(pathname.replace(/^\/+/, ''))
+  const filePath = path.resolve(PUBLIC, rel)
+  if (filePath !== PUBLIC && !filePath.startsWith(PUBLIC + path.sep)) {
+    sendJson(res, 404, { ok: false })
+    return
+  }
+  if (!MIME_TYPES[path.extname(filePath).toLowerCase()]) {
+    sendJson(res, 404, { ok: false })
+    return
+  }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    sendJson(res, 404, { ok: false })
+    return
+  }
+  sendFile(res, filePath)
+}
+
 /* ---------------- 应用 ---------------- */
 
 /** createApp / startServer 的选项（后三个都能直接透传，加选项不用改两处签名） */
@@ -194,7 +208,10 @@ export function createApp ({
     }
 
     if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
-    if (isGet && STATIC[pathname]) return sendFile(res, path.join(PUBLIC, STATIC[pathname]))
+    if (isGet && (pathname === '/' || pathname === '/index.html')) return sendFile(res, path.join(PUBLIC, 'index.html'))
+    /* 前端拆成多个 ES 模块后，写死白名单会 404，所以通用托管整个 public 目录。
+       但 /api/* 是接口，绝不能让静态分支抢走（否则 /api/health 等 GET 接口会被当文件 404）。 */
+    if (isGet && !pathname.startsWith('/api/')) return servePublic(res, pathname)
 
     /* ---- 元信息：有哪些语言、表在不在 ---- */
     if (isGet && pathname === '/api/meta') {

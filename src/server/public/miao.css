@@ -7,14 +7,14 @@
  *   resources/common/layout/elem.html （元素背景的挂法）
  *
  * 设计前提：miao 的这张结果图是**一张固定 600px 宽的画布**。要长得像，
- * 就不能把它拆成流式响应式布局 —— 我们照搬 600px 画布，再由 app.js 用 zoom
+ * 就不能把它拆成流式响应式布局 —— 我们照搬 600px 画布，再由 detail.js 用 zoom
  * 把整张画布等比缩到屏幕宽度。这样万像素缩小版，构图和 miao 出图完全一致。
  *
  * 立绘是「左溢出、信息浮右侧」：.main-pic 宽 1400px、margin-left -545px，
  * 所以角色图占左三分之二，数值列绝对定位在右上角，不会挡脸。
  * ========================================================================== */
 
-/* 缩放外壳：zoom 由 app.js 按视口宽度直接写内联样式，PC 上恒为 1（原尺寸） */
+/* 缩放外壳：zoom 由 detail.js 按视口宽度直接写内联样式，PC 上恒为 1（原尺寸） */
 .pd-frame {
   width: 600px;
   margin: 0 auto;
@@ -43,7 +43,7 @@
 
 .basic { position: relative; margin: 0 -15px 15px -10px; }
 /*
- * 面板 9 行时的底部补偿（app.js 给 .char-attr 加 `attr-tall` 时生效）。
+ * 面板 9 行时的底部补偿（detail.js 给 .char-attr 加 `attr-tall` 时生效）。
  *
  * 面板的 7 个固定项之外，dmg/phy/heal 是**按需出行**的（见 shape.js 的 DMG_ATTRS），
  * 所以行数在 8~9 之间浮动。`.main-pic`（立绘）固定 500px，而右侧信息列
@@ -684,7 +684,7 @@
  * SSS<49 / ACE<56 / MAX<70。
  *
  * 三处都吃这一套，色只有这一份：明细页「评级」行（.arti-stat-ret 里的 strong）、圣遗物卡角标
- * （.artis .head span.mark）、首页角色卡角标（.cc-rank，app.js 挂上档位类）。
+ * （.artis .head span.mark）、首页角色卡角标（.cc-rank，roster.js 挂上档位类）。
  *
  * ⚠️ 这里**只管颜色、不写 font-weight**：三处的粗细各由自己那条规则给（strong 默认就是粗的、
  *    .artis .head span.mark 是 bold、.cc-rank 要 800）。本文件在 style.css **之后**加载，
@@ -736,7 +736,7 @@
   text-align: left;
   font-size: 14px;
 }
-/* 词条名（app.js 里多包的一层）—— 存在的唯一理由是「能裁」。
+/* 词条名（detail.js 里多包的一层）—— 存在的唯一理由是「能裁」。
    必须裁：display:table 的列宽由「所有行里最宽的那个单元格」决定，
    英文标签最长 18 字（Physical DMG Bonus / Elemental Mastery / Electro DMG Bonus），
    只要有一行这么长，整张表就被撑到 222px（卡只有 185），
@@ -795,12 +795,12 @@
    一行 » 的个数就是命中次数，看的人得先数箭头；游戏 5.3 起给圣遗物加了
    「强化次数标记」，就是「实心圆里一个镂空的数字」—— 一个数字，一眼看清。
    位置沿用原来那条带子：left:91 是「标签起点 30 + 标签带宽 61」，所以版式一点没动。
-   圆和数字都在 app.js 的 hitMark() 造的那只 <svg> 里：
+   圆和数字都在 detail.js 的 hitMark() 造的那只 <svg> 里：
      圆走 fill="currentColor" —— 三档配色（great 金 / useful 白 / nouse 灰）都落在 span.title 上，
      这样下面那两条配色规则不用为它再写一遍；
      color:inherit 就是给这个 currentColor 兜底的（i 本来就能继承到，写出来是让这份依赖看得见）。
      数字必须镂空而不是填色：行的底色是「模糊的圣遗物图 + 半透明黑」叠出来的，
-     填哪个固定颜色都会露馅；所以只能走 SVG 的 mask，理由写在 app.js 那段注释里。
+     填哪个固定颜色都会露馅；所以只能走 SVG 的 mask，理由写在 detail.js 那段注释里。
    这里只给字体和尺寸 —— CSS 管不了字形做蒙版这件事。 */
 .artis ul.detail li span.title i.up-num {
   position: absolute;

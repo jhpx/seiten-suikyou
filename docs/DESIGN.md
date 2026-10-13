@@ -170,7 +170,7 @@ enka 原始响应
 `miao.css` 是 miao 的 `resources/character/profile-detail.css` **照抄**的移植版，不是凭印象画的。
 
 设计前提：miao 的那张结果图是**一张固定 600 px 宽的画布**。要长得像就不能拆成流式响应式布局
-—— 这里照搬 600 px 画布，再由 `app.js` 用 `zoom` 把整张画布等比缩到屏幕宽度。
+—— 这里照搬 600 px 画布，再由前端的 `detail.js`（`fitDetailZoom`）用 `zoom` 把整张画布等比缩到屏幕宽度。
 缩下来就是同一张图的缩小版，构图与 miao 出图一致。
 
 结构（照抄上游，不自己发明）：

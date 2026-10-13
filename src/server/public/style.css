@@ -119,9 +119,9 @@ body {
    而 .top 是 sticky（**照常占正常流**），这 1.3px 会推着下面全部内容下移，
    像素对拍时整页都脏。13.5 + 2 + 36 = 51.5，正好是改前那一行的高度。 */
 .field span { font-size: 11px; line-height: 13.5px; color: rgba(211, 188, 142, .75); letter-spacing: .14em; }
-/* 深色玻璃输入控件（顶栏输入框/下拉 + 筛选搜索框）共用外观：金描边 + 内阴影 + focus 金晕。
+/* 深色玻璃输入控件（顶栏输入框/下拉）共用外观：金描边 + 内阴影 + focus 金晕。
    输入框与下拉统一 36px 定高（原来 input 31 / select 33，同一行底对齐后顶边差 2px；定高 + 垂直居中严丝合缝），垂直 padding 归零全交 height。 */
-.field input, .field select, .rf-search {
+.field input, .field select {
   padding: 0 12px;
   background: var(--ctrl-bg);
   border: 1px solid var(--gold-line);
@@ -135,9 +135,9 @@ body {
 .field input, .field select { height: 36px; width: 100%; }
 /* placeholder 是提示不是内容：压到约 3.9:1，够看但不跟真值抢 */
 .field input::placeholder { color: rgba(240, 236, 225, .45); }
-.field input:hover, .field select:hover, .rf-search:hover { border-color: rgba(211, 188, 142, .5); }
+.field input:hover, .field select:hover { border-color: rgba(211, 188, 142, .5); }
 /* focus 走一圈金晕。原来描的是 --accent 蓝边，蓝在这套配色里已经退场了 */
-.field input:focus, .field select:focus, .rf-search:focus {
+.field input:focus, .field select:focus {
   border-color: var(--gold-line-hi);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, .45), 0 0 0 3px rgba(211, 188, 142, .13);
 }
@@ -299,8 +299,25 @@ body {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   margin-bottom: 12px;
 }
-.rf-search { flex: 1 1 130px; min-width: 0; height: 34px; }
-.rf-search::placeholder { color: rgba(240, 236, 225, .45); }
+/* 多条件排序面板：每行 = 优先级圈 + 字段名 + 一组小按钮（升降序 / 上下移 / 移除 / +） */
+.rf-sort-menu { min-width: 240px; padding: 6px; }
+.rf-sort-row { display: flex; align-items: center; gap: 6px; height: 32px; }
+.rf-sort-pos {
+  flex: 0 0 auto; width: 18px; height: 18px; line-height: 18px; text-align: center;
+  border-radius: 50%; background: rgba(211, 188, 142, .18); color: var(--gold-lt);
+  font-size: 11px; font-weight: 600;
+}
+.rf-sort-name { flex: 1 1 auto; color: var(--ink-2); font-size: 12px; letter-spacing: .04em; white-space: nowrap; }
+.rf-sort-mini {
+  flex: 0 0 auto; width: 24px; height: 24px; padding: 0;
+  background: none; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--ink-2); font-size: 12px; line-height: 1; cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.rf-sort-mini:hover:not(:disabled) { border-color: rgba(211, 188, 142, .5); color: var(--gold-lt); background: rgba(211, 188, 142, .12); }
+.rf-sort-mini:disabled { opacity: .3; cursor: default; }
+.rf-sort-add { color: var(--gold-lt); border-color: rgba(211, 188, 142, .4); }
+.rf-sort-hint { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line); color: rgba(240, 236, 225, .45); font-size: 11px; line-height: 1.4; }
 
 /* 下拉容器：面板绝对定位挂在它下面，得有个定位参照 */
 .rf-dd { position: relative; min-width: 0; }
@@ -341,9 +358,9 @@ body {
   box-shadow: 0 10px 28px rgba(0, 0, 0, .55);
 }
 .rf-dd.open .rf-menu { display: block; }
-/* 最右那组（权重）改成右对齐：英文的「Elemental Mastery」比按钮本身宽，
+/* 末尾那组（权重 / 排序）改成右对齐：英文的「Elemental Mastery」比按钮本身宽，
    左对齐会一路顶出去被 body 的 overflow-x 裁掉 */
-.rf-dd:last-child .rf-menu { left: auto; right: 0; }
+.rf-dd-end .rf-menu { left: auto; right: 0; }
 .rf-opt {
   display: flex; align-items: center; gap: 6px;
   width: 100%; height: 30px; padding: 0 10px;
@@ -478,7 +495,7 @@ body {
   text-shadow: 0 .5cqw 1.2cqw rgba(0, 0, 0, .75);
 }
 
-/* 右下角评级。color 走 miao.css 的 .mark-*（app.js 挂上档位类），边框跟着 currentColor 走。
+/* 右下角评级。color 走 miao.css 的 .mark-*（roster.js 挂上档位类），边框跟着 currentColor 走。
    字号 13cqw（2026-09-19 用户「评分和评级字体相差太多，评级太小了」）：
    评分 16 / 评级 10 是 1.6 倍的落差，两个胶囊高 18.4 vs 14.6，摆在一起像「大字 + 小标签」。
    13 是**胶囊高度追平评分**的那个点：13 + 2×1.2 纵内边距 + 2×1.11 边框 = 17.6，对 18.4。

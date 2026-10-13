@@ -23,7 +23,7 @@
       <span id="uidLabel">UID</span>
       <input id="uid" name="uid" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="101242308" list="uidHistory">
     </label>
-    <!-- 历史 UID 由 app.js 用 localStorage 维护（原生 autocomplete 对 preventDefault 的表单不可靠） -->
+    <!-- 历史 UID 由前端脚本用 localStorage 维护（原生 autocomplete 对 preventDefault 的表单不可靠） -->
     <datalist id="uidHistory"></datalist>
     <button type="button" class="btn primary" id="fetch" title="联网从 enka 刷新一次">刷新</button>
     <label class="field locale">
@@ -44,6 +44,6 @@
   <span class="dim" id="footmeta"></span>
 </footer>
 
-<script src="/app.js"></script>
+<script type="module" src="/bootstrap.js"></script>
 </body>
 </html>

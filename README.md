@@ -160,7 +160,7 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 | `GET /assets/<路径>` | 图片素材（扩展名白名单 + 目录穿越防护 + 一天缓存） |
 | `GET /` | H5 页面 |
 
-静态页走**白名单**（`/`、`/index.html`、`/app.js`、`/style.css`、`/miao.css`），不做通用静态服务。
+静态页走**通用静态服务**：整个 `public/` 目录按扩展名白名单 + 目录穿越防护托管（`/` 与 `/index.html` 给首页，`/bootstrap.js` 等 ES 模块逐个加载，`/style.css`、`/miao.css` 给样式），`/api/*` 一律交给接口、不会被静态分支抢走。
 失败一律同一个形状：`{ ok:false, error:{ code, message } }`。
 
 ### 限流
@@ -299,10 +299,17 @@ seiten-suikyou/
 │   │   └── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
 │   ├── cli/score.ts          # 命令行评分入口
 │   └── server/
-│       ├── index.ts          #   node:http 路由（API + 静态页），零新依赖
-│       └── public/           #   页面：原生 JS，无框架无 CDN
-│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚）
-│           ├── app.js        #     渲染 + 交互（首页网格、明细画布、缩放、i18n）
+│       ├── index.ts          #   node:http 路由（API + 通用静态页），零新依赖
+│       └── public/           #   页面：原生 ES 模块，无框架无 CDN（type="module"，零构建）
+│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚），引 /bootstrap.js
+│           ├── bootstrap.js  #     入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
+│           ├── core.js       #     基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
+│           ├── roster.js     #     feature：账号头 + 角色网格 + 卡片
+│           ├── filter.js     #     feature：筛选条（元素 / 评分 / 权重）
+│           ├── sort.js       #     feature：多条件排序（至多 3 字段的排序链）
+│           ├── detail.js     #     feature：角色明细画布 + 缩放
+│           ├── i18n.js       #     feature：loadMeta / 切语言 / 静态文案
+│           ├── history.js    #     feature：UID 历史（localStorage）
 │           ├── style.css     #     外壳样式
 │           ├── miao.css      #     评分卡样式（miao 的 profile-detail.css 移植版）
 │           └── assets/       #     图片素材（sync:assets 从 miao-plugin 复制，约 100MB，随仓库提交）

@@ -255,18 +255,18 @@ console.log('\n=== 8. 静态文件 ===')
   ok((r.headers.get('content-type') || '').includes('text/html'), '内容是 html')
   const html = await r.text()
   ok(html.includes('星天水镜'), '页面里有标题')
-  ok(html.includes('/app.js') && html.includes('/style.css'), '页面引了脚本和样式')
+  ok(html.includes('/bootstrap.js') && html.includes('/style.css'), '页面引了脚本和样式')
 
-  const js = await get('/app.js')
+  const js = await get('/bootstrap.js')
   ok((js.headers.get('content-type') || '').includes('javascript'), 'js 的 content-type 对')
   ok((await js.text()).length > 500, 'js 不是空文件')
 
   const css = await get('/style.css')
   ok((css.headers.get('content-type') || '').includes('text/css'), 'css 的 content-type 对')
 
-  /* 白名单之外一律 404 —— 顺带就没有目录穿越这回事 */
+  /* 越界（目录穿越）与不存在的文件一律 404 —— 顺带就没有目录穿越这回事 */
   for (const p of ['/../package.json', '/../../etc/passwd', '/public/app.js']) {
-    eq((await get(p)).status, 404, `白名单外的 ${p} → 404`)
+    eq((await get(p)).status, 404, `越界/不存在的 ${p} → 404`)
   }
 }
 
