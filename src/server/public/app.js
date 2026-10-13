@@ -11,12 +11,6 @@
 const $ = (id) => document.getElementById(id)
 
 const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
-/* 首页角标档位色 —— miao.css 里 .mark-* 的 JS 副本，改一边要同步改另一边。
- * 档位配色：灰(D) → 白(C) → 冰蓝(B) → 天蓝(A) → 绿(S) → 梅紫(SS) → 金(SSS) → 橙(ACE) → 正红(MAX)。*/
-const RANK_COLOR = {
-  MAX: '#ec2b2b', ACE: '#ff9f2e', SSS: '#ffe066', SS: '#ef8ce0',
-  S: '#5fd48f', A: '#4fb0ee', B: '#a9d8ff', C: '#ffffff', D: '#6b7280'
-}
 const SLOT_GLYPH = { 1: '花', 2: '羽', 3: '沙', 4: '杯', 5: '冠' }
 
 /* 武器副属性在卡片上的短名，照抄 miao 模板里的 titleMap（profile-detail.html:233） */
@@ -122,10 +116,6 @@ function weaponFallback (w) {
   return T(w?.state === 'unknown' ? 'unknownWeapon' : 'noWeapon')
 }
 
-function rankColor (rank) {
-  return RANK_COLOR[rank] || '#e8edf4'
-}
-
 /* 词条按权重分三档，和 miao 卡片里「有效/无效词条」的高亮规则一致 */
 function weightClass (w) {
   return w > 79.9 ? 'great' : (w > 0 ? 'useful' : 'nouse')
@@ -217,8 +207,8 @@ function renderCharCard (av) {
 
   const lv = el('div', 'cc-lv', `Lv.${av.level ?? '?'}`)
   const score = el('div', 'cc-score', av.score.mark)
-  const badge = el('span', 'cc-rank', rank)
-  badge.style.color = rankColor(rank)
+  /* 色走 miao.css 的 .mark-*（档位名就是类名后缀），跟明细页 / 圣遗物卡同一套 */
+  const badge = el('span', 'cc-rank mark-' + rank, rank)
 
   const top = el('div', 'cc-top')
   top.append(bg, face, elem, lv, score, badge)

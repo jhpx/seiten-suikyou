@@ -478,15 +478,14 @@ body {
   text-shadow: 0 .5cqw 1.2cqw rgba(0, 0, 0, .75);
 }
 
-/* 右下角评级。color 由 JS 按档位给（跟明细页共用 rankColor），边框跟着 currentColor 走。
+/* 右下角评级。color 走 miao.css 的 .mark-*（app.js 挂上档位类），边框跟着 currentColor 走。
    字号 13cqw（2026-09-19 用户「评分和评级字体相差太多，评级太小了」）：
    评分 16 / 评级 10 是 1.6 倍的落差，两个胶囊高 18.4 vs 14.6，摆在一起像「大字 + 小标签」。
    13 是**胶囊高度追平评分**的那个点：13 + 2×1.2 纵内边距 + 2×1.11 边框 = 17.6，对 18.4。
    为什么不敢再大：最宽的档位是 `MAX`（M 很宽，量出 2.481em），
      可用宽 94cqw（100 − 左右各 3）；评分占 2.752em × 16 = 44.0 + 左右内边距 4.8 = 48.8
      评级占 2.481 × F + 2×(2.2 + 1.11)
-     F=13 → 中间只剩 6.3cqw（5.7px）；F=14 → 3.8cqw；F=15 就只剩 1.3cqw 了。
-   MAX 这个档位现存数据里没有，但 `rankColor` 认它，所以预算必须按它算。 */
+     F=13 → 中间只剩 6.3cqw（5.7px）；F=14 → 3.8cqw；F=15 就只剩 1.3cqw 了。 */
 .cc-rank {
   position: absolute; right: 3cqw; bottom: 2cqw;
   font-size: 13cqw; font-weight: 800; line-height: 1;

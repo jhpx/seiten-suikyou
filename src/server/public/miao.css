@@ -683,21 +683,26 @@
  * 档位从哪来：miao 的 `ArtisMark.getMarkClass`，D<7 / C<14 / B<21 / A<28 / S<35 / SS<42 /
  * SSS<49 / ACE<56 / MAX<70。
  *
- * ⚠️ `app.js` 的 `RANK_COLOR` 是这套色的 JS 副本（首页卡片角标在 JS 里上色），改这里要同步改那边。
+ * 三处都吃这一套，色只有这一份：明细页「评级」行（.arti-stat-ret 里的 strong）、圣遗物卡角标
+ * （.artis .head span.mark）、首页角色卡角标（.cc-rank，app.js 挂上档位类）。
+ *
+ * ⚠️ 这里**只管颜色、不写 font-weight**：三处的粗细各由自己那条规则给（strong 默认就是粗的、
+ *    .artis .head span.mark 是 bold、.cc-rank 要 800）。本文件在 style.css **之后**加载，
+ *    在这儿写 bold 会把首页角标的 800 压成 700。
  *
  * ⚠️ SS 的紫**不能是普通紫**：四星角色卡底色（common/item/bg4.png 主色 #8a6ab0）就是紫，
  * 首页角标压在那张图上（再垫 50% 黑 = #453558）。最早用的 #b07ae8 和它**色相只差 2°**，
  * 字直接融进底里。现在的 #ef8ce0 是**偏粉的梅紫**：色相差拉到 42°，同底对比度 3.57 → 4.99。
  */
-.mark-MAX { color: #ec2b2b; font-weight: bold; }
-.mark-ACE { color: #ff9f2e; font-weight: bold; }
-.mark-SSS { color: #ffe066; font-weight: bold; }
-.mark-SS { color: #ef8ce0; font-weight: bold; }
-.mark-S { color: #5fd48f; font-weight: bold; }
-.mark-A { color: #4fb0ee; font-weight: bold; }
-.mark-B { color: #a9d8ff; font-weight: bold; }
-.mark-C { color: #ffffff; font-weight: bold; }
-.mark-D { color: #6b7280; font-weight: bold; }
+.mark-MAX { color: #ec2b2b; }
+.mark-ACE { color: #ff9f2e; }
+.mark-SSS { color: #ffe066; }
+.mark-SS { color: #ef8ce0; }
+.mark-S { color: #5fd48f; }
+.mark-A { color: #4fb0ee; }
+.mark-B { color: #a9d8ff; }
+.mark-C { color: #ffffff; }
+.mark-D { color: #6b7280; }
 
 /* 词条表：主词条一行 + 副词条若干行 */
 .artis ul.detail {
