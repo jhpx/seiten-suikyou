@@ -78,6 +78,14 @@ FILES = [
     # --- 面板属性计算（角色规则读 profile.attr，见下方说明） ---
     "models/attr/Attr.js",
     "models/attr/AttrData.js",
+    # --- 伤害计算：编排入口 + dmg 引擎（每个角色的 calc.js 靠下面 GLOBS 按目录搬） ---
+    "models/ProfileDmg.js",
+    "models/dmg/DmgAttr.js",
+    "models/dmg/DmgBuffs.js",
+    "models/dmg/DmgCalc.js",
+    "models/dmg/DmgCalcMeta.js",
+    "models/dmg/DmgMastery.js",
+    "models/dmg/AttrItem.js",
     # --- 路径工具（`#miao.path`，零云崽依赖，原样搬） ---
     "tools/path.js",
     # --- 圣遗物元数据：权重表 / 词条基准 / 套装数据 ---
@@ -119,7 +127,18 @@ FILES = [
 # 这些是运行时动态读取的资源（Data.readJSON），依赖闭包扫不出来，只能按目录规则搬。
 GLOBS = [
     ("resources/meta-gs/character", "data.json", 1),
+    # 旅行者按元素分开放 data.json（character/旅行者/<元素>/data.json）。
+    # 深度 1 只搬得到索引级的 旅行者/data.json（没有 talentData），而内核 getDetail()
+    # 对旅行者按 `旅行者/<elem>` 取数 —— 少这一层，旅行者的天赋倍率查表直接空、
+    # 伤害计算必炸（冰翼给 7 个元素都写了 calc.js，没理由不搬）。
+    # 深度 2 还会带上芭芭拉/安柏（皮肤数据），无人读，无害。
+    ("resources/meta-gs/character", "data.json", 2),
     ("resources/meta-gs/character", "artis.js", 1),
+    # 角色伤害计算脚本：普通角色在 character/<角色名>/calc.js；
+    # 旅行者按元素分开放 character/旅行者/<元素>/calc.js（深度 2，全资源目录里仅此一例，
+    # 其余角色目录下只有 icons/imgs 这类图片目录，不会误命中）
+    ("resources/meta-gs/character", "calc.js", 1),
+    ("resources/meta-gs/character", "calc.js", 2),
     # 武器详情：weapon/<类型>/<武器名>/data.json，同目录下的 webp 不搬
     ("resources/meta-gs/weapon", "data.json", 2),
 ]
@@ -532,6 +551,23 @@ const rootPath = miaoPath""",
             )
         ],
     },
+    # ---------------------------------------------------------------- 伤害计算编排
+    {
+        "file": "models/ProfileDmg.js",
+        "desc": "摘掉云崽专属依赖 Common（组团伤害的 teamCalc 配置项，云崽聊天层才有）；calc_auto 分支随之一并移除",
+        "ops": [
+            (
+                "replace",
+                "import { MiaoError, Meta, Common } from '#miao'",
+                "import { MiaoError, Meta } from '#miao'",
+            ),
+            (
+                "replace",
+                "      { file: 'calc_auto', name: '组团伤害', test: () => Common.cfg('teamCalc') },\n",
+                "",
+            ),
+        ],
+    },
 ]
 
 # 生成的文件（非上游内容）。路径相对 vendor/miao/
@@ -567,6 +603,8 @@ GROUP_ORDER = [
     ("components/", "miao 入口与组件"),
     ("models/artis/", "评分算法"),
     ("models/attr/", "面板属性计算"),
+    ("models/dmg/", "伤害计算引擎"),
+    ("models/ProfileDmg.js", "伤害计算编排"),
     ("models/character/", "角色元数据"),
     ("models/", "领域模型"),
     ("tools/", "路径工具"),
@@ -581,10 +619,12 @@ GROUP_PURPOSE = {
     "miao 入口与组件": "`#miao` 入口、`Data`（路径与 JSON 读取）、`Meta`（元数据注册）、`Format`（数值格式化）、`MiaoError`、`common/Elem`（元素表）",
     "评分算法": "`Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体",
     "面板属性计算": "`Attr`（面板计算）＋ `AttrData`（属性基准表）—— 角色评分规则要读 `profile.attr`",
+    "伤害计算引擎": "`DmgCalc`（各区乘算的伤害公式）＋ `DmgAttr`（属性计算与 buff 施加）＋ `DmgBuffs`（武器/圣遗物/角色 buff 汇总）＋ `DmgMastery`（元素反应系数）＋ `DmgCalcMeta`（等级与反应基础表）＋ `AttrItem`",
+    "伤害计算编排": "`ProfileDmg` —— 加载角色 `calc.js`、组装属性与 buff、逐条算伤害的入口（只取它的 `calcData`，云崽那套模板渲染不要）",
     "角色元数据": "`CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent`",
     "领域模型": "`Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口",
     "路径工具": "`path.js` —— `#miao.path` 别名的目标",
-    "角色数据": "每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",
+    "角色数据": "每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）＋ `calc.js`（该角色的伤害计算脚本，旅行者按元素分开放 `旅行者/<元素>/`）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",
     "武器数据": "每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件",
     "圣遗物数据": "部位与套装数据、副词条基准、评分权重表（`artis-mark.js`）",
     "素材数据": "突破素材（`CharMeta` 引用了 `Material` 模型）、素材缩写、每日材料",
@@ -1057,6 +1097,8 @@ def build_report(
 
     n_char = cnt(r"resources/meta-gs/character/[^/]+/data\.json")
     n_rule = cnt(r"resources/meta-gs/character/[^/]+/artis\.js")
+    # 旅行者的 calc.js 在 character/旅行者/<元素>/ 下，两条模式互补（深度 1 匹配不到它）
+    n_calc = cnt(r"resources/meta-gs/character/[^/]+/calc\.js") + cnt(r"resources/meta-gs/character/[^/]+/[^/]+/calc\.js")
     n_wp_detail = cnt(r"resources/meta-gs/weapon/[^/]+/[^/]+/data\.json")
     wp_label = {
         "sword": "单手剑", "bow": "弓", "catalyst": "法器",
@@ -1115,6 +1157,7 @@ def build_report(
         f"- **角色数据 {len(grouped.get('角色数据', []))} 个** = "
         f"{n_char} 个角色的 `data.json`（等级 / 突破 / 天赋等基础数据）"
         f"＋ {n_rule} 个角色的 `artis.js`（该角色专属的评分规则，并非每个角色都有）"
+        f"＋ {n_calc} 个角色的 `calc.js`（该角色专属的伤害计算脚本，并非每个角色都有；旅行者按元素分 7 份）"
         f"＋ 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",
         f"- **武器数据 {len(grouped.get('武器数据', []))} 个** = "
         f"{n_wp_detail} 把武器的详情 `data.json`（{wp_break}）"

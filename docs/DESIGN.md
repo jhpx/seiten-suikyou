@@ -17,8 +17,8 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 
 三条原则：
 
-1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。505 个文件里 498 个是逐字节复制，
-   只有 7 个定点改写 + 2 个本地生成。
+1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。658 个文件里 649 个是逐字节复制，
+   只有 9 个定点改写 + 2 个本地生成。
 2. **别名交给 package.json** —— `#miao` / `#miao.models` / `#miao.path` 原样保留在源码里，
    由本项目 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。
    **没有任何 import 语句被改写**，IDE 跳转和静态分析照常可用。
@@ -30,7 +30,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 |---|---|---|
 | 全局 `redis` | `components/Data.js` 的 4 个缓存方法 | 退化为空实现（评分链路不走缓存） |
 | 全局 `logger` | `components/Data.js` 的 `delFile` | 改 `console.error` |
-| `Common`（渲染）/ `App`（应用） | `components/index.js` | 从入口摘掉（本项目无人引用） |
+| `Common`（渲染）/ `App`（应用） | `components/index.js`；`ProfileDmg` 引它只为 `calc_auto`（组团伤害）分支 | 从入口摘掉（本项目无人引用）；`ProfileDmg` 里那个分支一并移除 |
 | 云崽模型 `User` / `MysApi` / `Player` / `Abyss` … | `models/index.js` | 从入口摘掉，连同顶层副作用 |
 | `Cfg`（用户配置） | 依赖 `cfg/CfgData.js` → 217 行 `cfg_system.js` schema | `components/_local/Cfg.js` 最小实现 |
 | `Version`（宿主版本检测） | 读 `package.json` / `CHANGELOG.md`、辨别 Yunzai V2/V3 | `components/_local/Version.js` 最小实现 |
@@ -44,17 +44,52 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 `limiter`（限流的令牌桶，零传递依赖）。原则是**代码最精简 + 依赖量最小**，
 允许加轻量第三方库，但加之前先算账：省下的行数配不配得上它的体积。）
 
-### 搬运范围（为什么是 505 个文件 / 3.5 MB）
+### 搬运范围（为什么是 658 个文件 / 4.1 MB）
 
-除了评分算法与角色元数据，还搬了两样「容易漏掉、漏了就出不了正确分」的东西：
+除了评分算法与角色元数据，还搬了三样「容易漏掉、漏了就出不了正确分」的东西：
 
 | 搬什么 | 为什么必须要 |
 |---|---|
 | `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则文件里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
 | `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21 MB，评分用不到，全不搬。 |
+| `models/dmg/` + `models/ProfileDmg.js` + 每个角色的 `calc.js`（129 个） | 伤害计算（详见下节）。引擎 6 个文件约 1250 行纯计算；角色脚本按目录动态读取，闭包扫不出来，只能按 GLOBS 规则搬。 |
 
 另外 `src/index.ts` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
 对应模型就会静默返回 `false`（我们踩过一次 —— `Weapon.get()` 全返回 null，界面上武器显示「未识别」）。
+
+### 伤害计算：ProfileDmg + 每角色一个 calc.js
+
+miao 面板下方的「伤害计算」是它**自研**的，没有基于外部库。常被提到的「冰翼」不是库、
+是人 —— miao-plugin 的核心贡献者，129 个角色脚本里绝大多数署名是他（`calc.js` 里的
+`export const createdBy = '冰翼'`），CHANGELOG 里也能看到他的提交。
+
+构成分两层：
+
+- **引擎** `models/dmg/`（6 个文件约 1250 行）：`DmgCalc` 是各区乘算的公式本体（攻击区 ×
+  增伤区 × 暴击区 × 防御区 × 抗性区 × 反应区），`DmgAttr` 管属性计算与 buff 施加，
+  `DmgBuffs` 汇总武器 / 圣遗物套装 / 角色三方 buff，`DmgCalcMeta` 是等级与反应基础表。
+- **角色层** `resources/meta-gs/character/<角色>/calc.js`：每份导出 `details`（伤害条目，
+  形如 `dmg(talent.a['重击伤害'], 'a2', 'vaporize')`）和 `buffs`（命座 / 天赋 / 专武交互）。
+  旅行者按元素分开放 `旅行者/<元素>/calc.js`。
+
+编排在 `ProfileDmg.calcData()`：加载 calc.js → `DmgAttr.getAttr`（吃 `profile.attr` 打底，
+即 `Attr.calc()` 的产出）→ `getBuffs` → `calcAttr` 逐条目施加 → `getDmgFn` 出 `{ dmg, avg }`。
+本项目的出口是 `src/adapter/damage.ts` 的 `calcDamage()`（归一化 + 单角色炸了不拖垮整页），
+域模型到它的桥在 `materialize.ts`（`MiaoProfile.talent` 就是为它补的 —— 缺了天赋等级，
+内核按 1 级算，伤害凭空低一大截）。
+
+**对拍方法论**：数值不与「社区攻略」比，只与原版 miao 逐字一致。`.tmp/dmg-parity/run.ts`
+拿同一个 profile 过原版 `ProfileDmg`（在 miao-plugin 原地跑）与我方 `calcDamage`，diff 为空
+才算搬对；基线固化进 `test/damage.ts` 硬断言。跑对拍要两样临时物（脚本头部有说明）：
+miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / image-size / node-fetch，
+但伤害路径不调用），以及一个目录联接 —— 原版 `Data.getRoot('miao')` 写死云崽布局
+`<rootPath>/plugins/miao-plugin/`，而原版 `rootPath` 是 miao-plugin 的上两级。
+**跑完即删，不进仓库。**
+
+⚠️ 一个真实的漏搬教训：旅行者的 `data.json` 在 `旅行者/<元素>/` 下（深度 2），
+深度 1 的 GLOBS 只搬得到索引级的 `旅行者/data.json`（没有 `talentData`）——
+内核 `getDetail()` 却按 `旅行者/<elem>` 取数，少这一层旅行者伤害必炸。
+所以 GLOBS 里 `data.json` 有深度 1 和深度 2 两条。
 
 ### 同步产出
 
@@ -316,3 +351,6 @@ enka 原始响应
    仍会出现中文，正是 `classTitle` 这一项，不是回归）。
 2. 首页角色卡的进一步还原（排列/密度可调），以及明细页与 miao 出图的逐像素对拍。
 3. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。
+4. 明细页接伤害计算：`calcDamage()` 已就绪（含对拍基线），只差接口出口与排版。
+   miao 的面板除了伤害列表还有一张「换主属性伤害对比」矩阵（`calcData` 的 `dmgRet`），
+   要不要一并展示届时定。

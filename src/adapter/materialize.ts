@@ -36,6 +36,9 @@ export interface MiaoProfile {
   attr?: Record<string, number>
   /** 同上，哪些是「基础值」（页面渲染「基础 + 绿字」用） */
   base?: Record<string, number>
+  /** 天赋等级 { a/e/q: 等级 } —— 伤害计算的技能倍率查表要用（ProfileDmg.talent 读它）；
+      不给的话内核按 1 级算，伤害会凭空低一大截 */
+  talent?: Record<string, number>
 }
 
 /* 旅行者这类角色的元素要看天赋表；普通角色直接用 char.elem */
@@ -107,6 +110,10 @@ export function toMiaoProfile (character: Character): MiaoProfile | null {
     },
     artis
   }
+
+  /* 天赋等级：域模型存的是 {天赋id: 等级}（enka 的 skillLevelMap），
+     换算成内核要的 {a/e/q: 等级}。没有技能数据时给空对象 —— 内核那边按 1 级兜底。 */
+  profile.talent = deriveTalent(char, character.skillLevelMap)
 
   /* 面板属性不是数据源给的，是 miao 按「基础值 + 武器 + 圣遗物」算的（上游 Avatar.js:320）。
      base 也一并留下 —— Attr 算完 final 后内部还记着哪些是基础值，页面要拿它渲染「基础值 + 绿字」。 */

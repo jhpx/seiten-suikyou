@@ -35,6 +35,14 @@ export { default as Material } from '../vendor/miao/models/Material.js'
    而 attr 不是数据源给的，是 miao 自己算的（models/Avatar.js:320 那句 attr.calc()）。 */
 export { default as Attr } from '../vendor/miao/models/attr/Attr.js'
 
+/* 伤害计算 —— `ProfileDmg` 是编排入口（内部串起 DmgAttr / DmgBuffs / DmgCalc），
+   每个角色的伤害脚本 calc.js 由它在运行时按角色名动态加载（旅行者按元素分目录）。
+   引擎四件套一并导出，供测试与将来源码层直接取用。 */
+export { default as ProfileDmg } from '../vendor/miao/models/ProfileDmg.js'
+export { default as DmgCalc } from '../vendor/miao/models/dmg/DmgCalc.js'
+export { default as DmgAttr } from '../vendor/miao/models/dmg/DmgAttr.js'
+export { default as DmgBuffs } from '../vendor/miao/models/dmg/DmgBuffs.js'
+
 export { Meta, Format, Data } from '../vendor/miao/components/index.js'
 
 /* 多语言出口。miao 零 i18n 能力（resources/ 全是中文、连键都是中文名），

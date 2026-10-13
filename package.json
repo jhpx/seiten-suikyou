@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit",
     "score": "node --disable-warning=ExperimentalWarning src/cli/score.ts",
     "server": "node --disable-warning=ExperimentalWarning src/server/index.ts",
-    "test": "npm run typecheck && node test/smoke.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/verify.ts",
+    "test": "npm run typecheck && node test/smoke.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/damage.ts && node test/verify.ts",
     "smoke": "node test/smoke.ts",
     "arch": "node test/arch.ts",
     "enka": "node test/enka.ts",
@@ -35,6 +35,7 @@
     "server:test": "node --disable-warning=ExperimentalWarning test/server.ts",
     "cli:test": "node --disable-warning=ExperimentalWarning test/cli.ts",
     "regression": "node test/regression.ts",
+    "damage": "node test/damage.ts",
     "verify": "node test/verify.ts",
     "i18n": "node test/i18n.ts"
   },
