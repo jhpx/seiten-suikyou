@@ -286,7 +286,7 @@ seiten-suikyou/
 │   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分模块
 │   ├── store/                # 本地库（SQLite）
 │   │   ├── schema.sql        #   表结构（权威定义）
-│   │   ├── db.ts             #   连接 / 结构版本迁移（node:sqlite）
+│   │   ├── db.ts             #   连接 / 结构保证（node:sqlite，打开即跑最新 schema.sql）
 │   │   └── repo.ts           #   读写：合并式 upsert、按 uid 取、文案 key 清单
 │   ├── adapter/              # enka ↔ 本项目 的转换
 │   │   ├── enka.ts           #   按 uid 取原始响应（把 HTTP 码翻译成人话）

@@ -259,10 +259,10 @@ enka 原始响应
    所以基线数字没受影响，但它不是一份「规范数据」。要扩测试建议先改规范并重生成基线。
 7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
    若想版本化，建议单独 `git clone` 一份作为上游源。
-8. **改库结构必须同时加迁移**：`schema.sql` 全是 `CREATE TABLE IF NOT EXISTS`，
-   对**已存在**的表一列也不会加。改完要 +1 `SCHEMA_VERSION` 并在 `db.ts` 的 `MIGRATIONS`
-   里补一版 `ALTER`，否则老库会静默不升级、跑起来报「no such column」。
-   缺某一版迁移函数时 `openDb` 会直接抛错拒绝启动（降级处理会静默丢数据）。
+8. **改库结构不用加迁移**：`schema.sql` 是单一事实来源，`openDb` 打开时直接跑它（空库建表、老库表在就不碰）。
+   数据可从 enka 重抓，所以不做增量迁移表——改了 `schema.sql` 后老库请删文件重抓；打开到比
+   `SCHEMA_VERSION` 旧的库会直接抛错提示删库。`schema.sql` 与模型 `FIELDS` 两份列定义必须一致
+   （`test/pipeline.ts` 断言「空库的列 == 模型 COLS」）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
    ⚠️ `src/server/public/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件），

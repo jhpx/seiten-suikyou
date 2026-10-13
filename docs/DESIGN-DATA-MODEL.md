@@ -111,8 +111,8 @@ enka 原始响应 (JSON)
 每个模型只声明**一张**「列名 ↔ 领域字段」对照表（`FIELDS`，工具在 `src/domain/fields.ts`）：
 `COLS`（拼 SQL 的列名清单）/ `toValues`（写库取值）/ `fromRow`（读行入参）全由它派生。
 加一列因此只动两处 —— 模型的 `FIELDS` + `schema.sql`（DDL 省不掉）。以前这三份是分开写的、
-顺序一致只靠注释约束；`test/pipeline.ts` 第 8 节现在把「空库的列 == FIELDS」与「迁移后的列 == FIELDS」
-两个方向都断言了，写歪即红。`ingest` 只做编排，「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`。
+顺序一致只靠注释约束；`test/pipeline.ts` 现在把「空库的列 == 模型 COLS」断言了，写歪即红。
+`ingest` 只做编排，「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`。
 
 ⚠️ 模型**不许引外层**（`test/arch.ts` 第 7 节）—— 只许两种 import：同目录的 `./xxx.ts`，
 以及更底一层的共用件 `../shared/util.ts`。不许 import store / adapter / view / miao / 三方包。
@@ -176,26 +176,19 @@ enka 原始响应 (JSON)
 - **分数不默认落库**。miao 每次 sync 权重都可能变，缓存的分立刻过期。
   要缓存就缓存成 `(uid, avatar_id, miao_version)` 三元组，sync 后自动失效。
 
-### 4.1 结构版本与迁移
+### 4.1 结构保证（不做增量迁移）
 
-`db.ts` 里 `SCHEMA_VERSION` 是唯一版本号，`PRAGMA user_version` 记录库当前版本：
+`db.ts` 的 `openDb` 打开库时直接把 `schema.sql` 跑一遍——`CREATE TABLE IF NOT EXISTS`：空库建表就位，
+已存在的库表在就不碰，不破坏旧数据。`SCHEMA_VERSION` 只作当前结构代次的戳记（每次打开写进
+`PRAGMA user_version`），用来比对「库是不是比代码旧」。
 
-- **空库**：直接执行 `schema.sql`（全是 `CREATE TABLE IF NOT EXISTS`），一次到位。
-- **老库**：走 `MIGRATIONS[当前版本]` 逐版本 `ALTER`。
-  必须这么做——`CREATE TABLE IF NOT EXISTS` 对**已存在**的表一列也不会加，只跑它就是静默不升级。
-- 缺某一版的迁移函数时**直接抛错拒绝启动**，而不是降级处理（降级会静默丢数据）。
+不做「增量迁移表」：数据全部可从 enka 重新抓取，老库没必要逐版本 `ALTER` 升级。因此改了 `schema.sql`
+后，老库不会自动长出新列——这种库删掉 db 文件、重启后重新抓取即可。打开到一个比当前代次旧的库时
+（说明 `schema.sql` 改过而库没重建），直接抛错提示删库重抓，而不是静默带着缺列的库跑（插入/读取
+新列时才崩，更难查）。
 
-已用过四次：v1 → v2 补三个 `*_hash` 列（§5）、v2 → v3 补两列 enka 原始数值、v3 → v4 把 `avatar` 表
-改名为 `character` 并删掉 `i18n_text` 死表、v4 → v5 把武器五列拆成独立的 `weapon` 表。
-`test/pipeline.ts` 第 8 节用「造一个 v1 形状的库再打开」的方式守着整条路 —— 连升级后的列顺序都对着
-模型的 `COLS` 断言。
-
-v4 是**整表重建**（建新表 → 按显式列名搬数据 → 丢旧表），不是 `ALTER ... RENAME`：老库的列顺序是
-历年 ALTER 追加出来的（`*_hash` / `main_stat_value` / `sub_stats` 全吊在表尾），RENAME 改不了顺序，
-而重建能让老库与新库结构逐字一致。v5 反过来只用 `ALTER ... DROP COLUMN` —— 它不关心列序（读写都点名列），
-所以「建 weapon 表 → 按列名搬 → 丢掉 character 里那五列」就够了，不必再重建一次。
-迁移里的 DDL 是**冻结快照**，故意不读 `schema.sql`、也不引模型的 `COLS` —— 迁移是历史记录，
-写的是什么就永远做什么；跟着现码走会在下次改结构时重复加同一列。
+`schema.sql` 与模型的 `FIELDS` 两份列定义必须一致——`test/pipeline.ts` 用「空库的列 == 模型 COLS」
+守住这一条，写歪即红。加一列只动两处：模型的 `FIELDS` + `schema.sql`。
 
 ---
 

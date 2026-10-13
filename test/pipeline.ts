@@ -15,7 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, Meta, Character, ArtisMarkCfg } from '../src/index.ts'
-import { getRow, openDb, SCHEMA_VERSION } from '../src/store/db.ts'
+import { getRow, openDb } from '../src/store/db.ts'
 import type { DatabaseSync } from '../src/store/db.ts'
 import * as repo from '../src/store/repo.ts'
 import { ingestPayload } from '../src/adapter/ingest.ts'
@@ -401,96 +401,11 @@ const unknownChar = { ...structuredClone(payload), avatarInfoList: [{ avatarId: 
 ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).account.characters[0]) === null,
   'miao 不认识的角色返回 null，不抛异常')
 
-/* ---------------- 10. 老库升级 ---------------- */
-/*
- * 已经落地的库是 v1（没有那三列文案 key、也没有 enka 原始数值那两列），
- * CREATE TABLE IF NOT EXISTS 不会给老表补列，全靠 db.ts 里的 ALTER 迁移。
- * 这段就是守住那条路：造一个「v1 形状的库」，再打开，必须自动补齐且老数据一条不丢。
- * v1 之后结构动过四次（v2 补 hash、v3 补 enka 数值、v4 改名重建、v5 拆出 weapon 表），
- * 所以「退回 v1」也得把这四次逐个倒回去。
- */
-
-console.log('\n=== 8. 老库（v1）能自动升到最新版，数据不丢 ===')
-
+/* 空库走 schema.sql（CREATE TABLE IF NOT EXISTS）：列定义只写一遍（模型的 FIELDS），
+   schema.sql 那份要是写歪了 / 少一列 / 顺序不对，这几条必红。 */
 const cols = (d: DatabaseSync, table: string): string[] =>
   d.prepare(`PRAGMA table_info(${table})`).all().map(c => String(c.name))
 
-const tmpDb = path.join('.tmp', 'pipeline-migrate.db')
-for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: true })
-
-/* 先建一个正常的新库，写好一行数据 */
-let d = openDb(tmpDb)
-ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('main_stat_value'),
-  '新库直接就有 name_hash / main_stat_value 列')
-repo.saveFetch(d, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
-
-/* 手工退回 v1 形状。分两段，倒着来：
-   ① 先把 v5 拆出去的武器搬回 character、删掉 weapon 表 —— 列名按 v1 叫，所以又带上 weapon_ 前缀；
-   ② 再删掉 v2 加的三列 + v3 加的两列、表名改回 v1 的 avatar、版本号改回 1。
-   表名要一起退 —— v1 那时候这张表就叫 avatar，迁移 1 的 ALTER 是照着它写的。
-   列顺序不用管：迁移全程按显式列名搬（ALTER 只加列、v4 重建时 INSERT ... SELECT 也点名列），
-   所以这里 ADD COLUMN 追加在尾巴上不影响结果。 */
-d.exec(`
-  ALTER TABLE character ADD COLUMN weapon_item_id INTEGER;
-  ALTER TABLE character ADD COLUMN weapon_level   INTEGER;
-  ALTER TABLE character ADD COLUMN weapon_promote INTEGER;
-  ALTER TABLE character ADD COLUMN weapon_affix   INTEGER;
-  UPDATE character SET
-    weapon_item_id = (SELECT item_id FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
-    weapon_level   = (SELECT level   FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
-    weapon_promote = (SELECT promote FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id),
-    weapon_affix   = (SELECT affix   FROM weapon w WHERE w.uid = character.uid AND w.avatar_id = character.avatar_id);
-  DROP TABLE weapon;
-`)
-d.exec('ALTER TABLE artifact DROP COLUMN name_hash')
-d.exec('ALTER TABLE artifact DROP COLUMN set_hash')
-d.exec('ALTER TABLE artifact DROP COLUMN main_stat_value')
-d.exec('ALTER TABLE artifact DROP COLUMN sub_stats')
-d.exec('ALTER TABLE character RENAME TO avatar')
-d.exec('PRAGMA user_version = 1')
-ok(!cols(d, 'artifact').includes('name_hash') && !cols(d, 'artifact').includes('main_stat_value'),
-  '已退回 v1 形状（两批加列确实都没了）')
-d.close()
-
-/* 重新打开 → 自动升级（v1→v2→v3 补列，v4 按最新命名重建，v5 把武器拆进 weapon 表） */
-d = openDb(tmpDb)
-ok(cols(d, 'avatar').length === 0 && cols(d, 'character').length > 0, 'v4 把表名 avatar 改成了 character')
-ok(cols(d, 'artifact').includes('name_hash') && cols(d, 'artifact').includes('set_hash'),
-  '打开老库时自动补上 artifact 的两列文案 key')
-ok(cols(d, 'artifact').includes('main_stat_value') && cols(d, 'artifact').includes('sub_stats'),
-  '自动补上 v3 的两列 enka 原始数值')
-/* v5：武器五列从 character 挪进 weapon 表，character 里不该再有 weapon_* */
-ok(cols(d, 'character').length > 0 && !cols(d, 'character').some(c => c.startsWith('weapon_')),
-  'v5 后 character 里没有 weapon_* 列了', `实际 ${JSON.stringify(cols(d, 'character'))}`)
-ok(JSON.stringify(cols(d, 'weapon')) === JSON.stringify(Weapon.COLS),
-  'v5 建出的 weapon 列 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'weapon'))}`)
-/* v4 是「拿 schema.sql 重建」，所以老库的列顺序也和新库逐字一样 —— 这条钉住「结构不漂移」 */
-ok(JSON.stringify(cols(d, 'character')) === JSON.stringify(DomainCharacter.COLS),
-  '老库的 character 列顺序 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'character'))}`)
-ok(JSON.stringify(cols(d, 'artifact')) === JSON.stringify(Artifact.COLS),
-  '老库的 artifact 列顺序 == 模型 COLS', `实际 ${JSON.stringify(cols(d, 'artifact'))}`)
-ok(d.prepare('PRAGMA user_version').get()?.user_version === SCHEMA_VERSION,
-  `user_version 升到 ${SCHEMA_VERSION}`)
-
-const after = repo.loadAccountWithCharacters(d, uid)!
-ok(after.characters.length === 1 && after.characters[0].artifacts.length === 5,
-  '升级后老数据一条不丢（1 个角色 5 件圣遗物）')
-ok(after.characters[0].weapon.itemId === directCharacter.weapon.itemId &&
-  after.characters[0].weapon.affix === directCharacter.weapon.affix,
-  '升级后武器还在（v5 是从 character 搬进 weapon 表的，别搬丢了）')
-const stillScores = scoreOf(after.characters[0])
-ok(stillScores?.mark === viaDb!.mark, `升级后照旧能算出同一个分（${stillScores?.mark}）`)
-ok(after.characters[0].artifacts[0].nameHash === null, '老行补出来的新列是 NULL（不是 0，也别拿 0 充数）')
-/* 老库没 enka 数值 → 显示退回内核值，不炸 */
-const oldView = shapeCharacter(after.characters[0], toMiaoProfile(after.characters[0])!, stillScores!, 'chs')
-ok(!!oldView.artifacts[0].main, '老库（无 enka 数值）主词条照样显示，退回内核值')
-d.close()
-
-for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: true })
-
-/* 空库走 schema.sql（不跑迁移），所以两个方向都得钉：
-   「空库的列 == 模型的 FIELDS」+「迁移后的列 == 模型的 FIELDS」（上一节）。列定义只写一遍
-   （模型的 FIELDS），schema.sql 那份要是写歪了 / 少一列 / 顺序不对，这几条必红。 */
 {
   const fresh = openDb(':memory:')
   ok(JSON.stringify(cols(fresh, 'account')) === JSON.stringify(Account.COLS),
@@ -506,7 +421,7 @@ for (const suffix of ['', '-wal', '-shm']) fs.rmSync(tmpDb + suffix, { force: tr
 
 /* ---------------- 11. 文案 key 清单 ---------------- */
 
-console.log('\n=== 9. 文案 key 清单（将来接多语言翻译表照着要）===')
+console.log('\n=== 8. 文案 key 清单（将来接多语言翻译表照着要）===')
 const keys = repo.listTextKeys(db)
 ok(keys.hash.length === 7, `库里用到 7 个 key：5 个部件名 + 1 个套装名 + 1 个武器名（实际 ${keys.hash.length}）`,
   `实际 ${keys.hash.length}: ${keys.hash.slice().sort((a, b) => a - b).join(',')}`)
@@ -523,7 +438,7 @@ ok(keys.avatars.includes(10000046) && keys.avatars.includes(10000003),
  * 拿它当标准答案，能一次性验证「角色等级/突破 + 武器 + 圣遗物主副词条」全都没翻错。
  */
 
-console.log('\n=== 10. 真实数据端到端（含面板对拍）===')
+console.log('\n=== 9. 真实数据端到端（含面板对拍）===')
 /* 真实响应的夹具直接按 EnkaPayload 用（它就是一份 enka 响应；JSON.parse 出来是 any）。 */
 const realRaw = JSON.parse(fs.readFileSync(path.join('test', 'data', 'enka-real.json'), 'utf8')) as EnkaPayload
 const realIn = ingestPayload(realRaw, { source: 'enka' })
@@ -567,7 +482,7 @@ ok(realKeys.hash.length > 10, `真实数据带下来 ${realKeys.hash.length} 个
  * 看着像上游真给她定过一套权重，实际那张表根本没这一行。
  * 这里钉住两件事：内核要标出 isDefaultWeight，view 层要把它换成「默认-通用」。
  * ⚠️ 两侧都要有对照组：只测兜底角色的话，哪天内核改成永远返回 true 也会全绿。 */
-console.log('\n=== 11. 默认兜底在表现层可见 ===')
+console.log('\n=== 10. 默认兜底在表现层可见 ===')
 
 /* 上游权重表（vendored JS）：TS 从 JS 推出来的是「每个角色一行」的**精确字典**，
    拿任意字符串去索引会报错。这里按我们真正的用法声明成「角色名 → 权重行」——
@@ -769,7 +684,7 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
  * 上游权重表里 dmg / phy / heal 是三项独立权重（沃雅妮莎 heal:75、甘雨 dmg:100、
  * 芭芭拉 heal:100），面板把它们合并成一个名字就是误导 —— 看不出该刷什么。
  * ⚠️ 名字必须逐个断言：三个 key 都存在 ≠ 三个名字不同（合并成一个照样「都在」）。 */
-console.log('\n=== 12. 面板属性表：三种加成只按权重表出行 ===')
+console.log('\n=== 11. 面板属性表：三种加成只按权重表出行 ===')
 
 const { attrTableOf } = await import('../src/view/shape.ts')
 const panelOfFake = (attr: Record<string, number>, w: Record<string, number> = {}, elem = ''): AttrRow[] =>
@@ -900,7 +815,7 @@ const dmgRowsOf = (rows: AttrRow[]): AttrRow[] => rows.filter((r) => DMG3.includ
  * ⚠️ 只改数据（把 0.05249999836 改回 0.0525）救不了这类：double 在 x.x5 上可能落在
  *   分界下方（0.0315*100 = 3.1499999999999995），照样舍反。所以必须在这一层做十进制舍入。
  * ⚠️ 「非分界值」那组是防手抖的：舍入写宽一点（比如四舍五入到 2 位再截）会让每一行都 +0.1。 */
-console.log('\n=== 13. 百分比的显示舍入（float32 噪声 / 半分界）===')
+console.log('\n=== 12. 百分比的显示舍入（float32 噪声 / 半分界）===')
 const { attrValueText } = await import('../src/view/shape.ts')
 {
   /* [key, 内核已格式化好的串, 内核的裸数字, 期望, 这是什么档位] —— 裸数字都是真实档位算出来的原值 */
@@ -953,7 +868,7 @@ const { attrValueText } = await import('../src/view/shape.ts')
   ok(rows.find((r) => r.key === 'cpct')?.value === '5.3%', '面板百分比同口径 → 5.3%')
 }
 
-console.log('\n=== 14. 圣遗物显示用 enka 原始数值（不走内核重算）===')
+console.log('\n=== 13. 圣遗物显示用 enka 原始数值（不走内核重算）===')
 
 /*
  * 评分 100% 归 miao，但页面上的**数值**要用 enka 的原始 statValue —— 内核的基准表有
