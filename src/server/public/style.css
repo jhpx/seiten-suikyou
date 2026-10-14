@@ -768,28 +768,37 @@ body {
   width: 25cqw; height: 34cqw;
 }
 .cc-set-icon img { width: 100%; height: 100%; object-fit: contain; }
-/* 2+2：**一朵完整的花打底（件数多的那套）+ 第二套从右下角切一块楔形压上来**。
-   为什么不再各切一半：两套的花在素材里大小、位置并不一致（有的满格、有的偏小偏上），
-   各切一半拼起来轮廓对不上，看着是「两个半朵」；让第一套完整兜住轮廓 —— 外形还是一朵花，
-   第二套只在右下露一块，既看得出是两套、又不破形。
-   楔形走 clip-path 而不是把图挪进半格：素材是居中留白的方图，
-   挪进半格会把两张都挤成窄条，裁则两张都在原位、接缝正好是那条斜边。 */
+/* 2+2：**两朵花左右错开 + 沿两花中点的对角线切开**，各留大半 —— 两朵都看得清。
+   演进史（三版都试过、拼图肉眼选的）：
+   ① 各切一半硬拼 —— 两套的花在素材里大小/位置不一致，拼出来轮廓对不上，看着是两个半朵；
+   ② 一朵完整打底 + 第二套切角楔形 —— 外形是一朵花，但花是圆的、居中放格里，
+      楔形罩住的多是花瓣外的留白，切浅了右下认不出、切深了（-30%）又把左上盖没了；
+   ③ 定稿这版：两朵花**各往左右挪 14%**，中心错开之后沿中点对角线切，
+      每朵留在自己那侧的都是「过半 + 带花心」，不再有谁被盖住。
+   ⚠️ clip-path 在元素**本地**坐标系里生效、transform 之后才整体搬走 ——
+   第二朵往右挪了 s%，它的切线在本地就得往左补回 s%（斜边顶点取 (100-s)% / -s%），
+   不然切线会跟着图一起被挪走、对不上第一朵的边。 */
 .cc-set-icon.mix img { position: absolute; inset: 0; }
-.cc-set-icon.mix img:last-child { clip-path: polygon(100% 14%, 100% 100%, 14% 100%); }
-/* 那条切线：只压在楔形的斜边上，两端渐隐。
-   斜边两头伸出花外（素材四周留白），画满就是一条从边到边的长线，扎眼又没指到东西；
-   中间实、两头淡，看着就是「刚好把花切开一刀」。
-   格子不是正方形（25×34），斜率得跟着它走：角度 = atan(34/25) ≈ 53.7°，
-   取负号是因为这条边是「右下 → 左上」走向（右端翘起来）。 */
+
+.cc-set-icon.mix img:last-child {
+  transform: translate(10%, 10%);
+  clip-path: polygon(80% 10%, 100% 0%, 100% 100%, -20% 100%);
+}
+/* 一条斜向切线，自然切开两花 */
 .cc-set-icon.mix::after {
-  content: ''; position: absolute;
-  left: 57%; top: 57%;                 /* 斜边中点：((100+14)/2, (14+100)/2) */
-  width: 20cqw; height: 1.5cqw;
-  transform: translate(-50%, -50%) rotate(-53.7deg);
+  content: ''; 
+  position: absolute;
+  /* 因为图B向右向下各移了10%，两图中心点的中点需要跟着向右向下偏移 5% */
+  left: calc(50% + 5%); 
+  top: calc(50% + 5%); 
+  width: 28cqw; 
+  height: 1.5cqw;
+  transform: translate(-50%, -50%) rotate(-52.8deg);
   background: linear-gradient(90deg,
     transparent, rgba(169, 133, 60, .95) 20%, rgba(169, 133, 60, .95) 80%, transparent);
   pointer-events: none;
 }
+
 .cc-sets-list { display: flex; flex-direction: column; gap: .8cqw; min-width: 0; flex: 1; }
 /* 字号 10.5cqw：与武器名同规矩，可折行、不断词（anywhere 兜底）。
    件数**右锚定**（flex 两栏），不写在名字后面 —— 加了图标之后名字那栏只剩 66cqw
