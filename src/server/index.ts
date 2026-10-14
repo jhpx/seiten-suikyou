@@ -225,7 +225,7 @@ export function createApp ({
           i18nReady: i18n.available(),
           /* 界面文字也一并返回（切语言不用再问后端一次）；归一化过一遍，'zh-cn' 也能落到 chs */
           ui: i18n.uiTable(loc),
-          /* 首页「按属性权重筛选」的四个选项名，跟着语言一起给 —— 前端不写死词条名 */
+          /* 首页「按属性权重筛选」的选项名，跟着语言一起给 —— 前端不写死词条名 */
           weightOptions: weightFilterOptions(loc)
         }
       })

@@ -288,28 +288,170 @@ body {
 
 /* ───────────────────────── 首页：筛选条 ─────────────────────────
  *
- * 一行：搜索框 + 三个下拉。视觉沿用顶栏控件那套（--ctrl-bg 深色玻璃 + --gold-line 金描边），
+ * 一行三段：排序（左）｜武器/圣遗物切换（中）｜漏斗筛选（右）。
+ * 顺序即频率：排序定第一印象放最左；筛选是末态动作（点完就看结果）沉到最右。
+ * 视觉沿用顶栏控件那套（--ctrl-bg 深色玻璃 + --gold-line 金描边），
  * 一个新色都不引 —— 筛选条和顶栏在同一屏上，另起一套必然搭不上。
  * 34px 高：比顶栏控件（36）矮 2px，它是内容区的次级控件，不该和顶栏主角一样高。
  *
- * 选项收进下拉而不是平铺：三组平铺要占三行（元素 8 + 等级 9 + 权重 5），520px 下把角色网格
- * 挤下去一大截；竖排面板只占一行高。窄屏（≤ 一行放不下时）靠 flex-wrap 折成两行。
+ * 筛选是聚合**弹窗**（漏斗图标触发），不再摊三个下拉 —— 三个维度都要多选
+ * （同时看火和水），一个大框里一次勾完再确定；选项收起来而不平铺，是给网格省垂直空间。
+ * 窄屏（一行放不下时）靠 flex-wrap 折行，中间的视图切换 margin auto 两边分，
+ * 折了行它自己那一行也是居中的。
  */
 .roster-filter {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   margin-bottom: 12px;
 }
-/* 多条件排序面板：每行 = 优先级圈 + 字段名 + 一组小按钮（升降序 / 上下移 / 移除 / +） */
-.rf-sort-menu { min-width: 240px; padding: 6px; }
-.rf-sort-row { display: flex; align-items: center; gap: 6px; height: 32px; }
+/* 视图切换：**一颗循环按钮**（点一下换下一个视图），不是左右分段的 segmented ——
+   分段壳天生只画得下两半，加第三个视图就得重排版；循环按钮只报「当前是哪个」。
+   位置在筛选条最左，右边两颗（排序/筛选）靠 margin-left:auto 一起顶到右侧。
+   框子故意跟右边两颗不一样：**实心金底 + 全圆角胶囊**（右边是深色玻璃 + 方角）——
+   右边两颗是「点开弹窗去选」的操作，这一颗是「点一下就换状态」的状态钮，不是一类东西。 */
+.rf-switch-btn {
+  display: inline-flex; align-items: center;
+  height: 30px; padding: 0 14px;
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: #1a1510;
+  font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease;
+}
+.rf-switch-btn:hover { background: var(--gold-lt); border-color: var(--gold-lt); }
+/* 排序那颗：把它和漏斗一起顶到最右（margin-left:auto 吃掉中间剩余空间）。
+   两颗是同类的「弹窗触发器」，挨在一起，中间只留筛选条本身的 6px gap */
+.rf-sort { margin-left: auto; }
+/* 漏斗按钮：图标 + 角标。比别的下拉按钮窄（不摊文案），宽度跟着图标走。
+   这里要 position:relative —— 角标是相对它定位的，而漏斗按钮本身不再是 .rf-dd
+   （它开的是弹窗，不是挂在按钮下面的小面板） */
+.rf-filter { position: relative; margin-left: 0; }
+.rf-funnel-btn { padding: 0 9px; }
+.rf-funnel-btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
+/* 选中数角标：右下角一颗小圆点，金底深字。平时隐藏（visibility 而不是 display，
+   免得面板每次重画都改布局） */
+.rf-funnel-badge {
+  visibility: hidden;
+  position: absolute; right: -4px; bottom: -4px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 7px;
+  background: var(--gold);
+  color: #1a1510;
+  font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;
+}
+.rf-funnel-badge.on { visibility: visible; }
+/* ── 筛选弹窗 ──
+ * 三维度多选挤在 300px 的小面板里：chips 要折行、指针还得瞄准，勾三个元素很难受 ——
+ * 改成居中弹窗（最宽 520px），chips 排成网格一次勾完，最后「确定」。
+ * 遮罩是纯暗色、不带模糊：筛选前后要能对照着看下面的网格，糊掉就看不出变化了。 */
+.rf-mask {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: rgba(8, 7, 6, .62);
+}
+.rf-modal {
+  display: flex; flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(80vh, 100%);
+  background: var(--bg-3);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+}
+.rf-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.rf-modal-title { font-size: 14px; font-weight: 600; letter-spacing: .06em; }
+.rf-modal-x {
+  width: 28px; height: 28px; padding: 0;
+  background: none; border: 0; border-radius: 6px;
+  color: var(--ink-3); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.rf-modal-x:hover { color: var(--gold-lt); background: rgba(211, 188, 142, .12); }
+/* 内容区自己滚（选项多 / 窄屏不够高时），头和底钉住不动 */
+.rf-modal-body { overflow-y: auto; padding: 12px 14px; }
+.rf-fgroup + .rf-fgroup { margin-top: 14px; }
+.rf-fgroup-title {
+  padding: 0 2px 6px;
+  color: rgba(240, 236, 225, .45);
+  font-size: 11px; letter-spacing: .08em;
+}
+/* chips 排网格（不是随便折行）：每格 96px 起 —— 元素 7 个两行满、等级 9 档、
+   权重 4 项都各自对齐，行与行的列边界是直的，扫视不用跟着折行位置找 */
+.rf-fchips { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+/* 弹窗里的 chip 比小面板那颗高 8px（34 vs 26）：框大了、指针行程也长，
+   26px 在这个尺寸下看着像误触区 */
+.rf-chip {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  height: 34px; padding: 0 9px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 12px; letter-spacing: .04em;
+  cursor: pointer;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.rf-chip:hover { border-color: rgba(211, 188, 142, .5); color: var(--gold-lt); }
+.rf-chip.active {
+  background: rgba(211, 188, 142, .16);
+  border-color: var(--gold-line-hi);
+  color: var(--gold-lt);
+}
+/* 元素那一颗（图标 + 名字）自己也要 flex 居中：img 是行内元素，默认按**基线**对齐 ——
+   图标底边压在文字基线上，图标整体就比字的中心低半截（名字越长越明显）。
+   chip 外层的 align-items:center 只管得住 chip 这一层，管不住这个 span 内部。
+   line-height:1 是配套的：行盒一旦比图标高，flex 居中算的是行盒中心，视觉上又偏了 */
+.rf-opt-elem {
+  display: inline-flex; align-items: center; gap: 5px;
+  line-height: 1;
+}
+.rf-chip img { width: 18px; height: 18px; object-fit: contain; }
+.rf-modal-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.rf-modal-actions { display: flex; gap: 8px; margin-left: auto; }
+/* 取消 / 确定：跟筛选条控件同高（34px）。确定是金底深字 —— 它是这一步的主动作，
+   不能和「取消」一样轻 */
+.rf-btn {
+  height: 34px; padding: 0 14px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 12px; letter-spacing: .04em; cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.rf-btn:hover { border-color: rgba(211, 188, 142, .5); color: var(--gold-lt); }
+.rf-btn.primary { background: var(--gold); border-color: var(--gold); color: #1a1510; font-weight: 600; }
+.rf-btn.primary:hover { background: var(--gold-lt); border-color: var(--gold-lt); color: #1a1510; }
+.rf-fpanel-clear {
+  padding: 3px 10px;
+  background: none; border: 1px solid var(--line); border-radius: 6px;
+  color: var(--ink-2); font-size: 11px; letter-spacing: .04em; cursor: pointer;
+}
+.rf-fpanel-clear:hover { border-color: rgba(211, 188, 142, .5); color: var(--gold-lt); }
+.rf-fpanel-count { color: rgba(240, 236, 225, .45); font-size: 11px; }
+/* 排序现在也走弹窗（和筛选同一个 .rf-modal 壳），这些行只是弹窗里的**内容** ——
+   不再挂在 .rf-menu 上，宽度跟着弹窗走（520px），行高从 32px 放宽到 38px：
+   框大了、指针行程也长了，矮行在小面板里是省空间，在大框里显得局促。 */
+.rf-sort-row { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 4px; }
+.rf-sort-row + .rf-sort-row { border-top: 1px solid rgba(255, 255, 255, .05); }
 .rf-sort-pos {
   flex: 0 0 auto; width: 18px; height: 18px; line-height: 18px; text-align: center;
   border-radius: 50%; background: rgba(211, 188, 142, .18); color: var(--gold-lt);
   font-size: 11px; font-weight: 600;
 }
-.rf-sort-name { flex: 1 1 auto; color: var(--ink-2); font-size: 12px; letter-spacing: .04em; white-space: nowrap; }
+.rf-sort-name { flex: 1 1 auto; min-width: 0; color: var(--ink-2); font-size: 13px; letter-spacing: .04em; white-space: nowrap; }
+/* 小方钮在大框里跟着放大（28 vs 24），24px 在 38px 的行里偏小 */
 .rf-sort-mini {
-  flex: 0 0 auto; width: 24px; height: 24px; padding: 0;
+  flex: 0 0 auto; width: 28px; height: 28px; padding: 0;
   background: none; border: 1px solid var(--line); border-radius: 6px;
   color: var(--ink-2); font-size: 12px; line-height: 1; cursor: pointer;
   transition: border-color .14s ease, color .14s ease, background .14s ease;
@@ -317,7 +459,7 @@ body {
 .rf-sort-mini:hover:not(:disabled) { border-color: rgba(211, 188, 142, .5); color: var(--gold-lt); background: rgba(211, 188, 142, .12); }
 .rf-sort-mini:disabled { opacity: .3; cursor: default; }
 .rf-sort-add { color: var(--gold-lt); border-color: rgba(211, 188, 142, .4); }
-.rf-sort-hint { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line); color: rgba(240, 236, 225, .45); font-size: 11px; line-height: 1.4; }
+.rf-sort-hint { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: rgba(240, 236, 225, .45); font-size: 11px; line-height: 1.4; }
 
 /* 下拉容器：面板绝对定位挂在它下面，得有个定位参照 */
 .rf-dd { position: relative; min-width: 0; }
@@ -607,6 +749,63 @@ body {
 .cc-wmeta b { font-weight: 600; color: #2f2f33; }
 /* 精炼度用金色。白底上 #d3bc8e 太浅，压深一档才看得清 */
 .cc-wmeta b.refine { color: #a9853c; }
+
+/* 圣遗物套装块：白底，与武器块同构（flex:1 拉平排高、白底深字）——
+   切视图只换下半块内容，整排卡片高度不变。
+   没有图标栏（套装只有部位图、没有整套图，硬借一张部位图反而指代不明），
+   两行文字垂直居中。 */
+.cc-sets {
+  display: flex; align-items: center; gap: 3cqw;
+  padding: 3cqw;
+  background: #fff;
+  flex: 1;
+}
+/* 套装图标那一栏：宽 25cqw、高 34cqw 照抄 .cc-wicon ——
+   两种视图的白块必须一样高，切视图时整排卡片不能跳。
+   高是**定值**（不是 min-height）：圣遗物图是居中的方图，栏高随内容变会让接缝位置飘。 */
+.cc-set-icon {
+  position: relative; flex: 0 0 auto;
+  width: 25cqw; height: 34cqw;
+}
+.cc-set-icon img { width: 100%; height: 100%; object-fit: contain; }
+/* 2+2：**一朵完整的花打底（件数多的那套）+ 第二套从右下角切一块楔形压上来**。
+   为什么不再各切一半：两套的花在素材里大小、位置并不一致（有的满格、有的偏小偏上），
+   各切一半拼起来轮廓对不上，看着是「两个半朵」；让第一套完整兜住轮廓 —— 外形还是一朵花，
+   第二套只在右下露一块，既看得出是两套、又不破形。
+   楔形走 clip-path 而不是把图挪进半格：素材是居中留白的方图，
+   挪进半格会把两张都挤成窄条，裁则两张都在原位、接缝正好是那条斜边。 */
+.cc-set-icon.mix img { position: absolute; inset: 0; }
+.cc-set-icon.mix img:last-child { clip-path: polygon(100% 14%, 100% 100%, 14% 100%); }
+/* 那条切线：只压在楔形的斜边上，两端渐隐。
+   斜边两头伸出花外（素材四周留白），画满就是一条从边到边的长线，扎眼又没指到东西；
+   中间实、两头淡，看着就是「刚好把花切开一刀」。
+   格子不是正方形（25×34），斜率得跟着它走：角度 = atan(34/25) ≈ 53.7°，
+   取负号是因为这条边是「右下 → 左上」走向（右端翘起来）。 */
+.cc-set-icon.mix::after {
+  content: ''; position: absolute;
+  left: 57%; top: 57%;                 /* 斜边中点：((100+14)/2, (14+100)/2) */
+  width: 20cqw; height: 1.5cqw;
+  transform: translate(-50%, -50%) rotate(-53.7deg);
+  background: linear-gradient(90deg,
+    transparent, rgba(169, 133, 60, .95) 20%, rgba(169, 133, 60, .95) 80%, transparent);
+  pointer-events: none;
+}
+.cc-sets-list { display: flex; flex-direction: column; gap: .8cqw; min-width: 0; flex: 1; }
+/* 字号 10.5cqw：与武器名同规矩，可折行、不断词（anywhere 兜底）。
+   件数**右锚定**（flex 两栏），不写在名字后面 —— 加了图标之后名字那栏只剩 66cqw
+   （6 字多），七字名必折行；件数混在折行文本里会粘在断开的半个词后面
+   （实测「角斗士的终幕 / 礼×2」），锚到右边则名字怎么折它都在同一列 */
+/* 件数**纵向居中**而不是贴第一行：名字被图标挤窄后会折行（七字名必然），
+   baseline 对齐让「×2」吊在第一行的基线上、下面空一整行，看着像属于第一行。
+   center 让它对着**整块名字**（不管几行）居中，读起来是「这一套几件」 */
+.cc-set-row {
+  display: flex; align-items: center; gap: 1.2cqw;
+  font-size: 10.5cqw; line-height: 1.15; color: #2f2f33;
+}
+.cc-set-row span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* 件数金色：跟白块里「精1」同一支金，扫一眼就知道哪个数是件数 */
+.cc-set-n { flex: 0 0 auto; font-weight: 600; color: #a9853c; }
+.cc-sets-empty { font-size: 10.5cqw; color: #9a9aa2; }
 
 /* ───────────────────────── 明细页 ───────────────────────── */
 

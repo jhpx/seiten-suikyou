@@ -70,10 +70,21 @@ console.log('=== 1. 元信息与健康检查 ===')
   eq(en.data.ui.panelSection, 'Stats', 'locale=en 时界面文字跟着变')
   ok(en.data.ui.fetchDone.includes('{n}'), '英文版的占位符还在')
 
-  /* 首页「按属性权重筛选」的四个选项：顺序固定，名字随语言变（前端不写死词条名） */
-  eq(m.data.weightOptions.map((o: any) => o.key).join(','), 'atk,def,hp,mastery', '权重筛选四项按攻/防/生/精排')
-  eq(m.data.weightOptions[0].label, '攻击力', 'chs 的属性名是中文')
-  eq(en.data.weightOptions[0].label, 'ATK', '英文下属性名跟着变')
+  /* 首页「按属性权重筛选」的选项：命中判据是该项权重不为 0，所以**只收权重表里真会出现的键**。
+     键序钉在测试里：大/小词条（atk/atkPlus…）成对出现，一条只挂一个键，挂俩就是两颗筛出来一样的 chip */
+  eq(m.data.weightOptions.map((o: any) => o.key).join(','),
+    'hp,atk,def,mastery,cpct,cdmg,recharge,dmg,phy,heal', '权重筛选十项：生/攻/防/精 + 双暴 + 充能 + 三种加成（治疗垫底）')
+  eq(m.data.weightOptions[0].label, '生命值', '生命值排第一')
+  eq(m.data.weightOptions[9].label, '治疗加成', '治疗加成排最后')
+  eq(m.data.weightOptions[4].label, '暴击率', 'chs 的选项名是中文（含暴击率/暴击伤害）')
+  eq(m.data.weightOptions[5].label, '暴击伤害', '暴击伤害也进了选项')
+  /* 「元素伤害加成」用官方全称：miao 那张表里这条叫「伤害增加」（它出图时的简称），
+     跟物伤/治疗并列时看不出是哪个加成。这条钉死，别被上游同步改回去 */
+  eq(m.data.weightOptions[7].label, '元素伤害加成', 'dmg 那条叫「元素伤害加成」不是「伤害增加」')
+  eq(en.data.weightOptions[4].label, 'CRIT Rate', '英文下选项名跟着变')
+  eq(en.data.weightOptions[7].label, 'Elemental DMG Bonus', '英文下也是全称（不是 miao 的 “DMG Bonus”）')
+  /* ⚠️ 别在这儿断言「每个选项都有人命中」：测试库只有三四个角色，def / phy 这类冷门键必然 0 人
+     （真实 57 人库里 def 3 人、phy 1 人）。键表来自权重表本身，不是来自某份名单。 */
 
   /* 认不出的语言要落回默认语言，不能给个空表让页面全是 key */
   const bogus = await json('/api/meta?locale=xx')
@@ -121,6 +132,10 @@ let chsView = null
     ok(diluc.artifacts.every((a: any) => a.posName), '每个位置都有部位名')
     ok(diluc.panel.length > 0, `面板属性 ${diluc.panel.length} 项`)
     ok(diluc.sets.length > 0, `套装 ${diluc.sets.map((s: any) => s.name + '×' + s.count).join(' ')}`)
+    /* 套装视图拿「花」（部位 1）那张部位图当整套的代表图，2+2 时两张各裁一半拼。
+       钉死在 /1.webp：哪天改成别的部位，卡片上认套的线索就断了 */
+    ok(diluc.sets.every((s: any) => /^\/assets\/meta-gs\/artifact\/imgs\/[^/]+\/1\.webp$/.test(s.icon || '')),
+      '每个套装都带花的部位图', JSON.stringify(diluc.sets.map((s: any) => s.icon)))
     const withSubs = diluc.artifacts.filter((a: any) => !a.empty && a.subs.length)
     ok(withSubs.length > 0, '圣遗物带副词条')
     ok(withSubs.every((a: any) => a.subs.every((s: any) => s.upNum >= 1)),

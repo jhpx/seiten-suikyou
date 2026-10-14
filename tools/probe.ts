@@ -9,6 +9,10 @@
  * 用法：node tools/probe.ts <url> <表达式文件>   —— 表达式求值结果最好是字符串（用 JSON.stringify 包一层）
  *   echo 'JSON.stringify([...document.querySelectorAll(".cc-weapon")].map(e => e.getBoundingClientRect().height))' > .tmp/e.js
  *   node tools/probe.ts "http://127.0.0.1:8787/?uid=101242308&locale=en" .tmp/e.js
+ *
+ * 可选第 3 个参数 = 截图输出路径：表达式跑完（含里面的 await sleep）后接着截一张。
+ * 「先点开面板再截图」这类要交互的场景用它，不用另起 shot.ts（那个不能带前置动作）：
+ *   node tools/probe.ts <url> <表达式文件> .tmp/shot/x.png
  */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -20,6 +24,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SHELL = path.join(HERE, '..', '.tmp', 'chs', 'chrome-headless-shell-win64', 'chrome-headless-shell.exe')
 const TARGET = process.argv[2]
 const EXPR_FILE = process.argv[3]
+/* 可选：表达式跑完后截一张图（交互探针点完按钮的现场就靠它留证） */
+const SHOT_PNG = process.argv[4]
 const PORT = Number(process.env.PROBE_PORT || 9411)
 const WAIT_MS = Number(process.env.PROBE_WAIT || 3500)   // 等页面把数据取回来再量
 /* 视口尺寸默认 1200×1400 —— 页面自适应用的是 `cqw` 和媒体查询，卡宽跟着视口变，
@@ -87,6 +93,17 @@ try {
   const out = await send('Runtime.evaluate', { expression: EXPR, returnByValue: true, awaitPromise: true })
   const value = out.result?.result?.value
   console.log(value === undefined ? JSON.stringify(out, null, 1) : value)
+  if (SHOT_PNG) {
+    const shot = await send('Page.captureScreenshot', { format: 'png' })
+    if (shot.result?.data) {
+      const png = Buffer.from(shot.result.data, 'base64')
+      fs.mkdirSync(path.dirname(path.resolve(SHOT_PNG)), { recursive: true })
+      fs.writeFileSync(SHOT_PNG, png)
+      console.log('shot=', path.resolve(SHOT_PNG), png.length)
+    } else {
+      console.log('截图失败：', JSON.stringify(shot).slice(0, 200))
+    }
+  }
 } finally {
   ws?.close()
   child.kill()

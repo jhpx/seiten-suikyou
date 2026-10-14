@@ -96,6 +96,95 @@ function renderCharCard (av) {
   return card
 }
 
+/*
+ * 圣遗物视图的一张卡 —— 画像区与武器卡完全一样（同一套 grid、同一张 rarityBg），
+ * 只把底部白块从「武器」换成「圣遗物套装构成」。
+ *
+ * 套装构成 = 花图标 + 名字 + 件数（「绝缘之旗印 ×4」），不搞缩写 —— 缩写（「绝4」）
+ * 认不出来是哪套，而这批名字最长 7 字（华馆梦醒形骸记），10px 下一行放得下。
+ * miao 的 sets 只收 >=2 件的（1 件不激活套装效果），所以最多两行：4件 或 2+2。
+ * 一个套装都没带（或没带满 2 件的）时出「无圣遗物」占位，高度才整齐。
+ */
+
+/*
+ * 套装图标：一套 → 一张完整的花；两套（2+2）→ 第一套的花完整打底，第二套在**右下角**
+ * 裁一块楔形压上来（CSS 画那条斜切线）。第一套是件数多的那套，跟文字行顺序一致。
+ *
+ * 为什么用**花**：每套都出全五件，部位图不缺；而五件里花（和羽）的造型差别最大 ——
+ * 沙/杯/冠在不同套之间轮廓很接近，缩到 24cqw 分不出来。
+ * 为什么不各切一半：两套的花在素材里并不一样大、也不都居中，各切一半拼出来轮廓对不上，
+ * 看着是两个半朵。让第一套完整兜住轮廓，整体就还是一朵花。
+ */
+function setIconBox (sets) {
+  const box = el('div', 'cc-set-icon' + (sets.length > 1 ? ' mix' : ''))
+  const piece = (src) => {
+    const i = el('img')
+    i.src = src || ''
+    i.alt = ''
+    i.onerror = () => imgError(i)
+    return i
+  }
+  box.append(piece(sets[0].icon))
+  if (sets.length > 1) box.append(piece(sets[1].icon))
+  /* 两套时图标区整体挂提示：光看半张花认不出是哪两套，名字还得给一次 */
+  if (sets.length > 1) box.title = sets.map(s => `${s.name} ×${s.count}`).join(' · ')
+  return box
+}
+function renderArtiCard (av) {
+  const rank = rankOf(av.score.markClass)
+  const card = el('div', 'char-card')
+
+  const bg = setBg(el('div', 'cc-bg'), av.rarityBg)
+
+  const face = el('img', 'cc-face')
+  face.src = av.imgs?.face || av.splash
+  face.alt = ''
+  face.loading = 'lazy'
+  face.onerror = () => imgError(face)
+
+  const elem = el('img', 'cc-elem')
+  elem.src = av.elemIcon
+  elem.alt = av.elemText || ''
+  elem.onerror = () => imgError(elem)
+
+  const lv = el('div', 'cc-lv', `Lv.${av.level ?? '?'}`)
+  const score = el('div', 'cc-score', av.score.mark)
+  const badge = el('span', 'cc-rank mark-' + rank, rank)
+
+  const top = el('div', 'cc-top')
+  top.append(bg, face, elem, lv, score, badge)
+  /* 画像区提示：和武器卡同一套四项，切视图不该让「这是谁」的答案变 */
+  top.title = [
+    av.name,
+    `${T('tipLevel')} ${av.level ?? '?'}`,
+    `${T('tipScore')} ${av.score.mark}`,
+    `${T('tipScoreTier')} ${rank}`
+  ].join(' · ')
+
+  const sets = (av.sets || []).slice().sort((a, b) => b.count - a.count)
+  const sp = el('div', 'cc-sets')
+  if (!sets.length) {
+    sp.append(el('div', 'cc-sets-empty', T('noArtis')))
+  } else {
+    const box = el('div', 'cc-sets-list')
+    for (const s of sets) {
+      const row = el('div', 'cc-set-row')
+      row.append(el('span', '', s.name), el('b', 'cc-set-n', `×${s.count}`))
+      box.append(row)
+    }
+    sp.append(setIconBox(sets), box)
+    /* 套装区提示：五件部位的名字太长，这里报「几套什么、各几件」就够认了 */
+    sp.title = [
+      av.name,
+      ...sets.map(s => `${s.name} ×${s.count}`)
+    ].join(' · ')
+  }
+
+  card.append(top, sp)
+  card.addEventListener('click', () => openDetail(av.avatarId))
+  return card
+}
+
 function renderRoster () {
   const view = state.view
   const box = $('view-roster')
@@ -135,7 +224,10 @@ function renderRosterGrid (slot) {
   }
   const sorted = sortAvatars(list)
   const grid = el('div', 'char-grid')
-  for (const av of sorted) grid.append(renderCharCard(av))
+  /* 两种视图只差卡片下半块：武器（默认）/ 圣遗物套装。
+     画像区、网格、筛选、排序全共用 —— 视图切换不重置任何筛选条件。 */
+  const draw = state.rosterMode === 'artis' ? renderArtiCard : renderCharCard
+  for (const av of sorted) grid.append(draw(av))
   slot.append(grid)
 }
 

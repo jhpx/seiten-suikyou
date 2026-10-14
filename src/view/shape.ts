@@ -93,14 +93,43 @@ function shortLabel (key: string, locale: string): string {
   return SHORT_TITLE[title] || title
 }
 
-/** 词条 key → 本地化标题。查不到退回 miao 中文标题，再退回 key 本身 */
-export function statLabel (key: string, locale: string): string {
-  return i18n.statName(key, locale) || KEY_TITLE[key] || key
+/*
+ * 官方用字修正表 —— 只放「miao 那张表跟游戏官方叫法不一致」的条目，目前只有一条。
+ *
+ * `dmg` 在 miao 的 i18n 表里是「伤害增加」/ “DMG Bonus”（它自己出图时的简称），
+ * 但游戏里这一条就叫**元素伤害加成**。面板上物伤/治疗/元素伤三行连着读，
+ * 写成「伤害增加」看不出到底是哪个加成 —— 所以按官方名改。
+ * ⚠️ 改**这里**而不是改 vendor/i18n/names.json：那份是同步脚本的生成物，改了下次同步就被覆盖回去。
+ */
+const STAT_TITLE_FIX: Record<string, Record<string, string>> = {
+  dmg: {
+    chs: '元素伤害加成', cht: '元素傷害加成',
+    en: 'Elemental DMG Bonus', ja: '元素ダメージ加成', kr: '원소 피해 보너스'
+  }
 }
 
-/* 首页「按属性权重筛选」的四个选项：命中判据是这一项权重不为 0。顺序按攻/防/生/精排 */
+/** 词条 key → 本地化标题。修正表 → i18n 表 → miao 中文标题 → key 本身 */
+export function statLabel (key: string, locale: string): string {
+  /* 先归一语言码：修正表是按 chs/en 这种小写码写的，外面传进来的可能带大写或别名 */
+  const loc = i18n.resolveLocale(locale)
+  return STAT_TITLE_FIX[key]?.[loc] || i18n.statName(key, loc) || KEY_TITLE[key] || key
+}
+
+/*
+ * 首页「按属性权重筛选」的选项：命中判据是**这一项权重不为 0** ——
+ * 权重表里给 0 的，就是这个角色不吃这条属性（点出空结果也是有效信息：「我这号里没人吃防御」）。
+ *
+ * 收哪些键：只用 miao 权重表里**真的会出现**的键（实测 57 人：recharge 50、cpct 40、
+ * atk 37、cdmg 34、dmg 29、mastery 23、heal 16、hp 13、def 3、phy 1）。
+ * ⚠️ 大/小词条（atk / atkPlus、hp / hpPlus、def / defPlus）**永远成对出现、权重相等**
+ *   （实测 57 人无一例外），所以一条只挂一个键 —— 挂两个就是两颗筛出来一模一样的 chip。
+ * ⚠️ dmg / phy / heal 是三种加成，各占游戏里一个位置：**按角色挑**，不用三个都出。
+ * 顺序按「面板里从上往下的读法」排：生命 → 攻/防 → 精通 → 双暴 → 充能 → 三种加成，
+ * 加成里按「谁用得多」排（元素伤 >> 物伤 > 治疗），治疗垫底 —— 只有少数角色吃这条。
+ */
 export function weightFilterOptions (locale: string): Array<{ key: string; label: string }> {
-  return ['atk', 'def', 'hp', 'mastery'].map(key => ({ key, label: statLabel(key, locale) }))
+  return ['hp', 'atk', 'def', 'mastery', 'cpct', 'cdmg', 'recharge', 'dmg', 'phy', 'heal']
+    .map(key => ({ key, label: statLabel(key, locale) }))
 }
 
 /*
@@ -290,7 +319,7 @@ export function attrTableOf (profile: Pick<MiaoProfile, 'attr' | 'base'>, locale
   const dmgIcon = ELEM_BG.has(elem) ? elem : 'dmg'
   /* 属性名：中文用上面那张表，其它语言走 i18n 表。元素伤那一行带具体元素 —— 用字跟杯子（4 号位）对齐，
      名字就在 KEY_TITLE 里（`pyro → 火伤加成`，miao 自己按同一句式生成的）；拿不到元素时退回同句式的通名，
-     别掉到 statLabel 去 —— 那边给的是「伤害增加」，跟物伤/治疗两项对不齐。 */
+     别掉到 statLabel 去 —— 那边给的是官方全称「元素伤害加成」（6 字），跟物伤/治疗两项对不齐。 */
   const labelOf = (key: string, iconKey: string): string => {
     if (!zh) return statLabel(key, locale)
     if (key !== 'dmg') return ATTR_TITLE_ZH[key]
@@ -315,6 +344,11 @@ export function attrTableOf (profile: Pick<MiaoProfile, 'attr' | 'base'>, locale
   /* 前七项恒为满行：miao 模板是死循环那张表，缺项的属性也照样出一行 0.0%，行高和对齐才稳定（别 continue）。
      末尾三种加成**只按权重表出行**（理由见 DMG_ATTRS 的注释）。 */
   return [...ATTR_TABLE.map(makeRow), ...DMG_ATTRS.filter(([key]) => (charWeight[key] || 0) > 0).map(makeRow)]
+}
+
+/* 圣遗物素材图：`imgs/<套装官方中文名>/<部位>.webp`。部位 1=花 2=羽 3=沙 4=杯 5=头（见 Artifact.pos）。 */
+function artifactIcon (setNameZh: string | null | undefined, pos: number): string | null {
+  return setNameZh ? `/assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
 }
 
 /** 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
@@ -351,7 +385,7 @@ function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: 
     mark: marked.mark,                               // 给眼睛看的串（1 位小数）
     markValue: marked._mark || 0,                    // 给进度环用（0..70 的原始分）
     markClass: marked.markClass,
-    icon: setNameZh ? `/assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null,  // 404 时前端用占位图
+    icon: artifactIcon(setNameZh, pos),            // 404 时前端用占位图
     main: marked.main?.key
       ? {
           key: marked.main.key,
@@ -414,11 +448,15 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
      护摩/绝缘4/西风与角色专属规则的修正），不是权重表的原始值 —— 面板要的就是这个。 */
   const cw = result.charWeight || {}
 
-  /* 套装：miao 的 sets 键是**官方中文全名**（不是 hash），只能拿中文名反查 */
+  /* 套装：miao 的 sets 键是**官方中文全名**（不是 hash），只能拿中文名反查。
+     icon 固定取「花」（部位 1）那张 —— 五件的部位图里花的轮廓差别最大，一眼能分套，
+     而且每套都出全五件，不存在缺图。名字用 key（中文全名）拼，不跟显示名走：
+     素材目录是官方中文，切英文时 setNameZh 还是中文，不能拿英文去拼路径。 */
   const sets = Object.entries(result.sets || {}).map(([name, count]) => ({
     name: i18n.fromZh(name, loc) || name,
     nameZh: name,
-    count
+    count,
+    icon: artifactIcon(name, 1)
   }))
 
   /* 面板属性 + 该属性的评分权重（>=80 前端高亮成金色，和 miao 一致） */

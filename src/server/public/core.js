@@ -29,11 +29,15 @@ export const state = {
   selectedAvatarId: null,
   busy: false,
   ui: {},
-  /* 首页「按属性权重筛选」的四个选项（{ key, label }），随语言从 /api/meta 拿 */
+  /* 首页「按属性权重筛选」的选项（{ key, label }），随语言从 /api/meta 拿 —— 前端不写死词条名 */
   weightOptions: [],
-  /* 首页筛选：elem = 元素 key、rank = 评分档位、weight = 属性 key，'' = 不限。
-     不持久化 —— 筛选是「在这份名单里找人」的临时动作，下次进来还停在旧条件上反而碍事。 */
-  filter: { elem: '', rank: '', weight: '' },
+  /* 首页筛选：elem / rank / weight 各是一个数组 —— 每个维度都能多选
+     （维度内 OR、维度间 AND：选了火+水又选 SSS，出的是「火或水里的 SSS」）。
+     空数组 = 不限。
+     空数组 = 不限。不持久化 —— 筛选是「在这份名单里找人」的临时动作。 */
+  filter: { elem: [], rank: [], weight: [] },
+  /* 首页卡片显示模式：weapon = 武器块（默认）/ artis = 圣遗物套装块 */
+  rosterMode: 'weapon',
   /* 首页排序：key = level(角色等级) / mark(评价等级) / time(数据时间)；dir = asc|desc。
      默认按评价等级降序，和改之前「网格按评分从高到低」的表现一致。 */
   sort: [{ key: 'mark', dir: 'desc' }]
@@ -156,6 +160,87 @@ export function closeMenus () {
   for (const dd of document.querySelectorAll('.rf-dd.open')) dd.classList.remove('open')
 }
 
+/* ───────────────────────── 弹窗通用（筛选 / 排序共用） ─────────────────────────
+ * 两处都是「点开一个大框、在里面勾完再确定」，壳子只写一份：
+ * 遮罩 + 头（标题 + ×）+ 可滚内容区 + 底（可选清空 / 计数 / 取消 / 确定）。
+ *
+ * 三条规矩：
+ * ① 同时只允许一个弹窗 —— 换 UID 重画、再点按钮，都先把旧的收掉（openDialog 开头做）。
+ * ② Esc / 点遮罩 / 取消 = **丢弃**（什么都不写回）；确定才写回。
+ * ③ 确定时**先关窗再回调**：回调里重画网格，开着窗重画会让窗后的内容和窗本身一起闪。 */
+
+let openModal = null
+let escHandler = null
+
+export function closeModal () {
+  if (!openModal) return
+  openModal.remove()
+  openModal = null
+  if (escHandler) {
+    removeEventListener('keydown', escHandler)
+    escHandler = null
+  }
+}
+
+/**
+ * 开一个弹窗，返回 { body, count, close } —— 内容由调用方自己往 body 里塞。
+ * onOk 在关窗之后调用；onClear 给了就在左下角出「清空」钮。
+ */
+export function openDialog ({ title, onOk, onClear }) {
+  closeModal()
+
+  const mask = el('div', 'rf-mask')
+  const modal = el('div', 'rf-modal')
+  modal.setAttribute('role', 'dialog')
+  modal.setAttribute('aria-modal', 'true')
+
+  const head = el('div', 'rf-modal-head')
+  head.append(el('span', 'rf-modal-title', title))
+  const x = el('button', 'rf-modal-x')
+  x.type = 'button'
+  x.textContent = '×'
+  x.title = T('filterCancel')
+  x.addEventListener('click', () => closeModal())
+  head.append(x)
+
+  const body = el('div', 'rf-modal-body')
+
+  const foot = el('div', 'rf-modal-foot')
+  const count = el('span', 'rf-fpanel-count')
+  let clear = null
+  if (onClear) {
+    clear = el('button', 'rf-fpanel-clear')
+    clear.type = 'button'
+    clear.textContent = T('filterClear')
+    clear.addEventListener('click', onClear)
+    foot.append(clear)
+  }
+  foot.append(count)
+  const actions = el('div', 'rf-modal-actions')
+  const cancel = el('button', 'rf-btn')
+  cancel.type = 'button'
+  cancel.textContent = T('filterCancel')
+  cancel.addEventListener('click', () => closeModal())
+  const ok = el('button', 'rf-btn primary')
+  ok.type = 'button'
+  ok.textContent = T('filterOk')
+  ok.addEventListener('click', () => { closeModal(); onOk?.() })
+  actions.append(cancel, ok)
+  foot.append(actions)
+
+  modal.append(head, body, foot)
+  mask.append(modal)
+  /* 点在遮罩上（而不是弹窗里）= 取消 */
+  mask.addEventListener('click', e => { if (e.target === mask) closeModal() })
+  document.body.append(mask)
+
+  openModal = mask
+  escHandler = (e) => { if (e.key === 'Escape') closeModal() }
+  addEventListener('keydown', escHandler)
+  ok.focus()
+  return { modal, body, count, clear, close: closeModal }
+}
+
 /* 只在模块加载时装一次 —— 放进 renderFilterBar 会每重绘一次叠一个监听。
    closest 判「点在不在某个下拉里」：点按钮本身也算在里面，交给按钮自己的 toggle 处理。 */
 addEventListener('click', e => { if (!e.target?.closest('.rf-dd')) closeMenus() })
@@ -179,10 +264,11 @@ export function rosterRanks (view) {
   return RANK_ORDER.filter(r => view.avatars.some(a => a.score.markClass === r))
 }
 
-/* 换了 UID 之后，旧条件可能在这份名单里根本不存在 —— 那时一个 chip 都不激活、
-   网格却是空的，看着像 bug。条件不成立就地清空，回到「全部」。 */
+/* 换了 UID 之后，旧条件可能在这份名单里根本不存在 —— 那时 chips 全不激活、
+   网格却是空的，看着像 bug。不成立的值就地剔除，整组空了就是「不限」。
+   多选版：把每个维度里不在候选中的值过滤掉（原来单值版是直接清空整键）。 */
 export function dropStaleFilter (key, values) {
-  if (state.filter[key] && !values.includes(state.filter[key])) state.filter[key] = ''
+  state.filter[key] = state.filter[key].filter(v => values.includes(v))
 }
 
 /* ───────────────────────── URL / 加载态 ───────────────────────── */
