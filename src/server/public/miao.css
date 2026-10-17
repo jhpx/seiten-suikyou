@@ -129,13 +129,13 @@
  * 天赋图标的底座是一张按元素分的 100px 圆环图（miao common.css: `.elem-x .talent-icon`）。
  * 少了它，图标就是几个悬空的小图 —— 看着「简易」。
  */
-.elem-pyro .talent-icon { background-image: url("/assets/common/bg/talent-pyro.webp"); }
-.elem-hydro .talent-icon { background-image: url("/assets/common/bg/talent-hydro.webp"); }
-.elem-anemo .talent-icon { background-image: url("/assets/common/bg/talent-anemo.webp"); }
-.elem-electro .talent-icon { background-image: url("/assets/common/bg/talent-electro.webp"); }
-.elem-dendro .talent-icon { background-image: url("/assets/common/bg/talent-dendro.webp"); }
-.elem-cryo .talent-icon { background-image: url("/assets/common/bg/talent-cryo.webp"); }
-.elem-geo .talent-icon { background-image: url("/assets/common/bg/talent-geo.webp"); }
+.elem-pyro .talent-icon { background-image: url("assets/common/bg/talent-pyro.webp"); }
+.elem-hydro .talent-icon { background-image: url("assets/common/bg/talent-hydro.webp"); }
+.elem-anemo .talent-icon { background-image: url("assets/common/bg/talent-anemo.webp"); }
+.elem-electro .talent-icon { background-image: url("assets/common/bg/talent-electro.webp"); }
+.elem-dendro .talent-icon { background-image: url("assets/common/bg/talent-dendro.webp"); }
+.elem-cryo .talent-icon { background-image: url("assets/common/bg/talent-cryo.webp"); }
+.elem-geo .talent-icon { background-image: url("assets/common/bg/talent-geo.webp"); }
 .talent-icon img,
 .talent-icon .talent-icon-img {
   width: 46%; height: 46%;
@@ -174,7 +174,7 @@
   left: 50%; top: 0;
   width: 28px; height: 28px;
   margin-left: -14px;
-  background: url("/assets/character/imgs/crown.png") no-repeat;
+  background: url("assets/character/imgs/crown.png") no-repeat;
   background-size: contain;
   z-index: 2;
 }
@@ -286,26 +286,26 @@
      不指向任何一张 —— 随便指一张等于替玩家编了一个元素。
    ⚠️ 旧的 `.i-res`（元素抗性）已删：面板固定七项 + 按权重出的三种加成都没有 res，
      那条规则从来没被命中过（雪碧图时代留的）。 */
-.i-hp { --icon: url("/assets/character/svgs/icon_hp.svg"); }
-.i-atk { --icon: url("/assets/character/svgs/icon_attack.svg"); }
-.i-def { --icon: url("/assets/character/svgs/icon_defence.svg"); }
-.i-mastery { --icon: url("/assets/character/svgs/icon_element_mastery.svg"); }
-.i-cpct { --icon: url("/assets/character/svgs/icon_critical.svg"); }
-.i-cdmg { --icon: url("/assets/character/svgs/icon_critical_hurt.svg"); }
-.i-recharge { --icon: url("/assets/character/svgs/icon_charge_efficiency.svg"); }
-.i-phy { --icon: url("/assets/character/svgs/icon_physical_add_hurt.svg"); }
-.i-heal { --icon: url("/assets/character/svgs/icon_heal_add.svg"); }
+.i-hp { --icon: url("assets/character/svgs/icon_hp.svg"); }
+.i-atk { --icon: url("assets/character/svgs/icon_attack.svg"); }
+.i-def { --icon: url("assets/character/svgs/icon_defence.svg"); }
+.i-mastery { --icon: url("assets/character/svgs/icon_element_mastery.svg"); }
+.i-cpct { --icon: url("assets/character/svgs/icon_critical.svg"); }
+.i-cdmg { --icon: url("assets/character/svgs/icon_critical_hurt.svg"); }
+.i-recharge { --icon: url("assets/character/svgs/icon_charge_efficiency.svg"); }
+.i-phy { --icon: url("assets/character/svgs/icon_physical_add_hurt.svg"); }
+.i-heal { --icon: url("assets/character/svgs/icon_heal_add.svg"); }
 
 /* 元素图标：只给 --icon（mask 图），不给颜色 —— 十六张一律跟文字同色。
    曾经这里还有一组 .char-attr li .icon .i-pyro { background-color:#f95 } 之类，
    已删（2026-10-07）：一行属性一种颜色，和其余九个不是一套语言。 */
-.i-pyro { --icon: url("/assets/character/svgs/icon_fire_add_hurt.svg"); }
-.i-electro { --icon: url("/assets/character/svgs/icon_elec_add_hurt.svg"); }
-.i-cryo { --icon: url("/assets/character/svgs/icon_ice_add_hurt.svg"); }
-.i-hydro { --icon: url("/assets/character/svgs/icon_water_add_hurt.svg"); }
-.i-anemo { --icon: url("/assets/character/svgs/icon_wind_add_hurt.svg"); }
-.i-geo { --icon: url("/assets/character/svgs/icon_rock_add_hurt.svg"); }
-.i-dendro { --icon: url("/assets/character/svgs/icon_grass_add_hurt.svg"); }
+.i-pyro { --icon: url("assets/character/svgs/icon_fire_add_hurt.svg"); }
+.i-electro { --icon: url("assets/character/svgs/icon_elec_add_hurt.svg"); }
+.i-cryo { --icon: url("assets/character/svgs/icon_ice_add_hurt.svg"); }
+.i-hydro { --icon: url("assets/character/svgs/icon_water_add_hurt.svg"); }
+.i-anemo { --icon: url("assets/character/svgs/icon_wind_add_hurt.svg"); }
+.i-geo { --icon: url("assets/character/svgs/icon_rock_add_hurt.svg"); }
+.i-dendro { --icon: url("assets/character/svgs/icon_grass_add_hurt.svg"); }
 
 /* 兜底：拿不到元素（旅行者）时 --icon 没被定义，上面那条 mask 声明整条失效，
    mask 回到初始值 none → 不画图。这里显式写一遍，把「故意留空」这件事钉在样式里。 */
@@ -354,7 +354,7 @@
   color: #fff;
   font-size: 16px;
   overflow: hidden;
-  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background: url("assets/common/cont/card-bg.png") top left repeat-x;
   background-size: auto 100%;
   box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
 }
@@ -498,7 +498,7 @@
   position: relative;
   border-radius: 10px;
   overflow: hidden;
-  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background: url("assets/common/cont/card-bg.png") top left repeat-x;
   background-size: auto 100%;
   box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
 }
@@ -594,7 +594,7 @@
 .artis .weapon .star {
   display: inline-block;
   width: 100px; height: 20px;
-  background: url("/assets/common/item/star.png") no-repeat;
+  background: url("assets/common/item/star.png") no-repeat;
   background-size: 100px 100px;
   transform: scale(.8);
   transform-origin: 0 10px;
@@ -869,7 +869,7 @@
 .dmg-cont {
   margin: 10px 0;
   border-radius: 10px;
-  background: url("/assets/common/cont/card-bg.png") top left repeat-x;
+  background: url("assets/common/cont/card-bg.png") top left repeat-x;
   background-size: auto 100%;
   box-shadow: 0 0 1px 0 #ccc, 2px 2px 4px 0 rgba(50, 50, 50, .8);
   overflow: hidden;

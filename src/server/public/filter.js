@@ -17,7 +17,7 @@
  *
  * 漏斗图标是自绘 inline SVG（项目没有现成的漏斗素材，也不想为一个图标引一套图标库）。
  *
- * 元素图标从名单里已有角色借、属性名由 /api/meta 下发 ——
+ * 元素图标从名单里已有角色借、属性名由 /api/meta 返回 ——
  * 和卡片一个规矩：URL 和文案一律后端给，前端不拼路径、不写死词条名。
  *
  * 排序面板由 sort.js 提供（renderFilterBar 直接拼进来）。
@@ -26,7 +26,7 @@
 import { $, state, T, el, imgError, closeMenus, closeModal, openDialog, refreshRosterGrid, rosterElems, rosterRanks, dropStaleFilter, reg } from './core.js'
 import { sortPanel } from './sort.js'
 
-/* 元素选项：图标 + 名字，都从名单里已有角色身上借（URL 一律后端下发） */
+/* 元素选项：图标 + 名字，都从名单里已有角色身上借（URL 一律由接口返回） */
 function elemOption (view, e) {
   const src = view.avatars.find(a => a.elem === e)
   const label = src?.elemText || e

@@ -3,11 +3,11 @@
  *
  * 为什么用 node:http 手写而不引框架：`test/arch.ts` 锁死了「运行时依赖只有 lodash」，而这里要的东西
  * 很薄（几个 JSON 接口 + 几个静态文件），不值得为省一张路由表把那条线破掉。
- * 分层：这一层只做「HTTP ⇄ 视图对象」的翻译，不碰 SQL、不碰评分算法。
+ * 分层：本文件只做**装配** —— 起服务、限流、按前缀分派；具体接口在 api/，
+ * 静态托管在 static.ts，跨域在 cors.ts，响应原语在 http.ts。接口层只管「算数据 + 回响应」。
  */
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import fs from 'node:fs'
 import os from 'node:os'
 import type { NetworkInterfaceInfo } from 'node:os'
 import path from 'node:path'
@@ -20,130 +20,16 @@ import { fetchEnka } from '../adapter/enka.ts'
 import type { FetchEnkaOpts } from '../adapter/enka.ts'
 import { ingestPayload } from '../adapter/ingest.ts'
 import type { IngestResult } from '../adapter/ingest.ts'
-import { buildAccountView, fmtTime, weightFilterOptions, damageOf } from '../view/shape.ts'
+import { buildAccountView } from '../view/shape.ts'
 import { createRateGate } from './rate-limit.ts'
 import type { RateRules } from './rate-limit.ts'
 import { argValue, parseArgs } from '../shared/util.ts'
 import type { EnkaPayload } from '../domain/enka.ts'
-
-const HERE = path.dirname(fileURLToPath(import.meta.url))
-const PUBLIC = path.join(HERE, 'public')
-const ASSETS_DIR = path.join(PUBLIC, 'assets')
-const ASSETS_ROOT = path.resolve(ASSETS_DIR)
-
-/* 静态页白名单。不做通用静态服务 —— 几个文件而已，白名单顺手把目录穿越也解决了。 */
-/* 静态页走通用托管，见 servePublic（前端拆成多个 ES 模块，写死白名单会 404） */
-
-const MIME_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.woff': 'font/woff'
-}
-
-const BODY_LIMIT = 64 * 1024
-
-/* ---------------- 小工具 ---------------- */
-
-/** 额外的响应头（按需） */
-type Headers = Record<string, string>
-
-/* catch 到的一律是 unknown（TS 从 4.4 起）—— 取人话消息统一走这里 */
-const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e))
-
-function sendJson (res: ServerResponse, status: number, obj: unknown, headers?: Headers): void {
-  const body = JSON.stringify(obj)
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body),
-    'Cache-Control': 'no-store',
-    ...(headers || {})
-  })
-  res.end(body)
-}
-
-/* 失败一律走这个形状：{ ok:false, error:{ code, message } } */
-function sendError (res: ServerResponse, status: number, code: string, message: string, headers?: Headers): void {
-  sendJson(res, status, { ok: false, error: { code, message } }, headers)
-}
-
-function sendFile (res: ServerResponse, file: string, { cache = 'no-cache' }: { cache?: string } = {}): void {
-  const buf = fs.readFileSync(file)
-  res.writeHead(200, {
-    'Content-Type': MIME_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
-    'Content-Length': buf.length,
-    'Cache-Control': cache
-  })
-  res.end(buf)
-}
-
-/* 请求体 JSON —— 形状由各接口自己认（这里只保证「是个对象」）。空体回 {}，坏 JSON 抛错。 */
-function readBody (req: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => {
-      size += c.length
-      if (size > BODY_LIMIT) { reject(new Error('请求体过大')); req.destroy(); return }
-      chunks.push(c)
-    })
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8').trim()
-      if (!raw) return resolve({})
-      try { resolve(JSON.parse(raw)) } catch { reject(new Error('请求体不是合法 JSON')) }
-    })
-    req.on('error', reject)
-  })
-}
-
-/* 图片素材：扩展名白名单 + 目录穿越防护 */
-function serveAsset (res: ServerResponse, pathname: string): void {
-  const ext = path.extname(pathname).toLowerCase()
-  if (!MIME_TYPES[ext]) {
-    sendError(res, 404, 'asset_type', `不支持的资源类型：${ext}`)
-    return
-  }
-  const rel = decodeURIComponent(pathname.slice('/assets/'.length))
-  const filePath = path.resolve(path.join(ASSETS_DIR, rel))
-  if (!filePath.startsWith(ASSETS_ROOT + path.sep) && filePath !== ASSETS_ROOT) {
-    sendError(res, 403, 'asset_escape', '路径不合法')
-    return
-  }
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    sendError(res, 404, 'asset_missing', '资源不存在')
-    return
-  }
-  sendFile(res, filePath, { cache: 'public, max-age=86400' })
-}
-
-/* 通用静态页：按扩展名安全托管整个 public 目录（前端拆成多个 ES 模块后，写死白名单会 404）。
-   目录穿越防护 + 扩展名白名单 + 不存在即 404，与 serveAsset 同一套思路。 */
-function servePublic (res: ServerResponse, pathname: string): void {
-  const rel = decodeURIComponent(pathname.replace(/^\/+/, ''))
-  const filePath = path.resolve(PUBLIC, rel)
-  if (filePath !== PUBLIC && !filePath.startsWith(PUBLIC + path.sep)) {
-    sendJson(res, 404, { ok: false })
-    return
-  }
-  if (!MIME_TYPES[path.extname(filePath).toLowerCase()]) {
-    sendJson(res, 404, { ok: false })
-    return
-  }
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    sendJson(res, 404, { ok: false })
-    return
-  }
-  sendFile(res, filePath)
-}
+import { errMessage, sendError, sendFile } from './http.ts'
+import { applyCors } from './cors.ts'
+import { PUBLIC, serveAsset, servePublic } from './static.ts'
+import { routeApi } from './api/index.ts'
+import type { ApiContext } from './api/context.ts'
 
 /* ---------------- 应用 ---------------- */
 
@@ -157,6 +43,9 @@ export interface AppOptions {
   trustProxy?: boolean
   /** 覆盖限流档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流 */
   rateLimit?: Partial<RateRules> | false
+  /** 跨域白名单（来访的 Origin 一字不差地对上才给 CORS 头）；留空 = 不开跨域（默认）。
+      前端单独托管（GitHub Pages 之类）+ 后端另放一台机器时才需要，见 docs/DEPLOY.md。 */
+  corsOrigins?: string[]
 }
 
 /** 组装一个服务实例（不开监听），方便测试直接拿来做内存请求 */
@@ -164,7 +53,8 @@ export function createApp ({
   dbFile = path.join('data', 'gs.db'),
   fetchImpl = fetchEnka,
   trustProxy = false,
-  rateLimit
+  rateLimit,
+  corsOrigins = []
 }: AppOptions = {}) {
   const db = openDb(dbFile)
   /* 同一个 uid 同时来两次抓取请求时共用一个 promise，别把 enka 打两遍 */
@@ -194,9 +84,16 @@ export function createApp ({
     return p
   }
 
+  /* 接口层只拿这三样：库、视图、抓取。跨域 / 限流 / 静态托管都留在这层的外面。 */
+  const ctx: ApiContext = { db, viewOf, handleFetch }
+
   async function route (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const { pathname } = url
     const isGet = req.method === 'GET'
+
+    /* ---- 跨域：预检就地回完，业务响应挂上许可头（没配白名单时等于什么都没有）。
+       必须排在限流前面，原因写在 cors.ts。 ---- */
+    if (applyCors(req, res, corsOrigins)) return
 
     /* 限流卡在所有业务之前 —— 坏请求也得占配额，否则刷 400 比刷 200 还省 */
     if (gate) {
@@ -207,114 +104,15 @@ export function createApp ({
       }
     }
 
+    /* ---- 静态：素材、首页、public/ 下其余文件 ---- */
     if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
     if (isGet && (pathname === '/' || pathname === '/index.html')) return sendFile(res, path.join(PUBLIC, 'index.html'))
     /* 前端拆成多个 ES 模块后，写死白名单会 404，所以通用托管整个 public 目录。
        但 /api/* 是接口，绝不能让静态分支抢走（否则 /api/health 等 GET 接口会被当文件 404）。 */
     if (isGet && !pathname.startsWith('/api/')) return servePublic(res, pathname)
 
-    /* ---- 元信息：有哪些语言、表在不在 ---- */
-    if (isGet && pathname === '/api/meta') {
-      const loc = i18n.resolveLocale(url.searchParams.get('locale'))
-      sendJson(res, 200, {
-        ok: true,
-        data: {
-          locales: i18n.locales(),
-          defaultLocale: i18n.DEFAULT_LOCALE,
-          /* 表还没同步时为 false —— 页面据此提示「只有中文」 */
-          i18nReady: i18n.available(),
-          /* 界面文字也一并返回（切语言不用再问后端一次）；归一化过一遍，'zh-cn' 也能落到 chs */
-          ui: i18n.uiTable(loc),
-          /* 首页「按属性权重筛选」的选项名，跟着语言一起给 —— 前端不写死词条名 */
-          weightOptions: weightFilterOptions(loc)
-        }
-      })
-      return
-    }
-
-    if (isGet && pathname === '/api/health') {
-      sendJson(res, 200, { ok: true, data: { uids: repo.listUids(db).length } })
-      return
-    }
-
-    /* ---- 库里有哪些 uid ---- */
-    if (isGet && pathname === '/api/uids') {
-      const list = repo.listUids(db).map(uid => {
-        const acc = repo.loadAccount(db, uid)
-        return {
-          uid,
-          nickname: acc?.nickname ?? null,
-          level: acc?.level ?? null,
-          worldLevel: acc?.worldLevel ?? null,
-          avatarCount: repo.listCharacterIds(db, uid).length,
-          fetchedAt: fmtTime(repo.lastFetch(db, uid)?.fetched_at)   /* ISO UTC → 本地时区文本 */
-        }
-      })
-      sendJson(res, 200, { ok: true, data: list })
-      return
-    }
-
-    /* ---- 一个 uid 的完整视图 ---- */
-    const mUid = isGet && pathname.match(/^\/api\/uid\/(\d+)$/)
-    if (mUid) {
-      const uid = Number(mUid[1])
-      const view = viewOf(uid, url.searchParams.get('locale') || i18n.DEFAULT_LOCALE)
-      if (!view) {
-        sendError(res, 404, 'no_data', `库里没有 uid ${uid}。先抓一次：POST /api/fetch {"uid":${uid}}`)
-        return
-      }
-      sendJson(res, 200, { ok: true, data: view })
-      return
-    }
-
-    /* ---- 一个角色的伤害计算（明细页下侧的「伤害计算」表）----
-       data 为 null = 这个角色算不出伤害（没配 calc.js / 脚本崩了 / 元数据不认识），
-       页收到 null 就不出那一块 —— 与「角色不存在」是两件事，所以分开两种 404。 */
-    const mDmg = isGet && pathname.match(/^\/api\/uid\/(\d+)\/character\/(\d+)\/damage$/)
-    if (mDmg) {
-      const uid = Number(mDmg[1])
-      const avatarId = Number(mDmg[2])
-      const account = repo.loadAccountWithCharacters(db, uid)
-      if (!account) {
-        sendError(res, 404, 'no_data', `库里没有 uid ${uid}。先抓一次：POST /api/fetch {"uid":${uid}}`)
-        return
-      }
-      const ch = (account.characters || []).find(c => c.avatarId === avatarId)
-      if (!ch) {
-        sendError(res, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
-        return
-      }
-      sendJson(res, 200, { ok: true, data: await damageOf(ch) })
-      return
-    }
-
-    /* ---- 抓数据（会联网打 enka）---- */
-    if (req.method === 'POST' && pathname === '/api/fetch') {
-      /* 客户端给的体：只有 uid / locale 两个字段，都在这里当场认形状 */
-      let body: Record<string, unknown>
-      try { body = await readBody(req) } catch (e) { sendError(res, 400, 'bad_body', errMessage(e)); return }
-      const uid = Number(body.uid)
-      if (!Number.isInteger(uid) || uid <= 0) {
-        sendError(res, 400, 'bad_uid', '请求体里要有一个正整数 uid')
-        return
-      }
-      const locale = (typeof body.locale === 'string' ? body.locale : null) ||
-        url.searchParams.get('locale') || i18n.DEFAULT_LOCALE
-      try {
-        const summary = await handleFetch(uid)
-        sendJson(res, 200, {
-          ok: true,
-          data: viewOf(uid, locale),
-          meta: { fetched: summary.characterCount, source: summary.source }
-        })
-      } catch (e) {
-        /* enka 的业务错误（未公开 / 查不到 / 太频繁）在 message 里已经是人话了，
-           对浏览器来说这类都是「上游没给数据」，用 502 表达「网关上游失败」最贴切。 */
-        sendError(res, 502, 'fetch_failed', errMessage(e))
-      }
-      return
-    }
-
+    /* ---- 接口：交给 api/ 的路由表 ---- */
+    if (await routeApi(ctx, req, res, url)) return
     sendError(res, 404, 'not_found', `没有这个接口：${req.method} ${pathname}`)
   }
 
@@ -359,10 +157,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const trustProxy = args['trust-proxy'] === true || process.env.TRUST_PROXY === '1'
   /* 本地调试想完全不管限流就加 --no-rate-limit */
   const noLimit = args['no-rate-limit'] === true || process.env.NO_RATE_LIMIT === '1'
+  /* 跨域白名单：只有「前端单独托管 + 后端另放一台机器」才用得上。
+     逗号分隔，如 --cors-origin https://xxx.github.io 或 CORS_ORIGIN=https://a.com,https://b.com。
+     留空 = 不开（默认；本地运行就是这样）。 */
+  const corsOrigins = (argValue(args['cors-origin']) || process.env.CORS_ORIGIN || '')
+    .split(',').map(s => s.trim()).filter(Boolean)
 
   const app = await startServer({
     port: Number(args.port || process.env.PORT || 8787),
-    host, dbFile, trustProxy,
+    host, dbFile, trustProxy, corsOrigins,
     rateLimit: noLimit ? false : undefined
   })
 
@@ -389,6 +192,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`  客户端  ${trustProxy
     ? '按转发头认（CF-Connecting-IP / X-Forwarded-For）'
     : '按 TCP 对端地址认（挂代理后面要加 --trust-proxy，否则限流形同虚设）'}`)
+  console.log(`  跨域    ${corsOrigins.length
+    ? corsOrigins.join(' ')
+    : '关闭（本地运行不需要；前端单独托管时要加 --cors-origin <前端地址>）'}`)
   if (!i18n.available()) {
     console.log('  提示    多语言表还没同步（只有中文）。跑一次：I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py')
   } else {

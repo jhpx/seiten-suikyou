@@ -12,6 +12,18 @@
 
 export const $ = (id) => document.getElementById(id)
 
+/* ───────────────── 部署基址（只有前后端分开托管时才用得上） ─────────────────
+   默认一台机器一个进程（npm run server 既给页面又给接口），地址写根绝对路径 /api/ 就完事。
+   前端可以单独托管（比如丢到 GitHub Pages），那时要把接口指到另一台机器，填这里：
+     API_BASE —— 接口基址。留空 = 跟页面同源（默认）。跨域部署时填后端地址，如 https://gs.example.com（末尾别带 /）。
+   图片不用配：接口返回的就是相对路径（assets/...），浏览器按页面所在目录解析即可。
+   基址在 index.html 的 <meta> 里改，改完刷新即可（前端文件每请求现读盘）。 */
+const metaContent = (name) => document.querySelector(`meta[name="${name}"]`)?.content?.trim() || ''
+/* 页面自己所在的目录（末尾带 /）。切语言、进明细页改写地址栏时用它拼 ——
+   写根绝对路径（/?uid=…）在 Pages 那种 /<repo>/ 子路径部署下会被打回域名根，刷新即 404。 */
+export const PAGE_BASE = new URL('.', document.baseURI).href
+export const API_BASE = metaContent('api-base')
+
 export const RANK_ORDER = ['MAX', 'ACE', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D']
 export const SLOT_GLYPH = { 1: '花', 2: '羽', 3: '沙', 4: '杯', 5: '冠' }
 
@@ -66,8 +78,13 @@ export function richText (parent, text) {
 
 /* ───────────────────────── 后端调用 ───────────────────────── */
 
+/* 判断一个地址是不是「已经带协议/域名的完整网址」—— 是就别再补前缀了。
+   为什么非得判一下：`uidApiUrl()` 拼出来的已经是完整地址，这里再补一次就成了
+   `https://a.com https://a.com/api/...` 这种双前缀，fetch 直接抛「解析不了」。 */
+const isAbsoluteUrl = (p) => /^(https?:)?\/\//.test(p)
+
 export async function api (path, opts) {
-  const res = await fetch(path, opts)
+  const res = await fetch(isAbsoluteUrl(path) ? path : API_BASE + path, opts)
   let body = null
   try { body = await res.json() } catch {}
   if (!res.ok || (body && body.ok === false)) {
@@ -78,7 +95,7 @@ export async function api (path, opts) {
 
 /* 按当前语言取某个账号的接口地址（locale 一律跟 state.locale 走） */
 export function uidApiUrl (uid) {
-  return `/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`
+  return `${API_BASE}/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`
 }
 
 /* ───────────────────────── 提示条 ───────────────────────── */
@@ -278,7 +295,7 @@ export function syncUrl () {
   if (state.uid) q.set('uid', state.uid)
   if (state.locale) q.set('locale', state.locale)
   if (state.selectedAvatarId && $('view-detail').classList.contains('active')) q.set('char', state.selectedAvatarId)
-  history.replaceState(null, '', q.toString() ? `/?${q}` : '/')
+  history.replaceState(null, '', q.toString() ? `${PAGE_BASE}?${q}` : PAGE_BASE)
 }
 
 export function showLoading (text) {

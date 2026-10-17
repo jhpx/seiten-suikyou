@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>星天水镜 · 圣遗物评分</title>
-<link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="/miao.css">
+<!-- 部署基址：前后端在同一台机器上时留空（默认）。
+     前端单独托管（比如 GitHub Pages）+ 后端另放 VPS 时，把 api-base 填成后端地址，
+     如 content="https://gs.example.com"（末尾不要带 /）。图片地址后端直接发相对路径，不用配。 -->
+<meta name="api-base" content="">
+<!-- 页面自身的引用一律写**相对路径**：GitHub Pages 的项目站挂在 /<repo>/ 下面，
+     写成 /style.css 会指到域名根上去，直接 404。 -->
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="miao.css">
 </head>
 <body>
 
@@ -44,6 +50,6 @@
   <span class="dim" id="footmeta"></span>
 </footer>
 
-<script type="module" src="/bootstrap.js"></script>
+<script type="module" src="bootstrap.js"></script>
 </body>
 </html>

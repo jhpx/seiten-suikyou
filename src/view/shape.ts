@@ -255,7 +255,7 @@ function assetSeg (s: string | null | undefined): string {
  * ③ 立绘用 imgs/splash.webp，不是 character-img/ 那套（后者是别的功能的同人插画）。
  */
 function charImgs (char: any): Record<string, string> {
-  const base = `/assets/meta-gs/character/${assetSeg(char.name)}/`
+  const base = `assets/meta-gs/character/${assetSeg(char.name)}/`
   const talentCons = char.talentCons || {}
   /* 键是动态拼的（cons1..cons6 / a / e / q），所以标成「字符串字典」而不是字面量对象 */
   const imgs: Record<string, string> = {
@@ -265,7 +265,7 @@ function charImgs (char: any): Record<string, string> {
     banner: `${base}imgs/banner.webp`
   }
   for (let i = 1; i <= 6; i++) imgs[`cons${i}`] = `${base}icons/cons-${i}.webp`
-  imgs.a = `/assets/common/item/atk-${char.weaponType || 'sword'}.webp`
+  imgs.a = `assets/common/item/atk-${char.weaponType || 'sword'}.webp`
   for (const t of ['e', 'q']) {
     imgs[t] = talentCons[t] > 0 ? imgs[`cons${talentCons[t]}`] : `${base}icons/talent-${t}.webp`
   }
@@ -348,7 +348,7 @@ export function attrTableOf (profile: Pick<MiaoProfile, 'attr' | 'base'>, locale
 
 /* 圣遗物素材图：`imgs/<套装官方中文名>/<部位>.webp`。部位 1=花 2=羽 3=沙 4=杯 5=头（见 Artifact.pos）。 */
 function artifactIcon (setNameZh: string | null | undefined, pos: number): string | null {
-  return setNameZh ? `/assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
+  return setNameZh ? `assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
 }
 
 /** 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
@@ -546,12 +546,12 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     fetter: profile.fetter ?? null,
     elem,
     elemText: Format.elemName(elem),          // 元素名暂时只有 miao 的中文单字（i18n 表没收录元素，不想为它多同步一轮）
-    elemBg: `/assets/common/bg/bg-${elemOf(elem)}.webp`,
-    /* 首页角色卡的两张图（明细页用不到）：星级底色、左上角元素图标。两个 URL 都由后端给、前端不自己拼路径 */
-    rarityBg: `/assets/common/item/bg${char.star === 4 ? 4 : 5}.png`,
-    elemIcon: `/assets/common/elem/${elemOf(elem)}.png`,
+    elemBg: `assets/common/bg/bg-${elemOf(elem)}.webp`,
+    /* 首页角色卡的两张图（明细页用不到）：星级底色、左上角元素图标。两个 URL 都在此拼好、前端不自己拼路径 */
+    rarityBg: `assets/common/item/bg${char.star === 4 ? 4 : 5}.png`,
+    elemIcon: `assets/common/elem/${elemOf(elem)}.png`,
     splash: imgs.splash,
-    imgs,                                     // 整张表（立绘 + 命座 6 图 + 天赋 a/e/q 图）一起下发，前端照模板拼
+    imgs,                                     // 整张表（立绘 + 命座 6 图 + 天赋 a/e/q 图）一起返回，前端照模板拼
     talent: talentView,
     weapon: {
       /* 三态，前端按它选文案，别再靠「name 是不是空串」猜：
@@ -568,8 +568,8 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
          元数据不认识这把时退回**武器类型通用图**（五张图按类型分好了，类型能从 char.weaponType 拿到），
          卡片上就不至于空着一个格子。 */
       icon: wObj
-        ? `/assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
-        : (ch.weapon.equipped ? `/assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
+        ? `assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
+        : (ch.weapon.equipped ? `assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
       attrs: weaponAttrs,
       desc: weaponDesc
     },

@@ -35,6 +35,8 @@ export const encodeJson = (v: unknown): string => JSON.stringify(v ?? null) as s
 
 /*
  * argv → 选项对象：`--key value` 收成 `key: 'value'`，`--flag`（后面没跟值）收成 `true`。
+ * 也认 `--key=value`（等号写法）—— 不认的话 `--port=8787` 会被当成一个名叫
+ * "port=8787" 的开关，参数**静默失效**，排查起来很坑（踩过一次）。
  * 非 `--` 开头的直接忽略 —— 两个调用方（cli / server）都不认位置参数，uid 也得写成 `--uid 123`。
  */
 export interface ParsedArgs { [key: string]: string | true }
@@ -44,6 +46,8 @@ export function parseArgs (argv: readonly string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (!a.startsWith('--')) continue
+    const eq = a.indexOf('=')
+    if (eq > 2) { out[a.slice(2, eq)] = a.slice(eq + 1); continue }
     const key = a.slice(2)
     const next = argv[i + 1]
     if (next === undefined || next.startsWith('--')) out[key] = true
