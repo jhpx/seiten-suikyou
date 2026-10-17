@@ -158,8 +158,11 @@ export interface FetchLogRow {
 }
 
 /** 最近一次抓取流水，用来看数据新不新 */
+/** 最后一次**成功**抓取（列表页页脚 / 明细页 / CLI 的「最后抓取」都读它）。
+    只认 ok=1：失败流水（ok=0）记的是「尝试过」，数据并没变新 ——
+    把失败时刻当数据更新时间，页面会显示一个骗人的新鲜度。 */
 export function lastFetch (db: DatabaseSync, uid: number): FetchLogRow | null {
-  return getRow<FetchLogRow>(db, 'SELECT * FROM fetch_log WHERE uid = ? ORDER BY id DESC LIMIT 1', uid) || null
+  return getRow<FetchLogRow>(db, 'SELECT * FROM fetch_log WHERE uid = ? AND ok = 1 ORDER BY id DESC LIMIT 1', uid) || null
 }
 
 /* 库里实际用到过哪些「官方文案 key」—— 接多语言文案表时不用把几十万条全导进来，

@@ -73,11 +73,19 @@ export function createApp ({
     let p = inflight.get(uid)
     if (!p) {
       p = (async () => {
-        const payload = await fetchImpl(uid)
-        /* 抓回来的就是 enka 原始响应；形状由 ingestPayload 校验（缺 playerInfo 会抛） */
-        const summary = ingestPayload(payload as EnkaPayload, { source: 'enka' })
-        repo.saveFetch(db, { ...summary, stamp: new Date().toISOString() })
-        return summary
+        try {
+          const payload = await fetchImpl(uid)
+          /* 抓回来的就是 enka 原始响应；形状由 ingestPayload 校验（缺 playerInfo 会抛） */
+          const summary = ingestPayload(payload as EnkaPayload, { source: 'enka' })
+          repo.saveFetch(db, { ...summary, stamp: new Date().toISOString() })
+          return summary
+        } catch (e) {
+          /* 失败也记一行 fetch_log（ok=0）—— 以前只有成功记，上游抖过多少次根本查不到。
+             note 放错误原文：多源并行全失败时 summarize 已经把各源原因列成人话了。
+             同一 uid 的并发请求被 inflight 合成一次，所以失败也只记一行。 */
+          repo.logFailure(db, { uid, note: errMessage(e) })
+          throw e
+        }
       })().finally(() => inflight.delete(uid))
       inflight.set(uid, p)
     }

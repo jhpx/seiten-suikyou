@@ -56,7 +56,7 @@ npm run server -- --port 8787 --trust-proxy \
 ```bash
 git clone --recursive https://github.com/jhpx/seiten-suikyou-web.git
 cd seiten-suikyou-web
-# 导一份可发布目录，并把后端地址写进 index.html 的 <meta name="api-base">
+# 导一份可发布目录，--api-base 会把后端地址写进 env.js 的 API_BASE
 python tools/export_pages.py --out dist/pages --api-base https://<你的后端地址>
 #   导出 = 复制文件（前端零构建）；--no-assets 可跳过 101MB 素材，仅改样式时图快用
 ```
@@ -64,7 +64,7 @@ python tools/export_pages.py --out dist/pages --api-base https://<你的后端�
 把 `dist/pages/` 整个推上去（`gh-pages` 分支或仓库里的 `docs/`），在 Pages 设置里选它。
 素材 1900+ 文件，首次 push 慢一点，之后增量。
 
-前端通过 `index.html` 的 `<meta name="api-base">` 指到后端；**留空 = 同源**（仅本地形态会用）。
+前端通过 `env.js` 的 `API_BASE` 指到后端；**留空 = 同源**（仅本地形态会用）。
 `PAGE_BASE`（页面所在目录，在 `core.js` 里算）只用于改写地址栏，保证子路径下刷新不出 404，不参与资源加载。
 
 ### 2.3 为什么不需要任何图片改写

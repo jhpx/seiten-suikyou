@@ -239,14 +239,30 @@ console.log('\n=== 7. POST /api/accounts/:uid/refresh（用假 enka，不联网�
   ok(repo.listUids(app2.db).includes(UID), '抓完数据确实落库了')
 
   /* 上游报错要变成 502 + 人话，而不是 500 堆栈 */
-  const app3 = await startServer({
+  /* app4：同一个实例先成功一次、再失败一次 —— 钉死两件事：
+     ① 失败也要记流水（ok=0 + 错误原文），以前失败零留痕，上游抖动没法追溯；
+     ② 「最后抓取」只认成功 —— 失败时刻不算数据变新，否则页面显示骗人的新鲜度。 */
+  let calls = 0
+  const app4 = await startServer({
     port: 0, dbFile: ':memory:',
-    fetchImpl: async () => { throw new Error('enka: 查不到这个 UID') }
+    fetchImpl: async (uid) => {
+      if (calls++ > 0) throw new Error('enka: 查不到这个 UID')
+      return { ...REAL, uid }
+    }
   })
-  const r3 = await fetch(`${app3.url}/api/accounts/123/refresh`, { method: 'POST' })
-  eq(r3.status, 502, 'enka 业务错误 → 502')
-  eq((await readJson(r3)).error.message, 'enka: 查不到这个 UID', '错误原文透传给人看')
-  app3.server.close()
+  eq(repo.lastFetch(app4.db, UID), null, '没成功抓取过就没有最后抓取时间')
+  const r4ok = await fetch(`${app4.url}/api/accounts/${UID}/refresh?locale=chs`, { method: 'POST' })
+  eq(r4ok.status, 200, '同实例第一次抓取成功')
+  const okStamp = repo.lastFetch(app4.db, UID)!.fetched_at
+  const r4 = await fetch(`${app4.url}/api/accounts/${UID}/refresh`, { method: 'POST' })
+  eq(r4.status, 502, 'enka 业务错误 → 502')
+  eq((await readJson(r4)).error.message, 'enka: 查不到这个 UID', '错误原文透传给人看')
+  const failRows = app4.db.prepare('SELECT uid, note FROM fetch_log WHERE ok = 0').all() as Array<{ uid: number; note: string }>
+  eq(failRows.length, 1, '失败也记一行流水（ok=0）')
+  eq(failRows[0].uid, UID, '失败流水记的是这个 uid')
+  eq(failRows[0].note, 'enka: 查不到这个 UID', '失败流水带上错误原文')
+  eq(repo.lastFetch(app4.db, UID)!.fetched_at, okStamp, '最后抓取只认成功：失败不刷新数据新鲜度')
+  app4.server.close()
   app2.server.close()
 }
 
