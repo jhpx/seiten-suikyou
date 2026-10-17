@@ -102,9 +102,9 @@ export function createApp ({
        但 /api/* 是接口，绝不能让静态分支抢走（否则 /api/health 等 GET 接口会被当文件 404）。 */
     if (isGet && !pathname.startsWith('/api/')) return servePublic(res, pathname)
 
-    /* ---- 接口：先匹配路由，再按那条路由标的档位过闸门，最后跑 handler ----
+    /* ---- 接口：先匹配路由，再按那条路由标的档位过闸门，最后跑端点函数 ----
        顺序为什么是这样：限流档位写在路由表里（它是接口的属性），所以得先知道命中谁。
-       但闸门仍然卡在 handler 前面 —— 坏请求只要命中了路由就照样占配额，
+       但闸门仍然卡在端点函数前面 —— 坏请求只要命中了路由就照样占配额，
        否则拿着 /refresh 刷 400 比刷 200 还省。 */
     const hit = matchRoute(req.method, pathname)
     if (!hit) return sendError(res, 404, 'not_found', `没有这个接口：${req.method} ${pathname}`)
@@ -117,7 +117,7 @@ export function createApp ({
       }
     }
 
-    await hit.handler(ctx, req, res, url, hit.params)
+    await hit.endpoint(ctx, req, res, url, hit.params)
   }
 
   const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {

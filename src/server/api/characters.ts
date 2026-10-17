@@ -8,9 +8,9 @@ import * as repo from '../../store/repo.ts'
 import { damageOf } from '../../view/shape.ts'
 import { sendError, sendJson } from '../http.ts'
 import { noData } from './context.ts'
-import type { Handler } from './context.ts'
+import type { Endpoint } from './context.ts'
 
-export const characterDamage: Handler = async (ctx, _req, res, _url, { uid, avatarId }) => {
+export const characterDamage: Endpoint = async (ctx, _req, res, _url, { uid, avatarId }) => {
   const account = repo.loadAccountWithCharacters(ctx.db, uid)
   if (!account) {
     sendError(res, 404, 'no_data', noData(uid))

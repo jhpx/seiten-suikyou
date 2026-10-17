@@ -13,9 +13,9 @@ import * as repo from '../../store/repo.ts'
 import { fmtTime } from '../../view/shape.ts'
 import { errMessage, sendError, sendJson } from '../http.ts'
 import { noData } from './context.ts'
-import type { Handler } from './context.ts'
+import type { Endpoint } from './context.ts'
 
-export const listAccounts: Handler = (ctx, _req, res) => {
+export const listAccounts: Endpoint = (ctx, _req, res) => {
   const list = repo.listUids(ctx.db).map(uid => {
     const acc = repo.loadAccount(ctx.db, uid)
     return {
@@ -30,7 +30,7 @@ export const listAccounts: Handler = (ctx, _req, res) => {
   sendJson(res, 200, { ok: true, data: list })
 }
 
-export const getAccount: Handler = (ctx, _req, res, url, { uid }) => {
+export const getAccount: Endpoint = (ctx, _req, res, url, { uid }) => {
   const view = ctx.viewOf(uid, url.searchParams.get('locale') || i18n.DEFAULT_LOCALE)
   if (!view) {
     sendError(res, 404, 'no_data', noData(uid))
@@ -39,7 +39,7 @@ export const getAccount: Handler = (ctx, _req, res, url, { uid }) => {
   sendJson(res, 200, { ok: true, data: view })
 }
 
-export const refreshAccount: Handler = async (ctx, req, res, url, { uid }) => {
+export const refreshAccount: Endpoint = async (ctx, req, res, url, { uid }) => {
   /* 参数全在 URL 里，请求体用不上。但仍然要把它读掉 —— 不读的话带 body 的连接上
      残留数据会卡住同一个 keep-alive 连接的下一个请求。 */
   req.resume()

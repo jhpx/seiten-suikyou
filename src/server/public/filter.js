@@ -64,7 +64,7 @@ function funnelIcon () {
  * 一枚 chip：选中 = 金底金字。
  * 点的是 draft（草稿），不碰 state.filter —— 弹窗关掉前网格不该动。
  * paint / draft 都由调用方传进来：chip 是顶层函数，那两个是弹窗内的闭包，
- * 直接在 handler 里引用会因作用域链够不着而 ReferenceError。
+ * 直接在点击回调里引用会因作用域链够不着而 ReferenceError。
  */
 function chip (group, item, draft, paint) {
   const b = el('button', 'rf-chip')

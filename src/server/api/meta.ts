@@ -9,9 +9,9 @@ import { i18n } from '../../index.ts'
 import { weightFilterOptions } from '../../view/shape.ts'
 import * as repo from '../../store/repo.ts'
 import { sendJson } from '../http.ts'
-import type { Handler } from './context.ts'
+import type { Endpoint } from './context.ts'
 
-export const meta: Handler = (_ctx, _req, res, url) => {
+export const meta: Endpoint = (_ctx, _req, res, url) => {
   const loc = i18n.resolveLocale(url.searchParams.get('locale'))
   sendJson(res, 200, {
     ok: true,
@@ -28,6 +28,6 @@ export const meta: Handler = (_ctx, _req, res, url) => {
   })
 }
 
-export const health: Handler = (ctx, _req, res) => {
+export const health: Endpoint = (ctx, _req, res) => {
   sendJson(res, 200, { ok: true, data: { uids: repo.listUids(ctx.db).length } })
 }

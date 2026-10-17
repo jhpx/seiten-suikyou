@@ -28,13 +28,13 @@ npm run sync:assets                # 从 miao-plugin 全量复制图片素材（
 npm run server                     # 打开 http://127.0.0.1:8787
 ```
 
-- **运行时要求**：Node ≥ 22.5。本地库走 Node 自带的 `node:sqlite`，不引原生模块
+- **运行时要求**：Node ≥ 22.18（`.ts` 直接跑，靠内置类型剥离，零构建）。本地库走 Node 自带的 `node:sqlite`，不引原生模块
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
 - **不跑 `sync:assets` 也能用**，只是角色立绘、圣遗物图标会退化成 CSS 色块。
 - `sync:assets` 从 miao-plugin 的 `resources/` 整目录复制，**全程离线**：不联网、不按需、不猜名字
   （素材源：`MIAO_PLUGIN_PATH`，默认 `../miao-plugin`，跟 `npm run sync` 一个约定）。
-  全量约 100 MB、1800+ 个文件，一次跑完以后随便加角色都不用再管。
+  全量约 100 MB、1900+ 个文件，一次跑完以后随便加角色都不用再管。
   miao 仓库里唯一没有的 7 张元素符号，作为种子放在 `tools/assets-seed/` 里随仓库走。
 - 想对账「页面要的图是不是都落盘了」：`npm run list:assets && npm run sync:assets`。
   清单由页面自己的 `buildAccountView` 吐出来，缺哪个会列出来并以失败退出。
@@ -49,14 +49,17 @@ npm run server       # http://127.0.0.1:8787
 npm run score -- --help
 
 # 测试
-npm test             # 全量：smoke → arch → pipeline → i18n → server → cli → regression → verify
+npm test             # 全量：类型检查 + 十一套测试（明细见「测试」一节）
 npm run smoke        # 只跑冒烟
+npm run args         # 只跑参数解析
 npm run arch         # 只跑架构契约
+npm run enka         # 只跑上游抓取
 npm run pipeline     # 只跑管线
 npm run i18n         # 只跑多语言
 npm run server:test  # 只跑服务测试
 npm run cli:test     # 只跑命令行测试
 npm run regression   # 只跑回归断言
+npm run damage       # 只跑伤害计算基线
 npm run verify       # 只跑评分验证
 
 # 同步（只在要更新数据时跑）
@@ -222,7 +225,7 @@ I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 g
 > 再传一遍会让子脚本的 argparse 报「未知参数」）。要带参数就调子脚本本身，或用 `I18N_LOCALES`。
 
 文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
-（`src/i18n/ui.ts`，手写 69 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
+（`src/i18n/ui.ts`，手写 104 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
 我们自己页面的说法。两张表为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
 
 表不在时**静默降级**成只有中文（页面会给出提示），不会崩。
@@ -257,17 +260,21 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 npm test
 ```
 
-八套，分工不重叠：
+十二步，分工不重叠（项数是脚本自己打印的，没打印的写 —）：
 
-| 套 | 项数 | 管什么 |
+| 步 | 项数 | 管什么 |
 |---|---|---|
+| `typecheck` | — | `tsc --noEmit`，零构建项目唯一的类型闸门 |
 | `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
-| `arch` | 21 | 架构契约：别名可解析、依赖清单（lodash + limiter）、vendor 自包含、云崽全局零残留 |
-| `pipeline` | 58 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、迁移、合并抓取、真实数据 + 面板对拍 |
+| `args` | 11 | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
+| `arch` | 49 | 架构契约：别名可解析、依赖清单（lodash + limiter）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层 |
+| `enka` | — | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
+| `pipeline` | 153 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
-| `server` | 58 | 真起监听打真 HTTP：路由、静态与素材、错误形状、多语言出口、POST 抓取（用假 enka，不联网） |
+| `server` | 144 | 真起监听打真 HTTP：路由（含方法不符 / 非数字路径 → 404）、静态与素材、错误形状、限流三档、CORS 预检、POST 刷新（用假 enka，不联网） |
 | `cli` | 51 | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / 面板对拍 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
 | `regression` | — | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
+| `damage` | — | 伤害计算基线：`calcDamage()` 的输出逐字节钉死（基线来自与原版 miao 对拍） |
 | `verify` | — | 端到端评分（输出即基线，可 diff） |
 
 几条约定：
@@ -299,14 +306,17 @@ npm test
 seiten-suikyou/
 ├── src/
 │   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分模块
+│   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
+│   ├── shared/               # 谁也不依赖的小件：parseArgs / argValue / num
 │   ├── store/                # 本地库（SQLite）
 │   │   ├── schema.sql        #   表结构（权威定义）
 │   │   ├── db.ts             #   连接 / 结构保证（node:sqlite，打开即跑最新 schema.sql）
 │   │   └── repo.ts           #   读写：合并式 upsert、按 uid 取、文案 key 清单
 │   ├── adapter/              # enka ↔ 本项目 的转换
-│   │   ├── enka.ts           #   按 uid 取原始响应（把 HTTP 码翻译成人话）
+│   │   ├── enka.ts           #   按 uid 取原始响应（多源并行、谁先成功用谁，HTTP 码翻译成人话）
 │   │   ├── ingest.ts         #   原始响应 → 库行（挑字段、带文案 key，不解析属性）
 │   │   ├── materialize.ts    #   库行 → miao profile（id → 中文名/对象 + 算面板）
+│   │   ├── damage.ts         #   miao profile → 伤害计算的出口 calcDamage()
 │   │   └── panel-check.ts    #   拿游戏给的面板对拍，验证数据没翻错
 │   ├── view/shape.ts         # 视图成型：库行 + 评分结果 → 页面/接口/CLI 共用的对象
 │   ├── i18n/
@@ -320,7 +330,7 @@ seiten-suikyou/
 │       ├── cors.ts           #   跨域：白名单许可头 + 预检 204（默认不开）
 │       ├── rate-limit.ts     #   限流三档（只认档位，不认路径）
 │       ├── api/              #   接口：路由表 + 按资源分文件（契约见 docs/API.md）
-│       │   ├── index.ts      #     路由表：方法 / 路径模板 / 限流档 / handler（唯一列 URL 的地方）
+│       │   ├── index.ts      #     路由表：方法 / 路径模板 / 限流档 / 端点函数（唯一列 URL 的地方）
 │       │   ├── context.ts    #     共用上下文：db / viewOf / handleFetch
 │       │   ├── meta.ts       #     GET /api/meta · GET /api/health
 │       │   ├── accounts.ts   #     GET /api/accounts · /api/accounts/:uid · POST …/refresh
@@ -346,16 +356,18 @@ seiten-suikyou/
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
 │   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）
-│   ├── export_pages.py       # 导出可静态托管的前端目录（前后端分开部署时用，见 README「分开部署」）
+│   ├── export_pages.py       # 导出可静态托管的前端目录（前后端分开部署时用，见 docs/DEPLOY.md）
 │   ├── list_assets.ts        # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
-│   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
 │   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）
 │   ├── shot.ts               # headless chrome 截图
-│   └── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
+│   ├── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
+│   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
 ├── test/                     # 见「测试」一节
 ├── docs/                     # 设计文档 + 参考稿
 │   ├── DESIGN.md             #   总设计（为什么内嵌内核 / 页面与多语言怎么还原 / 工程约束）
 │   ├── DESIGN-DATA-MODEL.md  #   数据层专项：enka → 缓存 → 内核，为什么不设计算中间层
+│   ├── API.md                #   前后端接口契约（有哪些接口、请求怎么发、响应长什么样）
+│   ├── DEPLOY.md             #   部署：本地运行 / 前后端分离两种形态
 │   ├── 角色列表页.jpg         #   首页网格的版式参考（原魔工具箱「角色展柜」）
 │   ├── miao结果图参考.jpeg    #   明细页对拍基准（奥黛塔 248.0 / ACE）
 │   ├── sample/               #   样例数据：一次真实运行的完整命令行输出存档
@@ -367,7 +379,9 @@ seiten-suikyou/
 
 | 想了解 | 看哪 |
 |---|---|
-| 怎么装、怎么跑、接口有哪些 | 本文件 |
+| 怎么装、怎么跑 | 本文件 |
+| 每个接口的请求 / 响应、错误码、限流与跨域约定 | [`docs/API.md`](docs/API.md) |
+| 本地运行或前后端分离怎么部署 | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
 | 为什么内嵌 miao 内核、页面与多语言怎么还原、改动前的硬约束 | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | 数据层设计（存储存 id 不存名字、为什么不设计算中间层） | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
 | 命令行输出长什么样 | [`docs/sample/cli-output.txt`](docs/sample/cli-output.txt) |

@@ -16,7 +16,7 @@
 
 ```bash
 npm run server                       # 默认 http://127.0.0.1:8787
-npm run server -- --port 9000       # 换端口
+npm run server -- --port 9000        # 换端口
 npm run server -- --host 0.0.0.0     # 让局域网其他设备也能访问
 ```
 
@@ -60,13 +60,13 @@ python tools/export_pages.py --out dist/pages --api-base https://<你的后端�
 
 ### 2.3 为什么不需要任何图片改写
 
-页面和图片**都用相对路径**（如 `assets/common/elem/Anemo.png`、`/style.css` 这类不带前导 `/` 的引用）。
+页面和图片**都用相对路径**（`style.css`、`assets/common/elem/Anemo.png`，都不带前导 `/`）。
 相对路径由浏览器**按页面所在目录**解析：
 
 - 本地根路径 `http://host:8787/` → `http://host:8787/assets/...`
 - Pages 项目站 `https://user.github.io/<仓库名>/` → `https://user.github.io/<仓库名>/assets/...`
 
-两边都能自动落对位置，**不需要 `assetUrl` 改写函数、`ASSET_BASE` 之类配置**。
+两边都能自动落对位置，**不需要任何路径改写函数或前缀配置**。
 接口返回的图片地址本来就是相对路径，前端原样塞进 `<img src>` 或 CSS `background-image` 即可。
 
 > 推论：**`assets/` 必须跟着前端一起进发布仓库**（导出时**不要**加 `--no-assets`）。
