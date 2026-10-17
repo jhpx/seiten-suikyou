@@ -13,8 +13,8 @@
  *   坎蒂丝    带 unit 的条目（「Q提升普攻伤害」只有 avg、单位是 '%'）
  */
 import { Attr, Character } from '../src/index.ts'
-import { calcDamage } from '../src/adapter/damage.ts'
-import { toMiaoProfile } from '../src/adapter/materialize.ts'
+import { calcDamage } from '../src/kernel/damage.ts'
+import { toMiaoProfile } from '../src/kernel/materialize.ts'
 import { buildProfile, buildArtis, ATTR } from './fixtures.ts'
 /* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
    这里只要域模型，反手标成 Domain* 以免和上面的 miao Character 混。 */

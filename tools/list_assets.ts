@@ -9,9 +9,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { allRows, openDb } from '../src/store/db.ts'
-import { loadAccountWithCharacters } from '../src/store/repo.ts'
-import { buildAccountView } from '../src/view/shape.ts'
+import { openDb } from '../src/repository/db.ts'
+import { listUids, loadAccountWithCharacters } from '../src/repository/index.ts'
+import { buildAccountView } from '../src/service/view.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const dbPath = process.argv[2] || path.join(ROOT, 'data', 'gs.db')
@@ -24,7 +24,7 @@ const urlToRel = (url: string | null | undefined): string | null => {
 }
 
 const db = openDb(dbPath)
-const uids = allRows<{ uid: number }>(db, 'SELECT uid FROM account').map(row => row.uid)
+const uids = listUids(db)
 
 const wanted = new Set<string | null>()
 for (const uid of uids) {

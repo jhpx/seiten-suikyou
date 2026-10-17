@@ -16,7 +16,7 @@
  *
  * ⚠️ 这张表**只用于对数值 / 查名**，不参与算分 —— 评分 100% 走内核，内核自己从 id 解析。
  */
-import { num } from '../shared/util.ts'
+import { num } from '../common/util.ts'
 
 const STAT_TYPES = {
   HP:                { prop: 'FIGHT_PROP_HP',                key: 'hpPlus'   },
@@ -51,7 +51,7 @@ export const ENKA_PROP_TO_KEY = Object.fromEntries(
   Object.values(STAT_TYPES).map(t => [t.prop, t.key]))
 
 /* miao key → enka prop。两个消费者：本文件的 isIntegerStatKey（判整数口径）、
-   src/i18n/index.ts 的 statName（拿 prop 去官方文案表查名）。
+   src/common/names.ts 的 statName（拿 prop 去官方文案表查名）。
    ⚠️ 这个方向是**唯一正确**的（hp → ..._PERCENT）；反着写（hp → FIGHT_PROP_HP）不会报错、
    查名也照样对（官方这两条都叫「生命值」），但一旦拿它对数值就把大生命指到了固定值那一列。 */
 export const KEY_TO_PROP = Object.fromEntries(
@@ -64,7 +64,7 @@ export const enkaPropKey = (prop: string): string | null => ENKA_PROP_TO_KEY[pro
 const FIXED_PROPS = new Set([StatType.HP, StatType.ATTACK, StatType.DEFENSE])
 
 /* 一个 miao key 在游戏里是不是「整数口径」—— 固定值三项 + 元素精通。
-   显示层用它决定收整到 0 位还是按百分比舍 1 位（见 view/shape.ts 的 attrValueText）：
+   显示层用它决定收整到 0 位还是按百分比舍 1 位（见 service/view.ts 的 attrValueText）：
    这四类一律显整数，不存在「209.1」这种值。 */
 export const isIntegerStatKey = (key: string): boolean => {
   const prop = KEY_TO_PROP[key]

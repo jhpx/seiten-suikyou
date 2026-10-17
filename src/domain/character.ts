@@ -11,9 +11,7 @@
  * （见 docs/DESIGN-DATA-MODEL.md）；`skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推、
  * 这里不猜；圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
  */
-import { num } from '../shared/util.ts'
-import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
-import type { Field } from './fields.ts'
+import { num } from '../common/util.ts'
 import { Weapon } from './weapon.ts'
 import { Artifact } from './artifact.ts'
 import type { EnkaAvatarInfo } from './enka.ts'
@@ -58,30 +56,7 @@ export class Character {
     this.fetchedAt = fetchedAt
   }
 
-  /* character 表的列 ↔ 领域字段（顺序 = 建表顺序）。
-     武器与圣遗物各自另有表，所以这里没有它们 —— Character 只描述自己那一行。 */
-  static FIELDS: Field[] = [
-    ['uid', 'uid'], ['avatar_id', 'avatarId'], ['level', 'level'], ['promote', 'promote'],
-    ['cons', 'cons'], ['fetter', 'fetter'], ['costume', 'costume'],
-    ['skill_level_map', 'skillLevelMap', 'json'], ['source', 'source'], ['fetched_at', 'fetchedAt']
-  ]
-
-  static COLS: string[] = colsOf(Character.FIELDS)
-
-  /** 按 FIELDS 顺序的各列值（写 character 行用）；JSON 列在 FIELDS 里标了，stamp 覆盖 fetched_at */
-  toValues (stamp?: string): unknown[] {
-    return rowValuesOf(this, Character.FIELDS, { fetchedAt: stamp ?? this.fetchedAt })
-  }
-
-  /** character 行 + 它的武器行 + 圣遗物行 → Character（后两者是别的表，调用方读好传进来） */
-  static fromRow (
-    row: Record<string, unknown> | null | undefined,
-    artifacts: Artifact[] = [],
-    weapon: Weapon = Weapon.none()
-  ): Character | null {
-    if (!row) return null
-    return new Character({ ...rowArgsOf(row, Character.FIELDS), weapon, artifacts })
-  }
+  /* 武器与圣遗物各自另有表，Character 只描述自己那一行（三张表怎么拼是 repository 的事） */
 
   /** enka 的一个 avatarInfo → Character（含武器与圣遗物） */
   static ofEnka (info: EnkaAvatarInfo, source = 'enka'): Character {

@@ -12,7 +12,7 @@
  *
  * 断言同样只在失败时打印。
  */
-import { fetchEnka } from '../src/adapter/enka.ts'
+import { fetchEnka } from '../src/upstream/enka.ts'
 
 let pass = 0, fail = 0
 function eq (actual: unknown, expected: unknown, label: string): void {

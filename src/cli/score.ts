@@ -8,19 +8,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, i18n } from '../index.ts'
-import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../view/shape.ts'
-import type { MarkDetail } from '../view/shape.ts'
-import { openDb } from '../store/db.ts'
-import * as repo from '../store/repo.ts'
-import { ingestPayload } from '../adapter/ingest.ts'
-import type { IngestResult } from '../adapter/ingest.ts'
-import { fetchEnka } from '../adapter/enka.ts'
-import { toMiaoProfile, deriveTalent } from '../adapter/materialize.ts'
-import type { MiaoProfile } from '../adapter/materialize.ts'
-import { diffPanels, REL_TOL, ABS_TOL } from '../adapter/panel-check.ts'
+import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../service/view.ts'
+import type { MarkDetail } from '../service/view.ts'
+import { openDb } from '../repository/db.ts'
+import * as repo from '../repository/index.ts'
+import { ingestPayload } from '../upstream/enka-account.ts'
+import type { IngestResult } from '../upstream/enka-account.ts'
+import { fetchEnka } from '../upstream/enka.ts'
+import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
+import type { MiaoProfile } from '../kernel/materialize.ts'
 import type { Character } from '../domain/character.ts'
 import type { EnkaPayload } from '../domain/enka.ts'
-import { argValue, parseArgs } from '../shared/util.ts'
+import { argValue, parseArgs } from '../common/util.ts'
+import { DEFAULT_DB_FILE } from '../common/config.ts'
 
 /* 界面文字 / 部位名 / 词条名复用网页端那两张表，免得两处各写一套、加语言时漏改 */
 const uiText = i18n.uiText
@@ -32,7 +32,6 @@ const USAGE = `
   --file <path>      改用本地的 enka 原始响应 JSON（不联网）
   --offline          不联网，直接拿库里已有的数据打分
   --char <名字|id>    只输出指定角色
-  --check            拿游戏给的面板对拍，验证数据有没有翻错（需联网或 --file）
   --db <path>        库文件位置，默认 data/gs.db
   --save-raw <dir>   把原始响应另存一份到该目录
   --locale <code>    输出语言，默认 chs（chs/cht/en/ja/ko，或 zh-cn / zh-tw / jp / kr 这类别名）
@@ -116,7 +115,7 @@ async function main () {
   const args = parseArgs(process.argv.slice(2))
   if (args.help || args.h) { console.log(USAGE); return 0 }
 
-  const dbFile = argValue(args.db) || path.join('data', 'gs.db')
+  const dbFile = argValue(args.db) || DEFAULT_DB_FILE
   const db = openDb(dbFile)
 
   if (args.list) {
@@ -126,7 +125,7 @@ async function main () {
     for (const uid of uids) {
       const account = repo.loadAccount(db, uid)
       const charCount = repo.listCharacterIds(db, uid).length
-      console.log(`  ${uid}  ${account?.nickname || '?'}  Lv.${account?.level ?? '?'}  角色 ${charCount} 个  最后抓取 ${fmtTime(repo.lastFetch(db, uid)?.fetched_at) || '?'}`)
+      console.log(`  ${uid}  ${account?.nickname || '?'}  Lv.${account?.level ?? '?'}  角色 ${charCount} 个  最后抓取 ${fmtTime(repo.lastFetch(db, uid)?.fetchedAt) || '?'}`)
     }
     return 0
   }
@@ -189,7 +188,7 @@ async function main () {
   const sourceText = ingestSummary
     ? `${ingestSummary.source} ${uiText('thisFetch', locale)} ${ingestSummary.characterCount} ${uiText('chars', locale)}`
     : uiText('offline', locale)
-  console.log(`${uiText('data', locale)}  ${sourceText}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetched_at) || '?'}　|　${account.characters.length} ${uiText('chars', locale)}`)
+  console.log(`${uiText('data', locale)}  ${sourceText}　|　${uiText('fetched', locale)} ${fmtTime(repo.lastFetch(db, uidInDb)?.fetchedAt) || '?'}　|　${account.characters.length} ${uiText('chars', locale)}`)
 
   /* ---- 3. 打分 ---- */
   const charFilter = argValue(args.char)
@@ -228,30 +227,8 @@ async function main () {
   }
   console.log(line())
 
-  /* ---- 5. 面板对拍（只有拿到原始响应时才做得了） ---- */
-  if (args.check) {
-    if (!payload) {
-      console.log('面板对拍需要一个原始响应（联网抓，或者用 --file），离库打分做不了 —— 我们故意不把面板存进库。')
-    } else {
-      const profileById = new Map(results.map(entry => [entry.profile.id, entry.profile] as const))
-      const panelCmp = diffPanels(payload, profileById)
-      console.log(`\n面板对拍：游戏 fightPropMap（标准答案） vs miao 计算面板`)
-      console.log(`容差 绝对值 ≤${ABS_TOL} 或 相对 ≤${(REL_TOL * 100).toFixed(1)}%`)
-      for (const panel of panelCmp.list) {
-        const bad = panel.rows.filter(row => !row.ok)
-        console.log(`  ${panel.ok ? '一致' : '不符'}  ${padW(panel.name, 12)} ${String(panel.rows.length).padStart(2)} 项  最大偏差 ${(panel.worst.rel * 100).toFixed(4)}%（${panel.worst.key}）`)
-        for (const row of bad) {
-          console.log(`        × ${row.key} 游戏 ${row.game.toFixed(4)} vs 我们 ${row.ours.toFixed(4)}（差 ${row.diff.toFixed(4)}）`)
-        }
-      }
-      if (panelCmp.worst) {
-        console.log(`  全局最大偏差 ${(panelCmp.worst.rel * 100).toFixed(4)}%（${panelCmp.worst.key}）→ ${panelCmp.ok ? '链路正常' : '有属性对不上，查 materialize'}`)
-      }
-      if (!panelCmp.ok) return 1
-    }
-  }
-
-  /* --json 走的是和网页端同一个成型出口（view/shape），命令行看到的和接口拿到的是同一份形状。
+  /* ---- 5. --json ---- */
+  /* --json 走的是和网页端同一个成型出口（service/view.ts），命令行看到的和接口拿到的是同一份形状。
      额外保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
     console.log(JSON.stringify(wanted.map(({ character, profile, result }) => ({

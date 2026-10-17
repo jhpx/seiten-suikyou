@@ -14,7 +14,6 @@
 |---|---|
 | 按 UID 抓展柜 → 存本地库 → 用 miao 规则打分 | `npm run score -- --uid <uid>` |
 | 网页：首页角色网格 + 角色明细页（复刻 miao 的评分结果图） | `npm run server` |
-| 拿游戏客户端算的最终面板**对拍**我们自己算的面板 | `npm run score -- --check` |
 | 多语言：简体 / 繁體 / English / 日本語 / 한국어 | 页面右上角，或 `--locale` |
 | 本地缓存：enka 只给展柜那 8–12 个角色，跨多次抓取累积 | 自动 |
 | JSON 接口 | `GET /api/accounts/:uid?locale=en` |
@@ -23,13 +22,15 @@
 
 ```bash
 git clone --recursive <仓库地址>    # 前端是 submodule，漏了 --recursive 页面会 404
-npm install                        # 两个运行时依赖：lodash + limiter
+npm install                        # 四个运行时依赖：lodash / limiter / hono / drizzle-orm
 npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
 npm run server                     # 打开 http://127.0.0.1:8787
 ```
 
 - **运行时要求**：Node ≥ 22.18（`.ts` 直接跑，靠内置类型剥离，零构建）。本地库走 Node 自带的 `node:sqlite`，不引原生模块
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
+- **表结构**在 `src/repository/schema.ts`（drizzle 表定义），首次启动按它自动建表 —— **没有 schema.sql、没有迁移目录**。
+  改了表定义、又不想删库重抓时用 `npm run db:push`；`npm run db:sql` 能打出官方口径的建表 SQL 对一下。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
 - **前端是 git submodule**：`web/` 是前端子仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)
   的检出。clone 母仓库要带 `--recursive`（或 clone 后 `git submodule update --init`）—— 漏了这步，
@@ -82,7 +83,6 @@ npm run check:docs   # 校验 README / docs 里的相对链接没写歪（搬过
 npm run score -- --uid 101242308             # 抓 enka → 入库 → 打分
 npm run score -- --uid 101242308 --offline   # 不联网，直接读库打分
 npm run score -- --uid 101242308 --char 胡桃  # 只看一个角色
-npm run score -- --uid 101242308 --check     # 顺手对拍游戏面板，验证数据没翻错
 npm run score -- --file sample.json          # 从本地原始响应入库（不联网）
 npm run score -- --save-raw .tmp/raw         # 原始响应另存一份，方便复现
 npm run score -- --list                      # 库里存了哪些 uid
@@ -118,28 +118,23 @@ npm run score -- --locale en                 # 换语言输出
 
 数据时间统一按**本机时区**输出（库里的 ISO 是 UTC，展示时才本地化）。
 
-### `--check`：拿游戏自己的面板当标准答案
+### 面板对拍在测试里做，命令行没有这个开关
 
 数据喂错这件事很难从分数上看出来 —— 一个副词条权重看错，总分可能只差 2 分。
-所以 `--check` 干一件事：enka 的 `avatarInfo.fightPropMap` 是**游戏客户端自己算出来的最终面板**，
+所以 `test/panel-check.ts` 干一件事：enka 的 `avatarInfo.fightPropMap` 是**游戏客户端自己算出来的最终面板**，
 把它和 miao 算出来的 `attr` 逐项比。角色等级/突破、武器、圣遗物主副词条，整条链路一次全验证。
+`test/pipeline.ts` 拿真实响应硬断言它全过（容差：绝对值 ≤0.05 或 相对 ≤0.1%）。
 
-```
-面板对拍：游戏 fightPropMap（标准答案） vs miao 计算面板
-容差 绝对值 ≤0.05 或 相对 ≤0.1%
-  一致  迪卢克        7 项  最大偏差 0.0253%（cdmg）
-  一致  砂糖         7 项  最大偏差 0.0306%（cpct）
-  ...
-  全局最大偏差 0.0402%（cpct）→ 链路正常
-```
+它只服务测试，所以待在 `test/` 而不是 `src/kernel/`，命令行也不再挂 `--check` 这个开关 ——
+`npm test` 会自动验。非要用它比一份自己手里的原始响应，就在脚本里 import 那两个函数。
 
-实测 12 个角色 / 84 项对比全部通过。两个已知的口径差异（都不是我们的锅，写进容差里了）：
+两个已知的口径差异（都不是我们的锅，写进容差里了）：
 百分比类 enka 给小数（`0.5673`）而 miao 给百分数（`56.73`）；源头百分比只有两位小数，
 且 miao 元数据里的基础生命/攻击/防御取了整，被百分比加成放大。
 真翻错了偏差是百分之几，这个容差挡不住 —— 所以它是有效的。
 
-**注意**：`--check` 必须对着原始响应做，所以 `--offline --check` 会提示做不了
-（库里故意不存面板属性，理由见 [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) §3）。
+对拍必须对着原始响应做，因为库里故意不存面板属性
+（理由见 [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) §3）。
 
 ## 网页服务
 
@@ -194,10 +189,10 @@ npm run server -- --no-rate-limit                  # 本地调试时整个关掉
 限流会把所有访客当成同一个 IP。开了才按 `CF-Connecting-IP` / `X-Forwarded-For` 分桶。
 反过来，**直接暴露时不要开**：那只是个请求头，谁都能伪造，认了等于没限。
 
-用 `node:http` 手写，不引框架 —— 这里要的东西很薄（几个 JSON 接口 + 几个静态文件），
-不值得为省一张路由表把依赖撑大。运行时依赖只有两个：`lodash`（miao 内核本来就要）和
-`limiter`（限流的令牌桶，零传递依赖）。`test/arch.ts` 盯着这个清单 —— 加依赖前先算账：
-省下的行数配不配得上它的体积。
+HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizzle](https://orm.drizzle.team)（SQL 与表定义），
+两个都是纯 JS、零传递依赖 —— 库还是 Node 自带的 `node:sqlite`，不引任何原生模块。
+运行时就这四样：`lodash`（miao 内核本来就要）、`limiter`（限流的令牌桶）、`hono` + `drizzle-orm`。
+`test/arch.ts` 盯着这个清单 —— 加依赖前先算账：省下的行数配不配得上它的体积、是不是纯 JS。
 
 ### 分开部署：前端单独托管（GitHub Pages）
 
@@ -230,8 +225,9 @@ I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 g
 > 再传一遍会让子脚本的 argparse 报「未知参数」）。要带参数就调子脚本本身，或用 `I18N_LOCALES`。
 
 文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
-（`src/i18n/ui.ts`，手写 104 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
-我们自己页面的说法。两张表为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
+（`src/common/ui.ts`，手写 104 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
+我们自己页面的说法。两张表都从 `src/common/i18n.ts` 出去（认语言只在那儿做一次）。
+为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
 
 表不在时**静默降级**成只有中文（页面会给出提示），不会崩。
 
@@ -251,7 +247,7 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 
 - `char` 必须是**真 `Character` 对象**（规则里读 `char.name` / `char.isGs`）
 - `artis` 必须是**真 `Artis` 实例**（规则里调 `artis.is('绝缘4')`、读 `artis.sets`）
-- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/adapter/materialize.ts` 里就是这么做的）
+- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/kernel/materialize.ts` 里就是这么做的）
 - `weapon` 只要 `{ name, level, promote, affix }`，**`name` 必须是中文**（内核拿中文名查 `weaponCfg`）
 
 **圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
@@ -272,12 +268,12 @@ npm test
 | `typecheck` | — | `tsc --noEmit`，零构建项目唯一的类型闸门 |
 | `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
 | `args` | 11 | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
-| `arch` | 49 | 架构契约：别名可解析、依赖清单（lodash + limiter）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层 |
+| `arch` | 70 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层、`common/config.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（server / rest → service → repository → domain 不许反向，`rest` 也不许反向吃 `server`，`upstream` / `kernel` 是叶子，旧的 adapter / i18n / shared / view 不许复活） |
 | `enka` | — | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
 | `pipeline` | 153 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
-| `server` | 144 | 真起监听打真 HTTP：路由（含方法不符 / 非数字路径 → 404）、静态与素材、错误形状、限流三档、CORS 预检、POST 刷新（用假 enka，不联网） |
-| `cli` | 51 | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / 面板对拍 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
+| `server` | 150 | 真起监听打真 HTTP：路由（含方法不符 / 非数字路径 → 404）、静态与素材、错误形状、限流三档、CORS 预检、POST 刷新（用假 enka，不联网） |
+| `cli` | 46 | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
 | `regression` | — | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
 | `damage` | — | 伤害计算基线：`calcDamage()` 的输出逐字节钉死（基线来自与原版 miao 对拍） |
 | `verify` | — | 端到端评分（输出即基线，可 diff） |
@@ -298,8 +294,8 @@ npm test
   面板对拍那条断言就靠它。
 
 - `cli` 那套**只看输出、不看退出码**是不行的，反过来只看退出码也不行：CLI 挂过一次 ——
-  汇总段用了未定义的变量，异常被外层 `catch` 吞掉后提前返回，**后面的面板对拍整段不执行**，
-  而进程退出码当时还是 0。所以它断言的是「汇总段 / 面板对拍段在不在」。
+  汇总段用了未定义的变量，异常被外层 `catch` 吞掉后提前返回，**汇总段及其后的输出整段不执行**，
+  而进程退出码当时还是 0。所以它断言的是「汇总段在不在」。
   单独跑：`npm run cli:test`。
 
 改动前端样式后想验收，用 `tools/probe.ts` 直读真实 DOM（尺寸 / 折行 / 计算样式），
@@ -312,34 +308,40 @@ seiten-suikyou/
 ├── src/
 │   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分模块
 │   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
-│   ├── shared/               # 谁也不依赖的小件：parseArgs / argValue / num
-│   ├── store/                # 本地库（SQLite）
-│   │   ├── schema.sql        #   表结构（权威定义）
-│   │   ├── db.ts             #   连接 / 结构保证（node:sqlite，打开即跑最新 schema.sql）
-│   │   └── repo.ts           #   读写：合并式 upsert、按 uid 取、文案 key 清单
-│   ├── adapter/              # enka ↔ 本项目 的转换
+│   ├── repository/           # 数据层：一张表怎么存、一个聚合怎么拼
+│   │   ├── schema.ts         #   表结构权威定义（drizzle sqliteTable，没有 schema.sql / 迁移目录）
+│   │   ├── ddl.ts            #   表定义 → CREATE TABLE（openDb 时现算，空库自动建表）
+│   │   ├── db.ts             #   连接（node:sqlite + drizzle）/ 结构代次校验
+│   │   ├── dao/              #   一张表一行：account / character（含武器圣遗物）/ fetch-log
+│   │   └── index.ts          #   仓储门面：行 ↔ 领域模型、聚合组装、一次抓取的事务边界
+│   ├── service/              # 用例编排 + 视图组装 —— 不懂 HTTP
+│   │   ├── ingest.ts         #   抓取用例：并发去重 / 落库 / 失败留痕
+│   │   ├── account.ts        #   账号列表摘要 / 整包视图 / 伤害判别
+│   │   ├── view.ts           #   视图成型：库行 + 评分结果 → 接口/CLI 共用的对象（不是前端渲染）
+│   │   └── context.ts        #   对控制器的能力契约（service 说自己能提供什么）
+│   ├── upstream/             # 对外部数据源（enka / microgg）
 │   │   ├── enka.ts           #   按 uid 取原始响应（多源并行、谁先成功用谁，HTTP 码翻译成人话）
-│   │   ├── ingest.ts         #   原始响应 → 库行（挑字段、带文案 key，不解析属性）
-│   │   ├── materialize.ts    #   库行 → miao profile（id → 中文名/对象 + 算面板）
-│   │   ├── damage.ts         #   miao profile → 伤害计算的出口 calcDamage()
-│   │   └── panel-check.ts    #   拿游戏给的面板对拍，验证数据没翻错
-│   ├── view/shape.ts         # 视图成型：库行 + 评分结果 → 页面/接口/CLI 共用的对象
-│   ├── i18n/
-│   │   ├── index.ts          #   多语言：hash/id → 游戏文案（读 vendor/i18n/names.json）
-│   │   └── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
-│   ├── cli/score.ts          # 命令行评分入口
-│   └── server/
-│       ├── index.ts          #   装配：起服务 / 按路由限流 / 按前缀分派（零新依赖）
-│       ├── http.ts           #   响应原语：发 JSON / 发文件
-│       ├── static.ts         #   静态托管：/assets/* 与 web/ 子模块（扩展名白名单 + 穿越防护）
-│       ├── cors.ts           #   跨域：白名单许可头 + 预检 204（默认不开）
-│       ├── rate-limit.ts     #   限流三档（只认档位，不认路径）
-│       ├── api/              #   接口：路由表 + 按资源分文件（契约见 docs/API.md）
-│       │   ├── index.ts      #     路由表：方法 / 路径模板 / 限流档 / 端点函数（唯一列 URL 的地方）
-│       │   ├── context.ts    #     共用上下文：db / viewOf / handleFetch
-│       │   ├── meta.ts       #     GET /api/meta · GET /api/health
-│       │   ├── accounts.ts   #     GET /api/accounts · /api/accounts/:uid · POST …/refresh
-│       │   └── characters.ts #     GET /api/accounts/:uid/characters/:avatarId/damage
+│   │   └── enka-account.ts   #   enka 原始响应 → 账号 + 名下角色（挑字段、算指纹、带文案 key，不解析属性）
+│   ├── kernel/               # 对 miao 评分内核
+│   │   ├── materialize.ts    #   领域模型 → miao profile（id → 中文名/对象 + 算面板）
+│   │   └── damage.ts         #   miao profile → 伤害计算的出口 calcDamage()
+│   ├── common/               # 字典、默认值、纯函数（谁都引，不引业务）
+│   │   ├── config.ts         #   全局默认值：默认语言 / 库文件 / 端口 / 监听地址 / 上游源 / 超时 / 限流额度
+│   │   ├── i18n.ts           #   多语言门面：认语言 + 把下面两张表统一出口（名字 / 界面文字）
+│   │   ├── names.ts          #   官方文案：hash/id → 游戏文案（读 vendor/i18n/names.json）
+│   │   ├── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
+│   │   └── util.ts           #   num / str / parseArgs / argValue / errMessage（零依赖）
+│   ├── cli/score.ts          # 命令行评分入口（与 server/ 并列的两个进程入口之一）
+│   ├── server/               # HTTP 进程入口：装配 + URL 表 + 限流（业务别写回这里）
+│   │   ├── index.ts          #   装配：hono 应用 / 跨域 / 静态托管 / 起监听 / CLI 入口
+│   │   ├── routes.ts         #   URL 表：方法 + 路径 + 限流档 + 控制器，一条一行
+│   │   └── rate-limit.ts     #   限流三档（只认档位，不认路径）
+│   └── rest/                 # 控制器：一个资源一个文件，只做 HTTP 关切（取参 / 判 404 / 拼响应）
+│       ├── accounts.ts       #   账号：列表 / 详情 / 刷新
+│       ├── characters.ts     #   角色：伤害
+│       ├── meta.ts           #   系统：语言表 / 界面文案 / 探活
+│       ├── params.ts         #   路径 / query 取参
+│       └── reply.ts          #   响应原语：ok() / fail() / noData()
 ├── web/                      # 前端子仓库 seiten-suikyou-web 的检出（submodule，见「快速开始」）
 │   ├── index.html            #   外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
 │   ├── bootstrap.js          #   入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
@@ -366,7 +368,7 @@ seiten-suikyou/
 │   ├── shot.ts               # headless chrome 截图
 │   ├── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
 │   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
-├── test/                     # 见「测试」一节
+├── test/                     # 见「测试」一节（panel-check.ts 也在这儿：面板对拍只服务测试）
 ├── docs/                     # 设计文档 + 参考稿
 │   ├── DESIGN.md             #   总设计（为什么内嵌内核 / 页面与多语言怎么还原 / 工程约束）
 │   ├── DESIGN-DATA-MODEL.md  #   数据层专项：enka → 缓存 → 内核，为什么不设计算中间层

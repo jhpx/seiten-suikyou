@@ -1,5 +1,5 @@
 /*
- * 命令行参数解析（src/shared/util.ts 的 parseArgs / argValue）—— cli 和 server 两个入口共用它
+ * 命令行参数解析（src/common/util.ts 的 parseArgs / argValue）—— cli 和 server 两个入口共用它
  *
  * 为什么单独给它一个测试文件：参数写错了**不会报错**。
  * 真实例子：`--cors-origin=https://x.github.io` 这种等号写法，早先的 parseArgs 不认，
@@ -7,7 +7,7 @@
  * 服务照常起来、日志还打印「跨域 关闭」——人以为配了，其实一点没生效。
  * 这类「静默失效」比直接崩难查得多，所以在这儿钉死。
  */
-import { parseArgs, argValue } from '../src/shared/util.ts'
+import { parseArgs, argValue } from '../src/common/util.ts'
 
 let failed = 0
 let passed = 0

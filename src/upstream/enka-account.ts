@@ -1,15 +1,18 @@
 /*
- * ingest —— 把 enka 的原始响应翻译成「领域模型」
+ * enka-account —— 把 enka 的原始响应翻译成「账号 + 名下角色」
+ *
+ * 和 service/ingest.ts 分工：那边是**用例**（并发去重、落库、失败留痕），
+ * 这边只做纯翻译 —— 不进库、不联网、不知道 HTTP。名字也就别叫 ingest 了，两个 ingest 撞名会要命。
  *
  * 只做三件事：挑字段、算一次抓取的指纹、组装成一个 Account（含名下 Character）。
- * 「字段长什么样、装备怎么映射到部位」交给模型自己的 `ofEnka`，适配器不逐字段抄。
+ * 「字段长什么样、装备怎么映射到部位」交给模型自己的 `ofEnka`，这里不逐字段抄。
  *
  * 它**不解析属性**：mainPropId / appendPropIdList 原样存库，id → 属性 交给 miao 内核 ——
  * 内核靠「同一个 id 出现几次」算词条数，提前解析会把这信息丢掉（见 docs/DESIGN-DATA-MODEL.md）。
  */
 import { createHash } from 'node:crypto'
 
-import { num } from '../shared/util.ts'
+import { num } from '../common/util.ts'
 import { Account } from '../domain/account.ts'
 import { Character } from '../domain/character.ts'
 import type { EnkaPayload } from '../domain/enka.ts'

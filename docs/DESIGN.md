@@ -74,7 +74,7 @@ miao 面板下方的「伤害计算」是它**自研**的，没有基于外部�
 
 编排在 `ProfileDmg.calcData()`：加载 calc.js → `DmgAttr.getAttr`（吃 `profile.attr` 打底，
 即 `Attr.calc()` 的产出）→ `getBuffs` → `calcAttr` 逐条目施加 → `getDmgFn` 出 `{ dmg, avg }`。
-本项目的出口是 `src/adapter/damage.ts` 的 `calcDamage()`（归一化 + 单角色炸了不拖垮整页），
+本项目的出口是 `src/kernel/damage.ts` 的 `calcDamage()`（归一化 + 单角色炸了不拖垮整页），
 域模型到它的桥在 `materialize.ts`（`MiaoProfile.talent` 就是为它补的 —— 缺了天赋等级，
 内核按 1 级算，伤害凭空低一大截）。
 
@@ -144,7 +144,7 @@ enka 原始响应
    │
    ├─ ③ materialize → miao profile（id → miao 的中文名与真实对象）→ ArtisMark → 分数
    ├─ ④ localize    → 多语言文案（id → 目标语言）→ 前端
-   └─ ⑤ panel-check → 拿游戏给的面板对拍 ③ 的结果，验证翻对了没有
+   └─ ⑤ panel-check → 拿游戏给的面板对拍 ③ 的结果，验证翻对了没有（测试件，见 test/panel-check.ts）
 ```
 
 **为什么不设「enka → 自有数据模型 → 再拼回 miao」的中间层**（三条实证）：
@@ -281,14 +281,18 @@ enka 原始响应
 
 ## 四、多语言：为什么是两张表
 
-`src/i18n/` 分两张表，因为它们的**来源和性质完全不同**：
+`src/common/` 分两张表，因为它们的**来源和性质完全不同**：
 
-| | `vendor/i18n/names.json` | `src/i18n/ui.ts` |
+| | `vendor/i18n/names.json` | `src/common/ui.ts` |
 |---|---|---|
 | 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：刷新、搜索角色、面板属性、命之座… |
 | 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
 | 规模 | 767 个名字组、11931 个 hash | 104 条 × 5 种语言 |
 | 主键 | hash / avatarId / itemId / setId | 英文 key |
+
+两张表由 `src/common/i18n.ts` 统一出口：认语言（`resolveLocale`）、把界面文字包一层再给出去。
+**别再把这个包装放回 `names.ts`** —— 那样 `names` 要引 `ui`、`ui` 又要从 `names` 拿默认语言，
+两个文件互相 import（`test/arch.ts` 有一条断言钉着这个方向）。
 
 **前端一个词条名都不写死** —— 部位名、词条名、套装名、角色名、武器名全是后端按 `locale` 给好的文本；
 连按钮和分组标题都从 `/api/meta` 的 `ui` 表来。加一门语言不用动前端，
@@ -329,7 +333,7 @@ enka 原始响应
 4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
    所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
 5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
-   所以 `src/adapter/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
+   所以 `src/kernel/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
    库里存的是原始值 + 来源，万一推断错了改这一行就能全量重算，不用重新抓。
 6. **`test/fixtures.ts` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
    （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 小生命是 `hpPlus`、大生命才是 `hp`；
@@ -337,23 +341,24 @@ enka 原始响应
    所以基线数字没受影响，但它不是一份「规范数据」。要扩测试建议先改规范并重生成基线。
 7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
    若想版本化，建议单独 `git clone` 一份作为上游源。
-8. **改库结构不用加迁移**：`schema.sql` 是单一事实来源，`openDb` 打开时直接跑它（空库建表、老库表在就不碰）。
-   数据可从 enka 重抓，所以不做增量迁移表——改了 `schema.sql` 后老库请删文件重抓；打开到比
-   `SCHEMA_VERSION` 旧的库会直接抛错提示删库。`schema.sql` 与模型 `FIELDS` 两份列定义必须一致
-   （`test/pipeline.ts` 断言「空库的列 == 模型 COLS」）。
+8. **改库结构不用加迁移**：`repository/schema.ts` 的 drizzle 表定义是单一事实来源，`openDb` 打开时按它
+   现算 DDL 跑一遍（空库建表、老库表在就不碰）。数据可从 enka 重抓，所以不记迁移历史——改了表定义
+   后老库请删文件重抓（或开发期 `npm run db:push` 就地 ALTER）；打开到比 `SCHEMA_VERSION` 旧的库会
+   直接抛错提示删库。表定义与实际建表必须一致（`test/pipeline.ts` 断言「空库的列 == 表定义的列」）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
    ⚠️ `web/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件）——
    前端已拆成独立子仓库 seiten-suikyou-web，素材随那个仓库提交，母仓库这边只存子模块指针。
    理由是重新 `sync:assets` 依赖本地那个 miao-plugin 目录在、且版本对得上，换了机器素材就全没了。
-10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
-    （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。离库打分时 `--offline --check` 会提示做不了。
+10. **面板对拍只能在测试里、对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
+    （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。所以它是 `test/panel-check.ts`，
+    由 `test/pipeline.ts` 硬断言，命令行不提供 `--check` 开关。
 11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。
     不提交的话，它只能告诉你「自上次提交以来没变」，看不出这一轮到底搬了什么。
 12. **测 CLI 要断言「该打印的段落在不在」，光看退出码不够**。`test/cli.ts` 就是干这个的。
     来历：`src/cli/score.ts` 的汇总段曾用了未定义的 `r`（正确写法 `for (const r of sorted)`），
-    异常被外层 `catch` 吞掉后**提前返回**，后面的面板对拍整段不执行 —— 而进程退出码当时还是 0，
-    `npm test` 全绿，只有真跑一遍命令行才看得见。所以那套测试必须把「汇总」「面板对拍」这些
+    异常被外层 `catch` 吞掉后**提前返回**，汇总段及其后的输出整段不执行 —— 而进程退出码当时还是 0，
+    `npm test` 全绿，只有真跑一遍命令行才看得见。所以那套测试必须把「汇总」这类
     段落本身钉住，不能只断言 `code === 0`。
 13. **评分权重表不是每个角色都有的**。上游 `artis-mark.js` 的 `usefulAttr` 收录不全时，
     内核拿通用表兜底（`ArtisMarkCfg.js:99`：`atk75/cpct100/cdmg100/dmg100/phy100`），

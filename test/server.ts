@@ -11,9 +11,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+/* 别叫 eq：本文件的 eq() 是断言助手（逐字段比 JSON） */
+import { eq as sqlEq } from 'drizzle-orm'
+
 import { startServer } from '../src/server/index.ts'
-import * as repo from '../src/store/repo.ts'
-import { ingestPayload } from '../src/adapter/ingest.ts'
+import * as repo from '../src/repository/index.ts'
+import { character as characterT, fetchLog as fetchLogT } from '../src/repository/schema.ts'
+import { ingestPayload } from '../src/upstream/enka-account.ts'
 import type { EnkaPayload } from '../src/domain/enka.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -148,7 +152,7 @@ let chsView = null
      再请求一次：角色级要跟着变，UID 级（来自 fetch_log）必须纹丝不动。
      注意夹具里所有角色共用同一个 stamp，所以「改了迪卢克、其它人不变」才算真证明。 */
   const seed = '2026-01-02T03:04:05.000Z'
-  app.db.prepare('UPDATE character SET fetched_at = ? WHERE avatar_id = ?').run(seed, diluc.avatarId)
+  app.db.update(characterT).set({ fetchedAt: seed }).where(sqlEq(characterT.avatarId, diluc.avatarId)).run()
   const again = (await json(`/api/accounts/${UID}?locale=chs`)).data
   const d2 = again.avatars.find((a: any) => a.avatarId === diluc.avatarId)
   ok(!!d2?.fetchedAt, '角色视图带自己的数据时间')
@@ -253,15 +257,16 @@ console.log('\n=== 7. POST /api/accounts/:uid/refresh（用假 enka，不联网�
   eq(repo.lastFetch(app4.db, UID), null, '没成功抓取过就没有最后抓取时间')
   const r4ok = await fetch(`${app4.url}/api/accounts/${UID}/refresh?locale=chs`, { method: 'POST' })
   eq(r4ok.status, 200, '同实例第一次抓取成功')
-  const okStamp = repo.lastFetch(app4.db, UID)!.fetched_at
+  const okStamp = repo.lastFetch(app4.db, UID)!.fetchedAt
   const r4 = await fetch(`${app4.url}/api/accounts/${UID}/refresh`, { method: 'POST' })
   eq(r4.status, 502, 'enka 业务错误 → 502')
   eq((await readJson(r4)).error.message, 'enka: 查不到这个 UID', '错误原文透传给人看')
-  const failRows = app4.db.prepare('SELECT uid, note FROM fetch_log WHERE ok = 0').all() as Array<{ uid: number; note: string }>
+  const failRows = app4.db.select({ uid: fetchLogT.uid, note: fetchLogT.note })
+    .from(fetchLogT).where(sqlEq(fetchLogT.ok, 0)).all()
   eq(failRows.length, 1, '失败也记一行流水（ok=0）')
   eq(failRows[0].uid, UID, '失败流水记的是这个 uid')
   eq(failRows[0].note, 'enka: 查不到这个 UID', '失败流水带上错误原文')
-  eq(repo.lastFetch(app4.db, UID)!.fetched_at, okStamp, '最后抓取只认成功：失败不刷新数据新鲜度')
+  eq(repo.lastFetch(app4.db, UID)!.fetchedAt, okStamp, '最后抓取只认成功：失败不刷新数据新鲜度')
   app4.server.close()
   app2.server.close()
 }
@@ -575,7 +580,7 @@ console.log('\n=== 12. 跨域 ===')
     })
     const p1 = await pre()
     eq(p1.status, 204, '预检：回 204（不是 404/405，否则刷新按钮直接哑火）')
-    eq(p1.headers.get('access-control-allow-methods'), 'GET, POST, OPTIONS', '预检：放行的方法含 POST')
+    eq(p1.headers.get('access-control-allow-methods'), 'GET,POST,OPTIONS', '预检：放行的方法含 POST')
     ok((p1.headers.get('access-control-allow-headers') || '').toLowerCase().includes('content-type'),
       '预检：放行的头含 Content-Type（跨域带自定义头时靠它过预检）')
 

@@ -11,11 +11,9 @@
  *   · affix    是精炼等级（1~5）。enka 给的是「额外精炼次数」（精1 存 0 或干脆没这个键），所以读时 +1。
  *
  * ⚠️ 「装备了但元数据不认识这把」和「压根没装备」是两回事。本值对象只回答前者之外的那半边：
- *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（view/shape.ts）。
+ *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（service/view.ts）。
  */
-import { num } from '../shared/util.ts'
-import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
-import type { Field } from './fields.ts'
+import { num } from '../common/util.ts'
 import type { EnkaEquip } from './enka.ts'
 
 export class Weapon {
@@ -39,28 +37,9 @@ export class Weapon {
     this.affix = num(affix)         // 精炼等级（1~5）
   }
 
-  /* weapon 表的列 ↔ 领域字段（顺序 = 建表顺序） */
-  static FIELDS: Field[] = [
-    ['item_id', 'itemId'], ['name_hash', 'nameHash'],
-    ['level', 'level'], ['promote', 'promote'], ['affix', 'affix']
-  ]
-
-  /* uid / avatar_id 是「哪一行」的键、取自父对象，不是武器自己的字段，所以不在 FIELDS 里，拼在前面（同 Artifact） */
-  static COLS: string[] = ['uid', 'avatar_id', ...colsOf(Weapon.FIELDS)]
-
   /* 「没装备武器」的那一个 —— 全 null，别拿 0 充数（0 级 / 精 0 都不是合法状态）。
-     出口要显示默认值时自己 `?? 1`（见 adapter/materialize.ts）。 */
+     出口要显示默认值时自己 `?? 1`（见 kernel/materialize.ts）。 */
   static none (): Weapon { return new Weapon() }
-
-  /** 按 COLS 顺序的各列值（INSERT 用）；uid / avatarId 由父对象给 */
-  toValues (uid: number | null, avatarId: number | null): unknown[] {
-    return [uid, avatarId, ...rowValuesOf(this, Weapon.FIELDS)]
-  }
-
-  /** 库里的一行 → Weapon */
-  static fromRow (row: Record<string, unknown>): Weapon {
-    return new Weapon(rowArgsOf(row, Weapon.FIELDS))
-  }
 
   /* 到底装没装 —— 只看 itemId 有没有值（装备着但名字查不到 ≠ 没装：前者 enka 照样给 level/promote/affix） */
   get equipped (): boolean { return this.itemId !== null && this.itemId !== undefined }

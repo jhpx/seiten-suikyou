@@ -54,8 +54,8 @@
       "tag": "microgg 优先",
       "sources": [
         {
-          "path": "src/adapter/enka.ts",
-          "line": 126,
+          "path": "src/upstream/enka.ts",
+          "line": 123,
           "label": "fetchEnka 逐源尝试"
         }
       ]
@@ -112,8 +112,8 @@
       "tag": "只存数字 id",
       "sources": [
         {
-          "path": "src/adapter/ingest.ts",
-          "line": 25,
+          "path": "src/upstream/enka-account.ts",
+          "line": 28,
           "label": "ingestPayload"
         }
       ]
@@ -148,8 +148,8 @@
       "sources": [
         {
           "path": "src/server/index.ts",
-          "line": 66,
-          "label": "createApp / viewOf"
+          "line": 69,
+          "label": "createApp：装配 db → service → 路由"
         }
       ]
     },
@@ -169,9 +169,9 @@
       "tag": "跨多次抓取累积",
       "sources": [
         {
-          "path": "src/store/db.ts",
-          "line": 61,
-          "label": "openDb + 版本迁移"
+          "path": "src/repository/db.ts",
+          "line": 26,
+          "label": "openDb 按表定义建表"
         }
       ]
     },
@@ -191,7 +191,7 @@
       "tag": "id → 中文名",
       "sources": [
         {
-          "path": "src/adapter/materialize.ts",
+          "path": "src/kernel/materialize.ts",
           "line": 67,
           "label": "toMiaoProfile"
         }
@@ -305,8 +305,8 @@
       ],
       "sources": [
         {
-          "path": "src/view/shape.ts",
-          "line": 669,
+          "path": "src/service/view.ts",
+          "line": 673,
           "label": "buildAccountView"
         }
       ]
@@ -326,7 +326,7 @@
       ],
       "sources": [
         {
-          "path": "src/i18n/index.ts",
+          "path": "src/common/names.ts",
           "line": 95,
           "label": "name(hash, locale)"
         }

@@ -10,9 +10,7 @@
  */
 import { Stat } from './stat.ts'
 import type { EnkaEquip } from './enka.ts'
-import { colsOf, rowArgsOf, rowValuesOf } from './fields.ts'
-import type { Field } from './fields.ts'
-import { num } from '../shared/util.ts'
+import { num } from '../common/util.ts'
 
 /* 装备槽位名 → 位置（与上游 EnkaData.js 的 artisIdxMap 一致） */
 const POS_BY_EQUIP_TYPE: Record<string, number> = {
@@ -61,28 +59,6 @@ export class Artifact {
     this.subStats = (subStats || []).map(s => (s instanceof Stat ? s : new Stat(s.prop, s.value)))
     this.nameHash = num(nameHash)                // 本件名字的官方文案 key
     this.setHash = num(setHash)                  // 套装名文案 key（同套 5 件共用一个）
-  }
-
-  /* artifact 表的列 ↔ 领域字段（顺序 = 建表顺序）。列名与序列化都由模型自己出，
-     repo 不需要一份「哪列是 JSON」的清单 —— FIELDS 里标了。 */
-  static FIELDS: Field[] = [
-    ['pos', 'pos'], ['item_id', 'itemId'], ['level_raw', 'levelRaw'], ['star', 'star'],
-    ['main_prop_id', 'mainPropId'], ['append_prop_ids', 'appendPropIds', 'json'],
-    ['main_stat_value', 'mainStatValue'], ['sub_stats', 'subStats', 'json'],
-    ['name_hash', 'nameHash'], ['set_hash', 'setHash']
-  ]
-
-  /* uid / avatar_id 是「哪一行」的键、取自父对象，不是本件圣遗物的字段，所以不在 FIELDS 里，拼在前面 */
-  static COLS: string[] = ['uid', 'avatar_id', ...colsOf(Artifact.FIELDS)]
-
-  /** 按 COLS 顺序的各列值（INSERT 用）；uid / avatarId 由父对象给 */
-  toValues (uid: number | null, avatarId: number | null): unknown[] {
-    return [uid, avatarId, ...rowValuesOf(this, Artifact.FIELDS)]
-  }
-
-  /** 库里的一行 → Artifact；列名 → 字段、两列 JSON 的解码都在 FIELDS 里 */
-  static fromRow (row: Record<string, unknown>): Artifact {
-    return new Artifact(rowArgsOf(row, Artifact.FIELDS))
   }
 
   /** enka 的一件装备 → Artifact；不是圣遗物（比如武器）、或位置认不出 → null */

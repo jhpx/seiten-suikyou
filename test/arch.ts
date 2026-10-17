@@ -121,15 +121,19 @@ console.log('\n=== 3. 依赖策略（公共依赖用真的，云崽专属才做�
    **允许加轻量第三方库**，所以这里盯的是「清单里都有谁」，而不是「只能有一个」。
    - lodash：miao 内核本来就要，公共依赖用真的，不自造替代
    - limiter：限流的令牌桶，零传递依赖、103KB、原生 ESM
-   新加依赖时想清楚：省下的行数配不配得上这个体积。 */
-eq(Object.keys(pkg.dependencies || {}).sort(), ['limiter', 'lodash'],
-  'dependencies 只有 lodash 与 limiter')
-/* devDependencies 只容许「编译期工具链」，不许进运行时：
+   - hono / @hono/node-server：HTTP 框架（路由、跨域、静态托管），零传递依赖、纯 JS
+   - drizzle-orm：SQL 查询与表定义。纯 JS，不引原生驱动（库还是 node:sqlite 自带那个）
+   新加依赖时想清楚：省下的行数配不配得上这个体积，以及是不是纯 JS。 */
+eq(Object.keys(pkg.dependencies || {}).sort(), ['@hono/node-server', 'drizzle-orm', 'hono', 'limiter', 'lodash'],
+  'dependencies 只有 miao 的 lodash、限流的 limiter、HTTP 的 hono、查询的 drizzle-orm')
+/* devDependencies 只容许「不进运行时」的东西：
    - typescript：`tsc --noEmit` 类型检查。运行时用不到它 —— Node 原生剥类型就能直接跑 .ts。
    - @types/node：Node 内置模块（node:fs 等）的类型声明。
+   - drizzle-kit：可选的开发期工具（`npm run db:push` 就地改表、`npm run db:sql` 导 DDL）。
+     **运行时不引它**：它连不上 node:sqlite 的内存库，建表是 repository/ddl.ts 现算的。
    想再往里塞（测试框架 / 打包器 / linter）之前先问一句：不加真的不行吗。 */
-eq(Object.keys(pkg.devDependencies || {}).sort(), ['@types/node', 'typescript'],
-  'devDependencies 只有 TS 工具链（typescript + @types/node）')
+eq(Object.keys(pkg.devDependencies || {}).sort(), ['@types/node', 'drizzle-kit', 'typescript'],
+  'devDependencies 只有 TS 工具链 + 可选的 drizzle-kit')
 
 /* node_modules 的 JS 不在 allowJs 扫描范围内 → 动态 import 会报「找不到声明文件」。
    用 createRequire 取同一个模块（CJS 的 module.exports 就是 lodash 本体），
@@ -244,41 +248,217 @@ console.log('\n=== 7. 领域层（src/domain）只描述「是什么」，不依
 
 /* 领域模型是最内层（domain/artifact.ts、domain/stat.ts）。它存在的意义正是
    「让内存里的形状不再由 DB 列名决定」，所以它**不许**反过来知道：
-   DB 列名（store）、enka 的响应（adapter）、miao 内核、页面渲染（view）。
+   DB 列名（repository）、上游响应（upstream）、miao 内核（kernel）、接口形状（service / rest）。
    一旦引了，它就退化成「跟着存储列名走的数据袋」—— 那正是它要解决的问题。
-   能引的只有两种：同目录（`./xxx.ts`）、以及更底一层的共用件（`../shared/util.ts`）——
+   能引的只有两种：同目录（`./xxx.ts`）、以及更底一层的 `../common/util.ts` ——
    后者是纯 TS 零依赖（下面断死），不会把运行环境或外层概念带进领域层。
-   `../adapter/...` 这种「看起来像同族」的路径照样是越界，别放它进来。 */
+   ⚠️ 只放 `util.ts` 一个文件进来，**不是整个 common/**：names.ts 要读 vendor 文案表、
+   还反过来问 domain 要 KEY_TO_PROP，引它等于把 IO 拽进领域层。 */
 const DOMAIN_DIR = path.join(ROOT, 'src', 'domain')
-const SHARED_DIR = path.join(ROOT, 'src', 'shared')
-const SHARED_SPEC = /^\.\.\/shared\/[a-z0-9_-]+\.ts$/
+const COMMON_DIR = path.join(ROOT, 'src', 'common')
+const UTIL_FILE = path.join(COMMON_DIR, 'util.ts')
+const UTIL_SPEC = /^\.\.\/common\/util\.ts$/
 const domainFiles = fs.readdirSync(DOMAIN_DIR).filter(f => f.endsWith('.ts')).sort()
 ok(domainFiles.length > 0, `src/domain 下有 ${domainFiles.length} 个领域模型文件`)
 const domainOffenders = []
 for (const f of domainFiles) {
   for (const [spec, line] of specifiersOf(path.join(DOMAIN_DIR, f))) {
     const where = `src/domain/${f}:${line}`
-    if (spec.startsWith('./') || SHARED_SPEC.test(spec)) continue
+    if (spec.startsWith('./') || UTIL_SPEC.test(spec)) continue
     domainOffenders.push(`${where} 引了外层/外部：${spec}`)
   }
 }
 ok(domainOffenders.length === 0,
-  'src/domain 只引同目录与 src/shared（不碰 store / adapter / view / miao / 三方包）')
+  'src/domain 只引同目录与 src/common/util.ts（不碰 repository / upstream / kernel / service / rest / miao / 三方包）')
 for (const o of domainOffenders.slice(0, 20)) console.log('        ' + o)
 
-/* 共用件反过来必须**零依赖** —— 领域层引它，所以它一条 import 都不能有：
-   引了 `node:` 就把运行环境带进领域层（`payload_hash` 的 crypto 之所以留在适配层，
-   就是这个道理），引了任何 src 模块则等于开了条绕过分层的后门。 */
-const sharedFiles = fs.readdirSync(SHARED_DIR).filter(f => f.endsWith('.ts')).sort()
-ok(sharedFiles.length > 0, `src/shared 下有 ${sharedFiles.length} 个共用件文件`)
+/* util 反过来必须**零依赖** —— 领域层引它，所以它一条 import 都不能有：
+   引了 `node:` 就把运行环境带进领域层（`payload_hash` 的 crypto 之所以留在 upstream/，
+   就是这个道理），引了任何 src 模块则等于开了条绕过分层的后门。
+   common/ 里另外四个不受这条约束：names.ts 天生要读 vendor/i18n/names.json，
+   ui.ts 是纯数据表，i18n.ts 是两张表的门面（谁也不引它，它引那两张），
+   config.ts 只放默认值（可以引 `node:path` 拼路径）。 */
 const sharedOffenders = []
-for (const f of sharedFiles) {
-  for (const [spec, line] of specifiersOf(path.join(SHARED_DIR, f))) {
-    sharedOffenders.push(`src/shared/${f}:${line} 引了 ${spec}`)
+for (const [spec, line] of specifiersOf(UTIL_FILE)) {
+  sharedOffenders.push(`src/common/util.ts:${line} 引了 ${spec}`)
+}
+ok(sharedOffenders.length === 0, 'src/common/util.ts 零依赖（不引 node: 内置模块、不引任何 src 模块）')
+for (const o of sharedOffenders.slice(0, 20)) console.log('        ' + o)
+
+/* common/ 内部的方向也是单向的，别再绕成环：names.ts 只放官方文案表 + 认语言，
+   「把界面文字也接进来」是 i18n.ts 门面的活。以前包在 names.ts 里，造成 names ⇄ ui 互相 import。 */
+const NAMES_FILE = path.join(COMMON_DIR, 'names.ts')
+const UI_FILE = path.join(COMMON_DIR, 'ui.ts')
+const namesToUi = specifiersOf(NAMES_FILE)
+  .filter(([spec]) => spec.startsWith('.') && path.resolve(COMMON_DIR, spec) === UI_FILE)
+ok(namesToUi.length === 0, 'common/names.ts 不反过来引 ui.ts（接两张表是 i18n.ts 门面的事，否则成环）')
+for (const [spec, line] of namesToUi) console.log(`        src/common/names.ts:${line} → ${spec}`)
+
+/* config.ts 是「所有默认值」的最底层：只能有字面量和 node:path 拼路径，**不许引任何 src 模块**。
+   一旦它开始引业务（读库、查文案、算分数），配置文件就变成了第二个 service 层，
+   「改运维参数」和「改业务逻辑」的分界也跟着没了。 */
+const CONFIG_FILE = path.join(COMMON_DIR, 'config.ts')
+const configToSrc = specifiersOf(CONFIG_FILE).filter(([spec]) => spec.startsWith('.'))
+ok(configToSrc.length === 0, 'common/config.ts 只放默认值（不引任何 src 模块）')
+for (const [spec, line] of configToSrc) console.log(`        src/common/config.ts:${line} → ${spec}`)
+
+// ────────────────────────── 8. 分层：server(+cli) → rest → service → repository → domain
+console.log('\n=== 8. 分层方向（server / rest → service → repository → domain，只能从上往下引）===')
+
+/* 2026-10-18 用户三次校准：
+ * ① 后端按 rest / service / repository / domain 分目录；
+ * ② `server` 与 `cli` 是**一对进程入口**（一个对外 HTTP、一个对内命令行），server 要保留，
+ *   而 rest/ 只放控制器；
+ * ③ `adapter / i18n / shared / view` 四个横向目录与 `rest/config` 位置不对 ——
+ *   adapter 被拆成 upstream（对外部数据源）/ kernel（对 miao 内核），view 并入 service，
+ *   i18n + shared 合成 common，rest/config 的共用件各归各位（context → service，params / reply → rest）。
+ *   ——「i18n」这词不该消失（第二次校准）：它作为**目录**不回来，但 `common/i18n.ts` 作为
+ *   names + ui 两张表的门面回来（下面第 8 节末尾有断言钉住它不再绕成环）。
+ * 于是形状是：
+ *     server/      装配（createApp / startServer / CLI 入口）+ URL 表 + 限流   ← 与 cli/ 平级
+ *     rest/        控制器：一个资源一个文件，直接平铺，外加 params / reply 两个共用件
+ *     service/     用例编排 + 视图组装 + 能力契约（context）
+ *     domain/      领域模型        repository/  仓储 + DAO
+ *     upstream/    抓取 + 原始响应 → 实体      kernel/  实体 → miao profile → 评分 / 伤害
+ *     common/      字典与纯函数
+ *
+ * 拆目录本身没有约束力 —— 只要 controller 能顺手 `import * as repo`，分层当晚就会塌回去。
+ * 所以这里把方向钉死，五条最容易被违反的：
+ *   ① repository 不碰任何上层（server / rest / service / upstream / kernel）；
+ *   ② service 不碰 server / rest（业务层不该知道 HTTP 存在，判空就返回 null / 判别结果）；
+ *   ③ rest 不碰 server —— 装配与路由在外层，控制器不该反过来看它，也不能自己起服务 / 托管静态；
+ *      控制器还不直接引 repository / service，只认 context 给的那组用例能力；
+ *   ④ upstream / kernel 是**叶子适配层**：只认识 domain / common / 三方，不向上引
+ *      （否则「谁依赖谁」立刻变成一团，改内核还会牵出 service 的循环）；
+ *   ⑤ dao 不许反向引 ../index.ts（仓储门面引 dao，dao 再引回去就成环）。
+ * 反过来允许：server → rest / service（装配点要 openDb、要接能力集；例外只开给这一个目录）。 */
+const SRC = path.join(ROOT, 'src')
+
+function tsFiles (dir: string): string[] {
+  if (!fs.existsSync(dir)) return []
+  const out: string[] = []
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name)
+    if (e.isDirectory()) out.push(...tsFiles(p))
+    else if (e.name.endsWith('.ts')) out.push(p)
+  }
+  return out
+}
+
+/** 一批文件里，有没有 import 落进 src/<layer>/ —— 返回人话描述，空数组=干净。
+ *  except 里的绝对路径算「合法例外」（目前只有 service/context.ts 这份契约类型）。 */
+function importsInto (files: string[], layer: string, except: string[] = []): string[] {
+  const base = path.join(SRC, layer) + path.sep
+  const out: string[] = []
+  for (const f of files) {
+    for (const [spec, line] of specifiersOf(f)) {
+      if (!spec.startsWith('.')) continue
+      const abs = path.resolve(path.dirname(f), spec)
+      if (!abs.startsWith(base)) continue
+      if (except.some(e => abs === e || abs + '.ts' === e)) continue
+      out.push(`${path.relative(ROOT, f).replace(/\\/g, '/')}:${line} → ${spec}`)
+    }
+  }
+  return out
+}
+
+for (const layer of ['server', 'rest', 'service', 'repository', 'domain']) {
+  ok(fs.existsSync(path.join(SRC, layer)), `src/${layer}/ 是分层目录之一`)
+}
+/* server 与 cli 是并列的两个进程入口，缺一个都说不通 */
+ok(fs.existsSync(path.join(SRC, 'cli')), 'src/cli/ 与 src/server/ 并列（命令行入口 / HTTP 入口）')
+/* 三个横向件：不参与竖向流水线，但也得有明确位置，别再散回顶层 */
+for (const side of ['upstream', 'kernel', 'common']) {
+  ok(fs.existsSync(path.join(SRC, side)), `src/${side}/ 是横向件目录之一`)
+}
+/* 老位置别再复活：adapter / i18n / shared / view 已经各有归宿。
+   ⚠️ 这里查的是 **src/i18n 目录**；门面文件 `src/common/i18n.ts` 是另一回事，它在、而且是故意的。 */
+const legacy = ['adapter', 'i18n', 'shared', 'view'].filter(d => fs.existsSync(path.join(SRC, d)))
+ok(legacy.length === 0, `旧的横向目录不会再长回来（现存的：${legacy.join(' / ') || '无'}）`)
+
+const repoFiles = tsFiles(path.join(SRC, 'repository'))
+const daoFiles = tsFiles(path.join(SRC, 'repository', 'dao'))
+const serviceFiles = tsFiles(path.join(SRC, 'service'))
+const upstreamFiles = tsFiles(path.join(SRC, 'upstream'))
+const kernelFiles = tsFiles(path.join(SRC, 'kernel'))
+const REST = path.join(SRC, 'rest')
+const restFiles = tsFiles(REST)
+/* 控制器 = rest 顶层那几个文件（一个资源一个）；params / reply 是共用件，按名字排除 */
+const SHARED_IN_REST = new Set(['params.ts', 'reply.ts'])
+const ctlFiles = fs.readdirSync(REST, { withFileTypes: true })
+  .filter(e => e.isFile() && e.name.endsWith('.ts') && !SHARED_IN_REST.has(e.name))
+  .map(e => path.join(REST, e.name))
+
+/* 用户明确要「rest/xxx.ts」而不是「rest/controllers/xxx.ts」—— 这一层别再长回来 */
+ok(!fs.existsSync(path.join(REST, 'controllers')), 'rest 顶层就是控制器（不再套 controllers/ 一层）')
+
+const repoUp = [
+  ...importsInto(repoFiles, 'server'),
+  ...importsInto(repoFiles, 'rest'),
+  ...importsInto(repoFiles, 'service'),
+  ...importsInto(repoFiles, 'upstream'),
+  ...importsInto(repoFiles, 'kernel')
+]
+ok(repoUp.length === 0, 'repository 只往下（不引 server / rest / service / upstream / kernel）')
+for (const o of repoUp.slice(0, 20)) console.log('        ' + o)
+
+const sideUp = (files: string[]): string[] => [
+  ...importsInto(files, 'server'),
+  ...importsInto(files, 'rest'),
+  ...importsInto(files, 'service'),
+  ...importsInto(files, 'repository')
+]
+
+const upUp = sideUp(upstreamFiles)
+ok(upUp.length === 0, 'upstream 是叶子适配层（不引 server / rest / service / repository）')
+for (const o of upUp.slice(0, 20)) console.log('        ' + o)
+
+const kerUp = sideUp(kernelFiles)
+ok(kerUp.length === 0, 'kernel 是叶子适配层（不引 server / rest / service / repository）')
+for (const o of kerUp.slice(0, 20)) console.log('        ' + o)
+
+const svcUp = [...importsInto(serviceFiles, 'server'), ...importsInto(serviceFiles, 'rest')]
+ok(svcUp.length === 0, 'service 不引 server / rest（业务层不懂 HTTP）')
+for (const o of svcUp.slice(0, 20)) console.log('        ' + o)
+
+const restUp = importsInto(restFiles, 'server')
+ok(restUp.length === 0, 'rest 不引 server（控制器不看装配层，也不自己起服务）')
+for (const o of restUp.slice(0, 20)) console.log('        ' + o)
+
+const restServes = restFiles.filter(f => specifiersOf(f)
+  .some(([s]) => s === '@hono/node-server' || s.startsWith('@hono/node-server/')))
+ok(restServes.length === 0, 'rest 不引 @hono/node-server（托管静态 / 起监听是 server 的活）')
+for (const o of restServes.slice(0, 20)) console.log('        ' + path.relative(ROOT, o).replace(/\\/g, '/'))
+
+/* 唯一的合法例外是 service/context.ts 那份契约（控制器必须知道「能力集长什么样」，
+   但它只是类型；实现照样藏在 service 里）。除它以外的 service 导入一律不许。 */
+const CONTRACT = path.join(SRC, 'service', 'context.ts')
+const ctlDown = [
+  ...importsInto(ctlFiles, 'repository'),
+  ...importsInto(ctlFiles, 'service', [CONTRACT]),
+  ...importsInto(ctlFiles, 'server')
+]
+ok(ctlDown.length === 0, 'rest 控制器只认能力契约（context.ts），不直接引 repository / service 实现 / server')
+for (const o of ctlDown.slice(0, 20)) console.log('        ' + o)
+
+const ctlSql = ctlFiles.filter(f => specifiersOf(f).some(([s]) => s.startsWith('drizzle-orm')))
+ok(ctlSql.length === 0, 'rest 控制器不引 drizzle（写 SQL 是 repository 的活）')
+for (const o of ctlSql.slice(0, 20)) console.log('        ' + path.relative(ROOT, o).replace(/\\/g, '/'))
+
+/* dao 只该认识 schema / db / drizzle；引回仓储门面 = 环 */
+const REPO_INDEX = path.join(SRC, 'repository', 'index.ts')
+const daoBack = []
+for (const f of daoFiles) {
+  for (const [spec, line] of specifiersOf(f)) {
+    if (!spec.startsWith('.')) continue
+    const abs = path.resolve(path.dirname(f), spec)
+    if (abs === REPO_INDEX || abs + '.ts' === REPO_INDEX) {
+      daoBack.push(`${path.relative(ROOT, f).replace(/\\/g, '/')}:${line} → ${spec}`)
+    }
   }
 }
-ok(sharedOffenders.length === 0, 'src/shared 零依赖（不引 node: 内置模块、不引任何 src 模块）')
-for (const o of sharedOffenders.slice(0, 20)) console.log('        ' + o)
+ok(daoBack.length === 0, 'repository/dao 不反向引仓储门面（否则成环）')
+for (const o of daoBack.slice(0, 20)) console.log('        ' + o)
 
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

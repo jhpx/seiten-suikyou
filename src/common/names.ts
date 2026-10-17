@@ -6,19 +6,19 @@
  * 另存了一份 byId.avatar 补这一跳。
  *
  * 出口一律容错：表没同步、某语言缺条目、id 不在表里，都返回 null，不抛。
+ *
+ * 这里只管「官方这张表 + 认语言」；自己页面的界面文字在 ui.ts，两张表的统一出口在 i18n.ts，
+ * 默认语言（`DEFAULT_LOCALE`）是部署决策，在 config.ts。
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { t as uiT, all as uiAll } from './ui.ts'
+import { DEFAULT_LOCALE } from './config.ts'
 import { KEY_TO_PROP } from '../domain/stat.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TABLE = path.join(HERE, '..', '..', 'vendor', 'i18n', 'names.json')
-
-/** 默认语言：简体中文。与 miao 自带的中文名口径一致。 */
-export const DEFAULT_LOCALE = 'chs'
 
 /** names.json 里一种语言（`{ code, label }`） */
 export interface LocaleRow { code: string; label: string }
@@ -73,16 +73,6 @@ export function resolveLocale (want?: string | null): string {
   const key = String(want).toLowerCase()
   const code = ALIASES[key] || key
   return rows.some(r => r.code === code) ? code : DEFAULT_LOCALE
-}
-
-/** 界面文字（按钮/标题/提示）另有一张手写小表，见 ui.ts。包一层再出口，
- *  语言解析和别处用同一套规则 —— 不会出现「名字回落中文、界面文字回落英文」的割裂。 */
-export function uiText (key: string, locale: string | null = DEFAULT_LOCALE, vars: Record<string, unknown> | null = null): string {
-  return uiT(key, resolveLocale(locale), vars)
-}
-
-export function uiTable (locale: string | null = DEFAULT_LOCALE): Record<string, string> {
-  return uiAll(resolveLocale(locale))
 }
 
 /** 从一行多语言文案里挑一条：要的语言 → 英文 → 中文 → 放弃 */

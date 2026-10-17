@@ -1,44 +1,62 @@
 /*
- * HTTP 服务 —— 把 store + materialize + i18n 串成一个能看的页面和一组接口
+ * HTTP 服务装配 —— 起服务、挂中间件、分派到路由，外加命令行入口。**只装配，不写业务**。
  *
- * 为什么用 node:http 手写而不引框架：`test/arch.ts` 锁死了「运行时依赖只有 lodash」，而这里要的东西
- * 很薄（几个 JSON 接口 + 几个静态文件），不值得为省一张路由表把那条线破掉。
- * 分层：本文件只做**装配** —— 起服务、限流、按前缀分派；具体接口在 api/，
- * 静态托管在 static.ts，跨域在 cors.ts，响应原语在 http.ts。接口层只管「算数据 + 回响应」。
+ * `server/` 和 `cli/` 是一对：两个进程入口，一个对外（HTTP），一个对内（命令行）。
+ * 装配之外的东西都不该长在这里 —— 接口实现去 rest/，用例去 service/。
+ *
+ * 分层（从外到内，四层 + 三个横向件）：
+ *   server/      本目录：装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
+ *   rest/        控制器：一个资源一个文件（accounts / characters / meta），加两个共用件 params / reply
+ *   service/     用例编排（抓取落库、账号视图成型）+ 对控制器的能力契约（context）。业务层不懂 HTTP
+ *   domain/      领域模型：Account / Character / Weapon / Artifact
+ *   repository/  仓储与 DAO：聚合读写 + 一行一表的 SQL
+ *
+ * 横向件（不参与那条竖向流水线）：
+ *   upstream/    对外部数据源：抓取（enka）+ 原始响应翻译成实体（enka-account）
+ *   kernel/      对 miao 评分内核：materialize（实体 → profile）、damage（伤害出口）
+ *   common/      字典与通用小件：names（官方文案表）、ui（界面文案）、util（纯函数）
+ *
+ * 装配顺序也是有讲究的：cors 必须在限流前（预检不占配额），静态托管必须在路由后
+ * （能命中接口的路径先被路由回掉，剩下的才当文件找）。
  */
-import http from 'node:http'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import os from 'node:os'
 import type { NetworkInterfaceInfo } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
+import type { MiddlewareHandler } from 'hono'
+
 import { i18n } from '../index.ts'
-import { openDb } from '../store/db.ts'
-import * as repo from '../store/repo.ts'
-import { fetchEnka } from '../adapter/enka.ts'
-import type { FetchEnkaOpts } from '../adapter/enka.ts'
-import { ingestPayload } from '../adapter/ingest.ts'
-import type { IngestResult } from '../adapter/ingest.ts'
-import { buildAccountView } from '../view/shape.ts'
-import { createRateGate } from './rate-limit.ts'
+import { openDb } from '../repository/db.ts'
+import { accountView, characterDamage, countAccounts, listAccounts } from '../service/account.ts'
+import { createIngestService } from '../service/ingest.ts'
+import type { FetchImpl } from '../service/ingest.ts'
+import { weightFilterOptions } from '../service/view.ts'
+import { argValue, errMessage, parseArgs } from '../common/util.ts'
+import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../common/config.ts'
+import { clientIp, createRateGate } from './rate-limit.ts'
 import type { RateRules } from './rate-limit.ts'
-import { argValue, parseArgs } from '../shared/util.ts'
-import type { EnkaPayload } from '../domain/enka.ts'
-import { errMessage, sendError, sendFile } from './http.ts'
-import { applyCors } from './cors.ts'
-import { PUBLIC, serveAsset, servePublic } from './static.ts'
-import { matchRoute } from './api/index.ts'
-import type { ApiContext } from './api/context.ts'
+import { mountRoutes } from './routes.ts'
+import { fail } from '../rest/reply.ts'
+import type { ApiContext } from '../service/context.ts'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+
+/** 前端静态目录（index.html / *.js / *.css / assets/）—— 即 web/ 子模块的检出 */
+export const PUBLIC = path.resolve(HERE, '../../web')
 
 /* ---------------- 应用 ---------------- */
 
-/** createApp / startServer 的选项（后三个都能直接透传，加选项不用改两处签名） */
+/** createApp / startServer 的选项（后三个直接透传，加选项不用改两处签名） */
 export interface AppOptions {
   /** SQLite 文件，默认 data/gs.db */
   dbFile?: string
   /** 允许替换 enka 抓取（测试用） */
-  fetchImpl?: (uid: number | string, opts?: FetchEnkaOpts) => Promise<unknown>
+  fetchImpl?: FetchImpl
   /** 认不认转发头（挂在反向代理后面时开），默认 false */
   trustProxy?: boolean
   /** 覆盖限流档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流 */
@@ -51,107 +69,76 @@ export interface AppOptions {
 /** 组装一个服务实例（不开监听），方便测试直接拿来做内存请求 */
 export function createApp ({
   dbFile = path.join('data', 'gs.db'),
-  fetchImpl = fetchEnka,
+  fetchImpl,
   trustProxy = false,
   rateLimit,
   corsOrigins = []
 }: AppOptions = {}) {
   const db = openDb(dbFile)
-  /* 同一个 uid 同时来两次抓取请求时共用一个 promise，别把 enka 打两遍 */
-  const inflight = new Map<number, Promise<IngestResult>>()
-  /* 限流闸门。rateLimit 传 false 就没有闸门（本地调试用），后面判一下 null 即可 */
-  const gate = createRateGate({ trustProxy, rules: rateLimit })
+  /* 限流闸门。rateLimit 传 false 就没有闸门（本地调试用），guard 也就变成空中间件 */
+  const gate = createRateGate({ rules: rateLimit })
+  const ingest = createIngestService({ db, fetchImpl })
 
-  /* 库里的数据 → 视图对象。locale 认不出会退回默认语言（i18n.resolveLocale 负责）。 */
-  function viewOf (uid: number, locale: string) {
-    const account = repo.loadAccountWithCharacters(db, uid)
-    if (!account) return null
-    return buildAccountView({ account, locale, fetchedAt: repo.lastFetch(db, uid)?.fetched_at || null })
+  /* 控制器要的能力集 —— 实现都在 service 层，这里只是接起来 */
+  const ctx: ApiContext = {
+    meta: { weightOptions: weightFilterOptions },
+    accounts: {
+      list: () => listAccounts(db),
+      count: () => countAccounts(db),
+      view: (uid, locale) => accountView(db, uid, locale)
+    },
+    characters: { damage: (uid, avatarId) => characterDamage(db, uid, avatarId) },
+    ingest: ingest.fetch
   }
 
-  function handleFetch (uid: number): Promise<IngestResult> {
-    let p = inflight.get(uid)
-    if (!p) {
-      p = (async () => {
-        try {
-          const payload = await fetchImpl(uid)
-          /* 抓回来的就是 enka 原始响应；形状由 ingestPayload 校验（缺 playerInfo 会抛） */
-          const summary = ingestPayload(payload as EnkaPayload, { source: 'enka' })
-          repo.saveFetch(db, { ...summary, stamp: new Date().toISOString() })
-          return summary
-        } catch (e) {
-          /* 失败也记一行 fetch_log（ok=0）—— 以前只有成功记，上游抖过多少次根本查不到。
-             note 放错误原文：多源并行全失败时 summarize 已经把各源原因列成人话了。
-             同一 uid 的并发请求被 inflight 合成一次，所以失败也只记一行。 */
-          repo.logFailure(db, { uid, note: errMessage(e) })
-          throw e
-        }
-      })().finally(() => inflight.delete(uid))
-      inflight.set(uid, p)
-    }
-    return p
+  const app = new Hono()
+
+  /* 跨域必须排在限流前面：浏览器发带自定义头的跨域请求时会先探一发 OPTIONS，
+     这里不回 204 真正的请求根本发不出去；预检也不该占限流配额。
+     没配白名单就压根不挂这个中间件 —— 少一层，也不给任何许可头。 */
+  if (corsOrigins.length) {
+    app.use('*', cors({ origin: corsOrigins, allowMethods: ['GET', 'POST', 'OPTIONS'], maxAge: 86400 }))
   }
 
-  /* 接口层只拿这三样：库、视图、抓取。跨域 / 限流 / 静态托管都留在这层的外面。 */
-  const ctx: ApiContext = { db, viewOf, handleFetch }
-
-  async function route (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-    const { pathname } = url
-    const isGet = req.method === 'GET'
-
-    /* ---- 跨域：预检就地回完，业务响应挂上许可头（没配白名单时等于什么都没有）。
-       必须排在限流前面，原因写在 cors.ts。 ---- */
-    if (applyCors(req, res, corsOrigins)) return
-
-    /* ---- 静态：素材、首页、public/ 下其余文件 ---- */
-    if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
-    if (isGet && (pathname === '/' || pathname === '/index.html')) return sendFile(res, path.join(PUBLIC, 'index.html'))
-    /* 前端拆成多个 ES 模块后，写死白名单会 404，所以通用托管整个 public 目录。
-       但 /api/* 是接口，绝不能让静态分支抢走（否则 /api/health 等 GET 接口会被当文件 404）。 */
-    if (isGet && !pathname.startsWith('/api/')) return servePublic(res, pathname)
-
-    /* ---- 接口：先匹配路由，再按那条路由标的档位过闸门，最后跑端点函数 ----
-       顺序为什么是这样：限流档位写在路由表里（它是接口的属性），所以得先知道命中谁。
-       但闸门仍然卡在端点函数前面 —— 坏请求只要命中了路由就照样占配额，
-       否则拿着 /refresh 刷 400 比刷 200 还省。 */
-    const hit = matchRoute(req.method, pathname)
-    if (!hit) return sendError(res, 404, 'not_found', `没有这个接口：${req.method} ${pathname}`)
-
-    if (gate && hit.limit !== 'none') {
-      const wait = gate.check(req, hit.limit)
-      if (wait) {
-        return sendError(res, 429, 'rate_limited', '请求太频繁了，过一会儿再试',
-          { 'Retry-After': String(wait) })
-      }
-    }
-
-    await hit.endpoint(ctx, req, res, url, hit.params)
+  /* 每条路由自己挂限流档位；闸门关掉时 guard 是空中间件，调用点不用分支 */
+  const guard = (tier: 'read' | 'fetch'): MiddlewareHandler => async (c, next) => {
+    if (!gate) return next()
+    const wait = gate.check(clientIp(c, trustProxy), tier)
+    if (!wait) return next()
+    return fail(c, 429, 'rate_limited', '请求太频繁了，过一会儿再试', { 'Retry-After': String(wait) })
   }
 
-  const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-    route(req, res, new URL(req.url || '/', 'http://localhost')).catch((e: unknown) => {
-      sendError(res, 500, 'internal', errMessage(e))
-    })
-  })
+  mountRoutes(app, ctx, guard)
 
-  return { server, db, viewOf, rules: gate?.rules ?? null, close: () => server.close() }
+  /* 静态托管放在路由**之后**：能命中接口的路径已经被上面的路由回掉了，剩下的才当文件找。
+     （顺序反过来会让 /api/xxx 有被同名文件抢走的风险。） */
+  app.use('*', serveStatic({
+    root: PUBLIC,
+    rewriteRequestPath: p => (p === '/' ? '/index.html' : p),
+    /* 素材缓存一天、页面每次现问 —— 页面改完刷新就能看到 */
+    onFound: (file, c) => c.header('Cache-Control',
+      file.startsWith(path.join(PUBLIC, 'assets')) ? 'public, max-age=86400' : 'no-cache')
+  }))
+
+  app.notFound(c => fail(c, 404, 'not_found', `没有这个接口：${c.req.method} ${c.req.path}`))
+  app.onError((e, c) => fail(c, 500, 'internal', errMessage(e)))
+
+  return { app, db, rules: gate?.rules ?? null }
 }
 
 /**
  * 起监听。其余选项原样转给 createApp。
  *
- * host 默认**回环**而不是 0.0.0.0：调用方有两类 —— 一类是已经想清楚要暴露到哪的（文件末尾的 CLI
- * 入口，显式传 0.0.0.0），另一类是测试和脚本，后者不传 host 时不该在不知情的情况下开一个局域网端口
- * （测试的内存库里有真实 UID 数据）。对外服务是正式入口的显式决定，不是库的默认。
+ * host 默认**回环**而不是对外：调用方有两类 —— 一类是已经想清楚要暴露到哪的（文件末尾的 CLI
+ * 入口，显式传 config 的 DEFAULT_HOST），另一类是测试和脚本，后者不传 host 时不该在不知情的情况下
+ * 开一个局域网端口（测试的内存库里有真实 UID 数据）。对外服务是正式入口的显式决定，不是库的默认。
  */
-export function startServer ({ port = 8787, host = '127.0.0.1', ...appOpts }: { port?: number; host?: string } & AppOptions = {}): Promise<ReturnType<typeof createApp> & { port: number; url: string }> {
-  const app = createApp(appOpts)
-  return new Promise((resolve) => {
+export function startServer ({ port = DEFAULT_PORT, host = LOCAL_HOST, ...appOpts }: { port?: number, host?: string } & AppOptions = {}) {
+  const created = createApp(appOpts)
+  return new Promise<typeof created & { server: ReturnType<typeof serve>, port: number, url: string }>((resolve) => {
     /* port 传 0 = 让系统随便挑一个空闲端口，测试里就这么用 */
-    app.server.listen(port, host, () => {
-      const addr = app.server.address()
-      const actual = addr && typeof addr === 'object' ? addr.port : port
-      resolve({ ...app, port: actual, url: `http://${host}:${actual}` })
+    const server = serve({ fetch: created.app.fetch, port, hostname: host }, (info) => {
+      resolve({ ...created, server, port: info.port, url: `http://${host}:${info.port}` })
     })
   })
 }
@@ -162,8 +149,8 @@ export function startServer ({ port = 8787, host = '127.0.0.1', ...appOpts }: { 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2))
   /* 正式入口默认对外（局域网服务）。要只给本机用就 --host 127.0.0.1。 */
-  const host = argValue(args.host) || '0.0.0.0'
-  const dbFile = argValue(args.db) || path.join('data', 'gs.db')
+  const host = argValue(args.host) || DEFAULT_HOST
+  const dbFile = argValue(args.db) || DEFAULT_DB_FILE
   /* 挂在反向代理后面（Cloudflare Tunnel、nginx）时必须开：那种拓扑下 TCP 对端永远是代理自己
      （走 Tunnel 时全是 127.0.0.1），不认转发头的话限流会把所有访客当成一个人。 */
   const trustProxy = args['trust-proxy'] === true || process.env.TRUST_PROXY === '1'
@@ -176,14 +163,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     .split(',').map(s => s.trim()).filter(Boolean)
 
   const app = await startServer({
-    port: Number(args.port || process.env.PORT || 8787),
+    port: Number(args.port || process.env.PORT || DEFAULT_PORT),
     host, dbFile, trustProxy, corsOrigins,
     rateLimit: noLimit ? false : undefined
   })
 
   /* 绑 0.0.0.0（默认）时把各网卡地址列出来 —— 手机要访问得知道往哪打。
      虚拟机网卡（VMware / WSL）也在里面，扫一眼就能认出哪个是 Wi-Fi 的。 */
-  const lanIps = host === '0.0.0.0'
+  const lanIps = host === DEFAULT_HOST
     ? [...new Set(Object.values(os.networkInterfaces()).flat()
         .filter((i): i is NetworkInterfaceInfo => !!i && i.family === 'IPv4' && !i.internal)
         .map(i => i.address))]

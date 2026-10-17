@@ -15,14 +15,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, Meta, Character, ArtisMarkCfg } from '../src/index.ts'
-import { getRow, openDb } from '../src/store/db.ts'
-import type { DatabaseSync } from '../src/store/db.ts'
-import * as repo from '../src/store/repo.ts'
-import { ingestPayload } from '../src/adapter/ingest.ts'
-import { toMiaoProfile } from '../src/adapter/materialize.ts'
-import type { MiaoProfile } from '../src/adapter/materialize.ts'
-import { shapeCharacter } from '../src/view/shape.ts'
-import type { AttrRow, MarkDetail } from '../src/view/shape.ts'
+import { openDb } from '../src/repository/db.ts'
+import * as repo from '../src/repository/index.ts'
+import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from '../src/repository/schema.ts'
+import { getTableConfig } from 'drizzle-orm/sqlite-core'
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { ingestPayload } from '../src/upstream/enka-account.ts'
+import { toMiaoProfile } from '../src/kernel/materialize.ts'
+import type { MiaoProfile } from '../src/kernel/materialize.ts'
+import { shapeCharacter } from '../src/service/view.ts'
+import type { AttrRow, MarkDetail } from '../src/service/view.ts'
 import { Artifact } from '../src/domain/artifact.ts'
 import { Weapon } from '../src/domain/weapon.ts'
 import { Account } from '../src/domain/account.ts'
@@ -32,7 +35,7 @@ import { Account } from '../src/domain/account.ts'
 import { Character as DomainCharacter } from '../src/domain/character.ts'
 import type { EnkaEquip, EnkaPayload } from '../src/domain/enka.ts'
 import { Stat, enkaPropKey, ENKA_PROP_TO_KEY } from '../src/domain/stat.ts'
-import { diffPanels } from '../src/adapter/panel-check.ts'
+import { diffPanels } from './panel-check.ts'
 
 let failed = 0
 let passed = 0
@@ -284,19 +287,20 @@ ok(dirtyArt.subStats[0].value === 46.6, 'Stat 的字符串值 → number')
 ok(dirtyArt.setHash === null, '缺字段（undefined）→ null，不是 0 / NaN',
   `实际 ${JSON.stringify(dirtyArt.setHash)}`)
 
-/* ② 被手工改过的库：JSON 列（TEXT）里塞字符串数值，fromRow 也得归一。
+/* ② 被手工改过的库：JSON 列（TEXT）里塞字符串数值，读回来也得归一。
      注意别拿 main_stat_value 试 —— 它是 REAL 列，SQLite 的**类型亲和性**会自己把
      '4780' 转成数字，那样测的是 SQLite 不是我们。sub_stats 是 TEXT 列，里面的
-     JSON 是原样文本，SQLite 不碰，才能真正验证 constructor 的归一。 */
+     JSON 是原样文本，SQLite 不碰，才能真正验证 constructor 的归一。
+     这里用裸 SQL 绕过 drizzle 的 json mode 直接写文本，模拟「有人手工改过库」。 */
 const dirtyDb = openDb(':memory:')
 repo.saveFetch(dirtyDb, { ...ingested, stamp: '2026-01-01T00:00:00.000Z' })
-dirtyDb.prepare(`UPDATE artifact
-  SET sub_stats = '[{"prop":"FIGHT_PROP_HP_PERCENT","value":"46.6"}]'
-  WHERE pos = 1`).run()
-/* 读一行走 db.ts 的 getRow：SQLite 出来的东西没有类型，「按哪个行形状断言」只在那一处发生。 */
-const rowBack = Artifact.fromRow(getRow(dirtyDb, 'SELECT * FROM artifact WHERE pos = 1')!)
+dirtyDb.run(sql`UPDATE artifact
+  SET sub_stats = ${'[{"prop":"FIGHT_PROP_HP_PERCENT","value":"46.6"}]'}
+  WHERE pos = 1`)
+const dirtyBack = repo.loadCharacter(dirtyDb, uid, ingested.account.characters[0].avatarId!)!
+const rowBack = dirtyBack.artifacts.find(a => a.pos === 1)!
 ok(rowBack.subStats[0].value === 46.6,
-  'JSON 列里的字符串数值 → number（fromRow 复用同一个 constructor）',
+  'JSON 列里的字符串数值 → number（读回来仍过同一个 constructor）',
   `实际 ${JSON.stringify(rowBack.subStats[0].value)}`)
 
 /* ---------------- 5. 落库 + 读回 ---------------- */
@@ -325,7 +329,7 @@ ok(viaDbCharacter.weapon.nameHash === directCharacter.weapon.nameHash, '武器�
 /* ---------------- 6. 两条路算出的分必须一样 ---------------- */
 
 console.log('\n=== 4. 过库 vs 不过库，分数必须一致 ===')
-/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 view/shape.ts 里声明过
+/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 service/view.ts 里声明过
    （MarkDetail），这里断言的就是那几个字段，所以直接拿来用。 */
 const scoreOf = (row: DomainCharacter): MarkDetail | null => {
   const p = toMiaoProfile(row)
@@ -368,7 +372,7 @@ const merged = repo.listCharacterIds(db, uid)
 ok(merged.length === 2, `两次抓取各拿 1 个角色 → 库里累计 2 个（实际 ${merged.length}）`,
   `实际 ${JSON.stringify(merged)}`)
 ok(merged.includes(10000046), '第二次没抓到的胡桃仍在库里')
-ok(repo.lastFetch(db, uid)?.fetched_at === '2026-01-02T00:00:00.000Z', '抓取流水记到最后一次')
+ok(repo.lastFetch(db, uid)?.fetchedAt === '2026-01-02T00:00:00.000Z', '抓取流水记到最后一次')
 
 /* ---------------- 8. 重复抓取幂等 ---------------- */
 
@@ -401,22 +405,23 @@ const unknownChar = { ...structuredClone(payload), avatarInfoList: [{ avatarId: 
 ok(toMiaoProfile(ingestPayload(unknownChar, { source: 'enka' }).account.characters[0]) === null,
   'miao 不认识的角色返回 null，不抛异常')
 
-/* 空库走 schema.sql（CREATE TABLE IF NOT EXISTS）：列定义只写一遍（模型的 FIELDS），
-   schema.sql 那份要是写歪了 / 少一列 / 顺序不对，这几条必红。 */
-const cols = (d: DatabaseSync, table: string): string[] =>
-  d.prepare(`PRAGMA table_info(${table})`).all().map(c => String(c.name))
+/* 空库的 DDL 是启动时按 schema.ts 现算的：建出来的列必须与表定义**逐名逐序**一致。
+   少了 / 多了 / 顺序歪了（DDL 生成写错），这几条必红。 */
+const builtCols = (d: ReturnType<typeof openDb>, table: string): string[] =>
+  (d.$client.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(c => c.name)
+const defCols = (t: SQLiteTable): string[] => getTableConfig(t).columns.map(c => c.name)
 
 {
   const fresh = openDb(':memory:')
-  ok(JSON.stringify(cols(fresh, 'account')) === JSON.stringify(Account.COLS),
-    '空库 account 列 == Account.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'account'))}`)
-  ok(JSON.stringify(cols(fresh, 'character')) === JSON.stringify(DomainCharacter.COLS),
-    '空库 character 列 == Character.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'character'))}`)
-  ok(JSON.stringify(cols(fresh, 'weapon')) === JSON.stringify(Weapon.COLS),
-    '空库 weapon 列 == Weapon.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'weapon'))}`)
-  ok(JSON.stringify(cols(fresh, 'artifact')) === JSON.stringify(Artifact.COLS),
-    '空库 artifact 列 == Artifact.FIELDS', `实际 ${JSON.stringify(cols(fresh, 'artifact'))}`)
-  fresh.close()
+  for (const [table, def, label] of [
+    ['account', accountT, 'Account'], ['character', characterT, 'Character'],
+    ['weapon', weaponT, 'Weapon'], ['artifact', artifactT, 'Artifact']
+  ] as const) {
+    ok(JSON.stringify(builtCols(fresh, table)) === JSON.stringify(defCols(def)),
+      `空库 ${table} 的列 == schema.ts 里 ${label} 那几列`,
+      `实际 ${JSON.stringify(builtCols(fresh, table))}`)
+  }
+  fresh.$client.close()
 }
 
 /* ---------------- 11. 文案 key 清单 ---------------- */
@@ -490,7 +495,7 @@ console.log('\n=== 10. 默认兜底在表现层可见 ===')
 const { usefulAttr } = (await import('../vendor/miao/resources/meta-gs/artifact/artis-mark.js')) as {
   usefulAttr: Record<string, Record<string, number>>
 }
-const { classTitleOf } = await import('../src/view/shape.ts')
+const { classTitleOf } = await import('../src/service/view.ts')
 
 /*
  * 内核 ArtisMarkCfg.getCfg 的结果（vendored JS）—— 这里声明我们真正读的字段。
@@ -686,7 +691,7 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
  * ⚠️ 名字必须逐个断言：三个 key 都存在 ≠ 三个名字不同（合并成一个照样「都在」）。 */
 console.log('\n=== 11. 面板属性表：三种加成只按权重表出行 ===')
 
-const { attrTableOf } = await import('../src/view/shape.ts')
+const { attrTableOf } = await import('../src/service/view.ts')
 const panelOfFake = (attr: Record<string, number>, w: Record<string, number> = {}, elem = ''): AttrRow[] =>
   attrTableOf({ attr, base: {} }, 'chs', w, elem)
 const DMG3 = ['dmg', 'phy', 'heal']
@@ -816,7 +821,7 @@ const dmgRowsOf = (rows: AttrRow[]): AttrRow[] => rows.filter((r) => DMG3.includ
  *   分界下方（0.0315*100 = 3.1499999999999995），照样舍反。所以必须在这一层做十进制舍入。
  * ⚠️ 「非分界值」那组是防手抖的：舍入写宽一点（比如四舍五入到 2 位再截）会让每一行都 +0.1。 */
 console.log('\n=== 12. 百分比的显示舍入（float32 噪声 / 半分界）===')
-const { attrValueText } = await import('../src/view/shape.ts')
+const { attrValueText } = await import('../src/service/view.ts')
 {
   /* [key, 内核已格式化好的串, 内核的裸数字, 期望, 这是什么档位] —— 裸数字都是真实档位算出来的原值 */
   const cases: Array<[string, string, number, string, string]> = [
@@ -921,7 +926,7 @@ console.log('\n=== 13. 圣遗物显示用 enka 原始数值（不走内核重算
   ok(fbMain === '4,779',
     '老行没有 enka 数值时退回内核值（4,779 = 内核 4,778.55 收整；有 enka 值才是 4,780）',
     `实际 ${fbMain}`)
-  vdb.close()
+  vdb.$client.close()
 }
 
 {

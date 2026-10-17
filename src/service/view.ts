@@ -1,5 +1,9 @@
 /*
- * shape —— 「库里的一行 + miao 评分结果」→ 给页面/接口用的视图对象
+ * view —— 「库里的一行 + miao 评分结果」→ 给接口/CLI 用的视图对象
+ *
+ * 名字叫 view 但**没有任何前端渲染**（页面在 web/ 子仓库）：这里是后端的输出组装，
+ * 接口返回什么形状、命令行打什么形状，都由它决定。放在 service/ 是因为它和用例同层 ——
+ * 它要读领域模型、要调内核（见 kernel/），比 service 低的东西都不该反过来引它。
  *
  * 整条链路前面几步只碰数字 id，到这儿才出中文名，而**给人看的这一份**要按用户选的语言渲染 ——
  * 所以这里是「id → 文本」的第二条出口，语言由 locale 决定。
@@ -11,14 +15,14 @@
  *      例外只有一处：**怎么显示**（不是算多少）—— 整数词条要收整、百分比要按十进制舍，见 attrValueText。
  */
 import { ArtisMark, Artifact as MiaoArtifact, Format, i18n, Weapon } from '../index.ts'
-import { toMiaoProfile, deriveTalent } from '../adapter/materialize.ts'
-import type { MiaoProfile } from '../adapter/materialize.ts'
-import { calcDamage } from '../adapter/damage.ts'
+import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
+import type { MiaoProfile } from '../kernel/materialize.ts'
+import { calcDamage } from '../kernel/damage.ts'
 import { Artifact } from '../domain/artifact.ts'
 import type { Character } from '../domain/character.ts'
 import type { Account } from '../domain/account.ts'
 import { isIntegerStatKey } from '../domain/stat.ts'
-import { num } from '../shared/util.ts'
+import { num } from '../common/util.ts'
 
 /** 内核给的一件圣遗物的评分结果（= `result.artis[pos]`） */
 interface MarkedArtifact {
@@ -615,7 +619,7 @@ export interface DamageView {
 }
 
 /*
- * 一个角色 → 伤害表视图对象。内部就是 materialize 桥 + calcDamage（见 adapter/damage.ts），
+ * 一个角色 → 伤害表视图对象。内部就是 materialize 桥 + calcDamage（见 kernel/damage.ts），
  * 本函数只做「给页面用的整形」：数值按 miao 出图的口径格式化（Format.comma(v, 0)）、
  * buff 串按冒号拆成两列。
  *

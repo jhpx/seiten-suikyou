@@ -1,14 +1,15 @@
 /*
  * 面板对拍 —— 拿「游戏自己算好的面板」检验「我们喂给 miao 的数据有没有翻错」
  *
+ * 只在测试里用（test/pipeline.ts 拿它硬断言），不进生产路径 —— 所以它待在 test/ 而不是 src/kernel/。
  * 喂错数据很难从分数上看出来（一个副词条权重看错，总分可能只差 2 分）。而 enka 的
  * avatarInfo.fightPropMap 是游戏客户端算出来的最终面板、也就是标准答案 —— 拿它跟 miao 算出的 attr
  * 一比，角色等级/突破、武器、圣遗物主副词条整条链路一次全验。
  */
 /* fightPropMap 的键是游戏协议写死的 prop id（2000 = 最终生命……）；第三列是「换算到 miao 口径」
    要乘的系数 —— 百分比那边 enka 给小数、miao 给百分数，所以要 ×100。 */
-import type { EnkaAvatarInfo, EnkaPayload } from '../domain/enka.ts'
-import type { MiaoProfile } from './materialize.ts'
+import type { EnkaAvatarInfo, EnkaPayload } from '../src/domain/enka.ts'
+import type { MiaoProfile } from '../src/kernel/materialize.ts'
 
 const FIGHT_PROPS: Array<[string, string, number]> = [
   ['2000', 'hp', 1],

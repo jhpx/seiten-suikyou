@@ -3,9 +3,9 @@
  *
  * 对外只有一个入口 createRateGate()：
  *   const gate = createRateGate({ trustProxy, rules: rateLimit })   // rules 传 false = 整个关掉
- *   const wait = gate.check(req, tier)                              // 放行 null；拦下 = 还要等几秒
- * 于是主服务里限流只占三行，档位、取 IP、429 该等多久都不用它操心。
- * **哪个接口走哪档不在这里判断** —— 那是接口的属性，写在 api/index.ts 的路由表里；
+ *   const wait = gate.check(ip, tier)                               // 放行 null；拦下 = 还要等几秒
+ * 于是主服务里限流只占三行，档位、429 该等多久都不用它操心。
+ * **哪个接口走哪档不在这里判断** —— 那是接口的属性，挂在 routes.ts 每条路由的中间件上；
  * 这里只认 tier，所以改路径、加接口都不用回来动这个文件。
  *
  * 为什么用令牌桶而不是「整分钟清零」：固定窗口在边界上能翻倍（第 59 秒打满、第 61 秒又能打满，
@@ -23,8 +23,11 @@
  *
  * ⚠️ 生效范围只有**单进程**。多实例部署（Serverless、多容器）各数各的，那种场景得换成外部存储（Redis）。
  */
-import type { IncomingMessage } from 'node:http'
 import { TokenBucket } from 'limiter'
+import { getConnInfo } from '@hono/node-server/conninfo'
+import type { Context } from 'hono'
+
+import { RATE_DEFAULTS } from '../common/config.ts'
 
 /* ---------------- 档位 ---------------- */
 
@@ -46,14 +49,10 @@ export type RateTier = 'read' | 'fetch'
  * 静态文件和标了 none 的接口（/api/meta、/api/health）故意不限：health 是探活用的，
  * 被限住会误报故障。
  *
- * 三档都能用环境变量改（RATE_FETCH / RATE_FETCH_ALL / RATE_READ，填每分钟几次）；
+ * 三档的**默认额度**在 common/config.ts（部署参数），这里只管怎么算；
+ * 环境变量（RATE_FETCH / RATE_FETCH_ALL / RATE_READ，填每分钟几次）覆盖它，
  * 本地调试想彻底关掉就加 --no-rate-limit。
  */
-const RATE_DEFAULTS: RateRules = {
-  fetch: { limit: 20, windowMs: 60_000 },
-  fetchAll: { limit: 30, windowMs: 60_000 },
-  read: { limit: 300, windowMs: 60_000 }
-}
 
 /* 环境变量覆盖默认档位，填了非法值就当没填。overrides 是代码传进来的（测试用），优先级最高。 */
 function rateRules (overrides?: Partial<RateRules> | null): RateRules {
@@ -71,8 +70,8 @@ function rateRules (overrides?: Partial<RateRules> | null): RateRules {
 
 /* ---------------- 客户端 IP ---------------- */
 
-/*
- * 限流按 IP 分桶，所以「谁算这个 IP」是整套机制的底座。
+/**
+ * 这次请求算哪个 IP —— 限流桶的底座。
  *
  * ⚠️ 为什么默认**不信** `X-Forwarded-For`：那只是个请求头，谁都能伪造。服务直接暴露时（默认绑 0.0.0.0
  * 给局域网用）根本没人在前面盖这个头，此时谁伪造一个就能绕过限流 —— 所以默认只看 TCP 对端地址。
@@ -80,14 +79,14 @@ function rateRules (overrides?: Partial<RateRules> | null): RateRules {
  * 那种拓扑下由部署方显式开 TRUST_PROXY=1 / --trust-proxy，含义是「我确认前面有代理，而且它会盖掉
  * 客户端自带的那个头」—— Cloudflare 给的 `CF-Connecting-IP` 正是这种头，所以优先认它。
  */
-function clientIp (req: IncomingMessage, trustProxy: boolean): string {
+export function clientIp (c: Context, trustProxy: boolean): string {
   if (trustProxy) {
-    const cf = req.headers['cf-connecting-ip']
-    if (typeof cf === 'string' && cf.trim()) return normalizeIp(cf)
-    const xff = req.headers['x-forwarded-for']
-    if (typeof xff === 'string' && xff.trim()) return normalizeIp(xff.split(',')[0])
+    const cf = c.req.header('cf-connecting-ip')
+    if (cf?.trim()) return normalizeIp(cf)
+    const xff = c.req.header('x-forwarded-for')
+    if (xff?.trim()) return normalizeIp(xff.split(',')[0])
   }
-  return normalizeIp(req.socket?.remoteAddress)
+  return normalizeIp(getConnInfo(c).remote.address)
 }
 
 /* IPv4 被嵌在 IPv6 里时写作 ::ffff:1.2.3.4 —— 前缀不剥掉的话，
@@ -174,15 +173,14 @@ function createBuckets ({ now = () => Date.now() }: { now?: () => number } = {})
 /* ---------------- 对外：闸门 ---------------- */
 
 /** 造一个限流闸门。`rules` 传 false = 不限流，此时返回 null —— 调用方只要判一下有没有闸门就行。
- *  trustProxy 含义见 clientIp；now 是时间源（测试用）。 */
+ *  now 是时间源（测试用）。 */
 export interface RateGate {
   rules: RateRules
-  check: (req: IncomingMessage, tier: RateTier) => number | null
+  check: (ip: string, tier: RateTier) => number | null
   readonly size: number
 }
 
-export function createRateGate ({ trustProxy = false, rules, now = () => Date.now() }: {
-  trustProxy?: boolean
+export function createRateGate ({ rules, now = () => Date.now() }: {
   rules?: Partial<RateRules> | false
   now?: () => number
 } = {}): RateGate | null {
@@ -197,9 +195,8 @@ export function createRateGate ({ trustProxy = false, rules, now = () => Date.no
   }
 
   /* 这次请求放不放行：null = 放行；数字 = 拦下，且还要等这么多秒。
-     档位由调用方按路由表给（哪个接口走哪档是接口的属性，不归这里猜），这里只认 tier。 */
-  function check (req: IncomingMessage, tier: RateTier): number | null {
-    const ip = clientIp(req, trustProxy)
+     IP 由调用方给（clientIp 取），档位也是调用方按路由给 —— 这里只认 tier。 */
+  function check (ip: string, tier: RateTier): number | null {
     /* 抓取要连过两档才算过 —— 本 IP 一档、全局一档（保护 enka 上游） */
     if (tier === 'fetch') {
       return hit(r.fetch, `ip:${ip}:fetch`) || hit(r.fetchAll, 'all:fetch') || null

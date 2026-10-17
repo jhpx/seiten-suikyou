@@ -8,8 +8,11 @@
 > | 存储层（DB 缓存） | ✅ 必须有 | enka 只给展柜子集、要跨多次抓取累积、要支持多用户 |
 > | 展示层（i18n） | ✅ 必须有 | miao 零多语言能力（§1.2） |
 >
-> 实现落在 `src/adapter/`（ingest / materialize / panel-check）、`src/store/`（schema / db / repo）、
-> `src/cli/score.ts`（端到端命令行）。本文记录的是**为什么这么设计**，代码结构看 README。
+> 实现落在 `src/upstream/`（enka 抓取 + 原始响应 → 实体）、`src/kernel/`（materialize / damage，对 miao 内核）、
+> `src/repository/`（schema / ddl / db / dao / 仓储门面）、`src/service/`（用例编排 + 视图组装 + 能力契约）、
+> `src/rest/`（控制器：一个资源一个文件，取参 / 判空 / 拼响应）、`src/server/`（装配 + URL 表 + 限流，与 `src/cli/` 并列的两个进程入口）、
+> `src/common/`（字典与纯函数）、`src/cli/score.ts`（端到端命令行）。
+> 本文记录的是**为什么这么设计**，代码结构看 README。
 
 ---
 
@@ -62,7 +65,7 @@ cdTime (data) {
 
 **反过来这给了一个近乎完美的验收手段**：enka 的 `avatarInfo.fightPropMap` 是游戏客户端自己算出来的最终面板，
 是「标准答案」。拿它和 `Attr.create().calc()` 的结果一比，整条链路（角色等级/突破 + 武器 + 圣遗物主副词条）
-有没有翻错一眼就看出来。这就是 `src/adapter/panel-check.ts`（§6）。
+有没有翻错一眼就看出来。这就是 `test/panel-check.ts`（§6）—— 它是测试件，不进生产路径。
 
 ---
 
@@ -82,7 +85,7 @@ enka 原始响应 (JSON)
       │
       ├─ ③ materialize → miao profile（id → miao 的中文名与对象）→ ArtisMark → 分数
       ├─ ④ localize    → display DTO（id → 目标语言文本 + 图标）→ 前端
-      └─ ⑤ panel-check → 拿游戏面板对拍 ③ 的结果，验证翻对了没有
+      └─ ⑤ panel-check → 拿游戏面板对拍 ③ 的结果，验证翻对了没有（测试件，见 test/panel-check.ts）
 ```
 
 **核心原则：存储层存 id，不存名字。**
@@ -108,25 +111,30 @@ enka 原始响应 (JSON)
 | `Weapon` | weapon 行 | 1:1 独立落表，键同 artifact 的 `(uid, avatar_id)` —— 列名因此不用带 `weapon_` 前缀，`Character` 也不必把列拆成三段拼 |
 | `Artifact` | artifact 行 | 保证 `appendPropIds` 保序保重复（内核靠它算词条数） |
 
-每个模型只声明**一张**「列名 ↔ 领域字段」对照表（`FIELDS`，工具在 `src/domain/fields.ts`）：
-`COLS`（拼 SQL 的列名清单）/ `toValues`（写库取值）/ `fromRow`（读行入参）全由它派生。
-加一列因此只动两处 —— 模型的 `FIELDS` + `schema.sql`（DDL 省不掉）。以前这三份是分开写的、
-顺序一致只靠注释约束；`test/pipeline.ts` 现在把「空库的列 == 模型 COLS」断言了，写歪即红。
+模型**不再自己管列名**（旧版的 `FIELDS` / `COLS` / `toValues` / `fromRow` 已删）：
+列与类型的唯一来源是 `src/repository/schema.ts` 的 drizzle 表定义，而「行 ↔ 对象」的搬运
+（列名对应、JSON 编解码、子表拼装）集中在 `src/repository/index.ts` 的几对私有映射函数里
+（`accountRow`/`accountOf`、`characterRow`/`characterOf` …）。
+于是加一列只动**两处**：`schema.ts` 的表定义 + `repository/index.ts` 的映射（各一行），
+领域模型本身只在「这条数据对领域有意义」时才动。
 `ingest` 只做编排，「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`。
 
-⚠️ 模型**不许引外层**（`test/arch.ts` 第 7 节）—— 只许两种 import：同目录的 `./xxx.ts`，
-以及更底一层的共用件 `../shared/util.ts`。不许 import store / adapter / view / miao / 三方包。
-一旦它反过来依赖存储或数据源，就退化成「跟着 DB 列名走的数据袋」，那正是它要解决的问题。
-为此 `payload_hash` 的算法（要 `node:crypto`）留在适配层，模型只负责把它存下来。
+数据层内部的再分工（2026-10-18）：`repository/dao/` 是一张表一行的 SQL，只认行类型；
+`repository/index.ts` 是仓储门面，认聚合（`Account` + 角色 + 武器 + 圣遗物）与事务边界。
+所以「查个昵称」这种活走 dao 就够了，不必把聚合拼出来。
 
-`src/shared/util.ts` 是**跨层的小工具**（`num` 脏值收敛、库里 JSON 文本列的编解码、
-`parseArgs`）：不属于任何一层，所以谁都能引它；反过来它谁也不引（连 `node:` 都不用），
-否则会把运行环境顺着它带进领域层。只服务单层的工具不进这儿（`decRound` 只在展示层用，
-就留在 `view/shape.ts`）。
+⚠️ 模型**不许引外层**（`test/arch.ts` 第 7 节）—— 只许两种 import：同目录的 `./xxx.ts`，
+以及更底一层的共用件 `../common/util.ts`。不许 import repository / upstream / kernel / service / rest / miao / 三方包。
+一旦它反过来依赖存储或数据源，就退化成「跟着 DB 列名走的数据袋」，那正是它要解决的问题。
+为此 `payload_hash` 的算法（要 `node:crypto`）留在 `upstream/`，模型只负责把它存下来。
+
+`src/common/util.ts` 是**跨层的小工具**（`num` 脏值收敛、`str`、`parseArgs`）：不属于任何一层，所以谁都能引它；反过来它谁也不引（连 `node:` 都不用），
+否则会把运行环境顺着它带进领域层。只服务单层的工具不进这儿（`decRound` 只在视图组装里用，
+就留在 `service/view.ts`）。
 
 **字段类型不变量（「获取数据时转一次」）**：每个模型的 constructor 是**类型归一的唯一入口** ——
 数字语义的标量字段进对象时一律 `num()` 收敛成 `number | null`。于是 `ofEnka`（外部响应）与
-`fromRow`（库行）**都只做字段名映射、不再各自转换**；下游（materialize / view / cli）**信任**这个
+`repo` 里的行映射**都只做字段名映射、不再各自转换**；下游（materialize / view / cli）**信任**这个
 类型、不再重复 `num`。`num` 全项目只有两处合法用法：① 模型 constructor；② 出口解析**内核给的
 字符串数字**（`Format` 出的 "4,778.6"，那是另一条来源）。守卫在 `test/pipeline.ts` §2b ——
 ⚠️ 写这类测试别拿数值列（REAL/INTEGER）塞字符串：SQLite 的**类型亲和性**会自己转成数字，
@@ -159,7 +167,7 @@ enka 原始响应 (JSON)
 
 ## 4. Schema
 
-权威定义在 `src/store/schema.sql`（本文不再复制一份，避免两处漂移）。设计上值得说的几点：
+权威定义在 `src/repository/schema.ts`（drizzle `sqliteTable`；本文不再复制一份，避免两处漂移）。设计上值得说的几点：
 
 - **`level_raw` + `source`，而不是归一化后的 level。**
   四个上游对 level 基数的假设不一致：`EnkaData` 做 `-1`，`MysPanelData` / `EnkaHSRApi` / `HomoApi` 都不做。
@@ -171,24 +179,30 @@ enka 原始响应 (JSON)
 - **技能等级存 `skill_level_map` 原始 JSON**（`{天赋id: 等级}`），不在 ingest 阶段拆成 `elem` / `talent_a/e/q`。
   为什么：`天赋id → 是普攻还是战技` 这个对应关系在 **miao 的元数据**里（`char.meta.talentId`），
   我们在这儿拆就等于自己维护一份游戏数据 —— 拆解放在 materialize（§附），只在算分那一刻做。
-- **不存面板属性**（`fightPropMap` / 解析后的 attr 值）。理由见 §3；代价是 `--check` 只能对着原始响应做，
+- **不存面板属性**（`fightPropMap` / 解析后的 attr 值）。理由见 §3；代价是面板对拍只能对着原始响应做，
   没法对着库做——这是有意换来的。
 - **分数不默认落库**。miao 每次 sync 权重都可能变，缓存的分立刻过期。
   要缓存就缓存成 `(uid, avatar_id, miao_version)` 三元组，sync 后自动失效。
 
 ### 4.1 结构保证（不做增量迁移）
 
-`db.ts` 的 `openDb` 打开库时直接把 `schema.sql` 跑一遍——`CREATE TABLE IF NOT EXISTS`：空库建表就位，
-已存在的库表在就不碰，不破坏旧数据。`SCHEMA_VERSION` 只作当前结构代次的戳记（每次打开写进
-`PRAGMA user_version`），用来比对「库是不是比代码旧」。
+没有 `schema.sql`，也**不记迁移历史**：表定义就是源。`db.ts` 的 `openDb` 打开库时按表定义**现算**
+`CREATE TABLE IF NOT EXISTS` 执行（工具在 `repository/ddl.ts`，取 drizzle 的列元数据拼 DDL）——空库建表就位，
+已存在的库表在就不碰，不破坏旧数据；测试的 `:memory:` 库走同一条路。
+`SCHEMA_VERSION` 只作当前结构代次的戳记（每次打开写进 `PRAGMA user_version`），用来比对「库是不是比代码旧」。
 
-不做「增量迁移表」：数据全部可从 enka 重新抓取，老库没必要逐版本 `ALTER` 升级。因此改了 `schema.sql`
-后，老库不会自动长出新列——这种库删掉 db 文件、重启后重新抓取即可。打开到一个比当前代次旧的库时
-（说明 `schema.sql` 改过而库没重建），直接抛错提示删库重抓，而不是静默带着缺列的库跑（插入/读取
-新列时才崩，更难查）。
+为什么不用 drizzle-kit 生成：kit 的 `push` 确实认 node:sqlite，但它只能对着**文件**库跑——
+测试和 `openDb` 用的是同进程的 `DatabaseSync`（含 `:memory:`），交给 CLI 就够不着了。
+所以运行时自己算 DDL；kit 只当可选的开发工具（`npm run db:push` 就地改表、`npm run db:sql` 导一份
+官方口径的建表 SQL 对照看），运行时不引。
 
-`schema.sql` 与模型的 `FIELDS` 两份列定义必须一致——`test/pipeline.ts` 用「空库的列 == 模型 COLS」
-守住这一条，写歪即红。加一列只动两处：模型的 `FIELDS` + `schema.sql`。
+不做「增量迁移表」：数据全部可从 enka 重新抓取，老库没必要逐版本 `ALTER` 升级。因此改了 `schema.ts`
+后，老库不会自动长出新列——删掉 db 文件、重启后重新抓取即可（或者开发期 `npm run db:push` 就地
+`ALTER` 上去，再把 `SCHEMA_VERSION` +1）。打开到一个比当前代次旧的库时，直接抛错提示删库重抓，
+而不是静默带着缺列的库跑（插入/读取新列时才崩，更难查）。
+
+表定义与实际建表必须一致——`test/pipeline.ts` 用「空库 `PRAGMA table_info` 的列 == 表定义里的列」
+守住这一条（逐名逐序），DDL 生成写歪即红。
 
 ---
 
@@ -242,7 +256,8 @@ miao 拿中文名查表（`usefulAttr[char.name]`、`weaponCfg[wn]`），
   「最后抓取」时间只认 `ok=1` —— 失败是「尝试过」，数据并没变新。
 - 读取时按 `ttl` 判断新鲜度，到期前只读 DB，不打 enka。
 - `source` 字段为将来接第二个数据源（米游社面板）预留。
-- **panel-check（`--check`）**：拿 `fightPropMap` 当标准答案对拍。
+- **panel-check（测试件）**：拿 `fightPropMap` 当标准答案对拍。放在 `test/panel-check.ts`，
+  由 `test/pipeline.ts` 硬断言；不进生产路径，命令行也没有开关。
   实测 12 个角色 / 84 项对比，**最大偏差 0.0402%**，全部通过。
   两个口径差异（都不是我们的锅）：
   1. 百分比类：enka 给小数（`0.5673`），miao 给百分数（`56.73`）→ 乘 100

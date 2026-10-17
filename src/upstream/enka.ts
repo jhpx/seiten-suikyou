@@ -19,23 +19,14 @@
  * undici（只暴露全局 fetch，不暴露 ProxyAgent）。要挂得自己用 node:net 手写 CONNECT 隧道、或引
  * proxy-agent（会破 test/arch.ts 的依赖断言）。目前靠国内镜像解决，不需要代理。
  *
- * 可调项：ENKA_SOURCE=microgg 只打某个源（排查用）、ENKA_TIMEOUT_MS=8000 改超时。
+ * 可调项：ENKA_SOURCE=microgg 只打某个源（排查用）、ENKA_TIMEOUT_MS=8000 改超时
+ * （源表、超时、UA 的默认值都在 `common/config.ts`）。
  * 响应里的 ttl 是上游给的缓存秒数，调用方应该尊重，别硬刷。
  */
 
 /* 本文件的返回值就是「enka 原始响应」= 领域层那份形状契约（纯类型，剥类型后不留运行时依赖） */
 import type { EnkaPayload } from '../domain/enka.ts'
-
-const SOURCES: Array<{ name: string; base: string }> = [
-  { name: 'microgg', base: 'https://profile.microgg.cn/api/uid/' },  // 国内镜像：热缓存最快，但会回源、会限流
-  { name: 'enka', base: 'https://enka.network/api/uid/' }            // 官方源：稳定 2~4.5s，并行里的保底一票
-]
-
-const DEFAULT_UA = 'seiten-suikyou/0.1 (artifact score viewer)'
-
-/* 并行下这是「最坏等多久」，不是加分项 —— 谁先回来用谁，慢的没人等。
-   8s 的依据：microgg 冷回源 6s、enka 抖动上限 4.5s，两边都得留出赢的机会。 */
-const DEFAULT_TIMEOUT_MS = 8000
+import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../common/config.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。
    ⚠️ 424 在两个源上语义不同（enka = 玩家没开展柜，microgg = 它自己回源失败），分不开 ——

@@ -2,7 +2,7 @@
  * 命令行测试 —— 把 CLI 当成黑盒跑子进程，断言它「没崩、也没少打印」。
  *
  * 为什么非要单开一套：七套测试原来一套都不跑 CLI，而 `src/cli/score.ts` 真崩过一次 ——
- * 汇总段用了未定义的 `r`，被外层 try/catch 吞掉后**直接 return**，后面的面板对拍一起不执行。
+ * 汇总段用了未定义的 `r`，被外层 try/catch 吞掉后**直接 return**，后面的输出一起不执行。
  * 进程退出码还是 0、`npm test` 全绿，只有人肉跑一遍才看得见。
  * 所以这里的断言不能只看退出码，必须看**输出里该有的段落在不在**。
  *
@@ -49,7 +49,7 @@ function cli (...args: string[]): { code: number | null; out: string; err: strin
 }
 
 /* 从输出里把「汇总」那几行抽出来：形如 `   184.7  SS   迪卢克        迪卢克-通用`
-   只取到收尾那条横线为止 —— 后面还跟着面板对拍段，别一起吃进来。 */
+   只取到收尾那条横线为止 —— 后面可能还跟着 --json 那一整块，别一起吃进来。 */
 function summaryLines (out: string): string[] | null {
   const start = out.indexOf('汇总（按总分降序')
   if (start < 0) return null
@@ -78,13 +78,12 @@ try {
   console.log('\n=== 2. 从本地响应入库并打分（--file）===')
   let first = null
   {
-    const r = cli('--file', FIXTURE, '--db', DB, '--check')
+    const r = cli('--file', FIXTURE, '--db', DB)
     first = r
     ok(r.code === 0, '退出码 0', `code=${r.code} err=${r.err.trim()}`)
     /* 这两条就是当年漏掉的那个 bug 的守卫：崩了会吞掉后面的输出、退出码却还是 0 */
     ok(!r.out.includes('[出错]'), '输出里没有 [出错]')
     ok(r.out.includes('汇总（按总分降序'), '打印了汇总段（崩在这儿的话这行不会出现）')
-    ok(r.out.includes('面板对拍'), '打印了面板对拍段')
     for (const n of CHARS) ok(r.out.includes(n), `输出里有「${n}」`)
     ok(/★\d Lv\.\d+ 命之座\d/.test(r.out), '角色行带着星级/等级/命座')
     ok(r.out.includes('主词条') && r.out.includes('副'), '圣遗物行有主词条与副词条')
@@ -104,22 +103,7 @@ try {
       `\n        --file  ${JSON.stringify(a)}\n        --offline ${JSON.stringify(b)}`)
   }
 
-  console.log('\n=== 4. --check 面板对拍 ===')
-  {
-    const r = cli('--file', FIXTURE, '--db', DB, '--check')
-    const consistent = (r.out.match(/^\s+一致\s/gm) || []).length
-    ok(consistent === CHARS.length, `3 个角色都对上了（实际 ${consistent} 个）`)
-    const worst = r.out.match(/全局最大偏差 ([\d.]+)%/)
-    ok(!!worst, '打印了全局最大偏差')
-    if (worst) {
-      const v = Number(worst[1])
-      console.log(`        全局最大偏差 ${v}%`)
-      ok(v < 0.1, '全局最大偏差在容差内（<0.1%）', `实际 ${v}%`)
-    }
-    ok(r.out.includes('链路正常'), '结论是「链路正常」')
-  }
-
-  console.log('\n=== 5. --json 与打印出来的分数一致 ===')
+  console.log('\n=== 4. --json 与打印出来的分数一致 ===')
   {
     const r = cli('--json', '--offline', '--uid', String(UID), '--db', DB)
     ok(r.code === 0, '退出码 0', `code=${r.code} err=${r.err.trim()}`)
@@ -150,7 +134,7 @@ try {
     }
   }
 
-  console.log('\n=== 6. --list / --keys ===')
+  console.log('\n=== 5. --list / --keys ===')
   {
     const r = cli('--db', DB, '--list')
     ok(r.code === 0, '--list 退出码 0')
@@ -163,7 +147,7 @@ try {
     ok(r.out.includes('10000016'), '--keys 列出了角色 id（enka 不给角色名 hash，得另配映射）')
   }
 
-  console.log('\n=== 7. --locale 真的透传到输出 ===')
+  console.log('\n=== 6. --locale 真的透传到输出 ===')
   {
     /* 期望值直接问 i18n 表，别在测试里手写译名 —— 表更新了测试不用跟着改。
        注意：`classTitle`（场景名，如「迪卢克-通用」）是 miao 自己的中文串，
@@ -180,7 +164,7 @@ try {
     ok(jp.code === 0 && dilucJa && jp.out.includes(`${dilucJa} ★5`), `别名 jp → ja 生效（${dilucJa}）`)
   }
 
-  console.log('\n=== 8. 出错时退出码不能是 0 ===')
+  console.log('\n=== 7. 出错时退出码不能是 0 ===')
   {
     const r = cli('--offline', '--uid', String(UID), '--db', DB, '--char', '不存在的角色')
     ok(r.code !== 0, '找不到角色时退出码非 0', `code=${r.code}`)

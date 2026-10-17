@@ -3,8 +3,7 @@
 本文只描述「前端 ↔ 后端 HTTP 接口」的契约：有哪些接口、请求怎么发、响应长什么样。
 页面如何展示、服务如何部署，不归这里管（部署见 [`docs/DEPLOY.md`](DEPLOY.md)）。
 
-后端源码：`src/server/api/index.ts` 的路由表（**唯一**列出 URL 的地方）+ 同目录各资源文件
-（`meta.ts` / `accounts.ts` / `characters.ts`）+ `src/view/shape.ts` 视图整形；
+后端源码：`src/server/routes.ts`（**唯一**列出 URL 的地方，一条路由一行）+ `src/rest/<资源>.ts`（控制器，一个资源一个文件）+ `src/service/view.ts` 视图整形；
 前端调用集中封装在前端子仓库 seiten-suikyou-web 的 `core.js` 的 `api()` / `uidApiUrl()`。
 
 ---
@@ -30,7 +29,7 @@
 | 约定 | 说明 |
 |---|---|
 | 资源名复数 | `/api/accounts`、`/api/accounts/:uid/characters/:avatarId/damage` |
-| 动态段只收数字 | `:uid`、`:avatarId` 编译成 `\d+`，非数字**匹配不上路由**，直接 `404 not_found`（不会走到业务校验） |
+| 动态段只收数字 | `:uid`、`:avatarId` 写成 `:uid{[0-9]+}`，非数字**匹配不上路由**，直接 `404 not_found`（不会走到业务校验） |
 | 语言走 query | `?locale=chs`，不传或传错退回默认语言 |
 | 没有请求体 | 所有接口都不用 JSON body（含 `POST /refresh`），参数一律从 URL 取 |
 
@@ -42,7 +41,7 @@
 
 ### 1.4 限流
 
-每个接口的限流档标在路由表里（`limit` 字段），默认限额：
+每个接口的限流档挂在**它自己那条路由的中间件**上（`guard('read')` / `guard('fetch')`），默认限额：
 
 | 档 | 用在哪些接口 | 默认限额（每分钟） | 命中返回 |
 |---|---|---|---|
@@ -57,8 +56,8 @@
 由后端启动参数 `--cors-origin`（或环境变量 `CORS_ORIGIN`，逗号分隔多个）控制，
 默认**不开**。命中白名单才回 `Access-Control-Allow-Origin: <Origin>` + `Vary: Origin`。
 
-预检 `OPTIONS` 在限流**之前**回 `204`（`Allow-Methods: GET, POST, OPTIONS`、
-`Allow-Headers: Content-Type`、`Max-Age: 86400`），否则带自定义头的跨域请求发不出去。
+预检 `OPTIONS` 在限流**之前**回 `204`（`Allow-Methods: GET,POST,OPTIONS`、
+`Allow-Headers` 原样回显浏览器要的那些、`Max-Age: 86400`），否则带自定义头的跨域请求发不出去。
 
 ### 1.6 错误码
 

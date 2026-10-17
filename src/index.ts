@@ -46,7 +46,8 @@ export { default as DmgBuffs } from '../vendor/miao/models/dmg/DmgBuffs.js'
 export { Meta, Format, Data } from '../vendor/miao/components/index.js'
 
 /* 多语言出口。miao 零 i18n 能力（resources/ 全是中文、连键都是中文名），
-   所以显示层必须自带一张表 —— 见 src/i18n/index.js。
+   所以显示层必须自带两张表 —— 官方文案在 src/common/names.ts，界面文字在 src/common/ui.ts，
+   统一从 src/common/i18n.ts 出去。
    表的主键是数字 hash / 部位序号 / FIGHT_PROP_*，与展示语言无关。 */
-export * as i18n from './i18n/index.ts'
+export * as i18n from './common/i18n.ts'
 
