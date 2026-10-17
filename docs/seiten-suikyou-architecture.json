@@ -12,7 +12,7 @@
     ],
     "repository": {
       "url": "https://github.com/jhpx/seiten-suikyou",
-      "revision": "17b8721d6094c8d2c2b64e9def77154cb06f560a"
+      "revision": "54e7668f234dcc8a4529c7ebc3a0a3378fdddf6b"
     }
   },
   "components": [
@@ -20,7 +20,7 @@
       "id": "cli",
       "type": "frontend",
       "label": "CLI",
-      "sublabel": "src/cli/score.js",
+      "sublabel": "src/cli/score.ts",
       "pos": [
         40,
         90
@@ -32,8 +32,8 @@
       "tag": "不经 HTTP 直连",
       "sources": [
         {
-          "path": "src/cli/score.js",
-          "line": 200,
+          "path": "src/cli/score.ts",
+          "line": 199,
           "label": "toMiaoProfile + getMarkDetail"
         }
       ]
@@ -42,7 +42,7 @@
       "id": "fetcher",
       "type": "backend",
       "label": "抓取器",
-      "sublabel": "enka.js · 多源",
+      "sublabel": "enka.ts · 多源",
       "pos": [
         212,
         90
@@ -54,8 +54,8 @@
       "tag": "microgg 优先",
       "sources": [
         {
-          "path": "src/adapter/enka.js",
-          "line": 106,
+          "path": "src/adapter/enka.ts",
+          "line": 126,
           "label": "fetchEnka 逐源尝试"
         }
       ]
@@ -78,7 +78,7 @@
       "id": "kernel",
       "type": "backend",
       "label": "内核出口",
-      "sublabel": "src/index.js",
+      "sublabel": "src/index.ts",
       "pos": [
         556,
         90
@@ -90,8 +90,8 @@
       "tag": "注册 Meta",
       "sources": [
         {
-          "path": "src/index.js",
-          "line": 16,
+          "path": "src/index.ts",
+          "line": 18,
           "label": "import resources/meta-gs/*"
         }
       ]
@@ -100,7 +100,7 @@
       "id": "ingest",
       "type": "backend",
       "label": "入库整形",
-      "sublabel": "ingest.js",
+      "sublabel": "ingest.ts",
       "pos": [
         384,
         200
@@ -112,8 +112,8 @@
       "tag": "只存数字 id",
       "sources": [
         {
-          "path": "src/adapter/ingest.js",
-          "line": 93,
+          "path": "src/adapter/ingest.ts",
+          "line": 25,
           "label": "ingestPayload"
         }
       ]
@@ -122,7 +122,7 @@
       "id": "browser",
       "type": "frontend",
       "label": "网页",
-      "sublabel": "首页 + 明细页",
+      "sublabel": "web/ 子仓库 · 首页 + 明细页",
       "pos": [
         40,
         330
@@ -130,11 +130,6 @@
       "size": [
         140,
         60
-      ],
-      "sources": [
-        {
-          "path": "src/server/public/app.js"
-        }
       ]
     },
     {
@@ -152,8 +147,8 @@
       ],
       "sources": [
         {
-          "path": "src/server/index.js",
-          "line": 126,
+          "path": "src/server/index.ts",
+          "line": 66,
           "label": "createApp / viewOf"
         }
       ]
@@ -174,8 +169,8 @@
       "tag": "跨多次抓取累积",
       "sources": [
         {
-          "path": "src/store/db.js",
-          "line": 36,
+          "path": "src/store/db.ts",
+          "line": 61,
           "label": "openDb + 版本迁移"
         }
       ]
@@ -184,7 +179,7 @@
       "id": "materialize",
       "type": "backend",
       "label": "组装 profile",
-      "sublabel": "materialize.js",
+      "sublabel": "materialize.ts",
       "pos": [
         556,
         330
@@ -196,8 +191,8 @@
       "tag": "id → 中文名",
       "sources": [
         {
-          "path": "src/adapter/materialize.js",
-          "line": 55,
+          "path": "src/adapter/materialize.ts",
+          "line": 67,
           "label": "toMiaoProfile"
         }
       ]
@@ -242,8 +237,8 @@
           "label": "getCfg"
         },
         {
-          "path": "vendor/miao/resources/meta-gs/character/胡桃/artis.js",
-          "label": "角色规则：读面板分档"
+          "path": "vendor/miao/resources/meta-gs/character/阿蕾奇诺/artis.js",
+          "label": "角色规则：按面板改权重"
         }
       ]
     },
@@ -298,7 +293,7 @@
     {
       "id": "shape",
       "type": "backend",
-      "label": "shape.js",
+      "label": "shape.ts",
       "sublabel": "视图整形",
       "pos": [
         910,
@@ -310,8 +305,8 @@
       ],
       "sources": [
         {
-          "path": "src/view/shape.js",
-          "line": 415,
+          "path": "src/view/shape.ts",
+          "line": 669,
           "label": "buildAccountView"
         }
       ]
@@ -331,8 +326,8 @@
       ],
       "sources": [
         {
-          "path": "src/i18n/index.js",
-          "line": 112,
+          "path": "src/i18n/index.ts",
+          "line": 95,
           "label": "name(hash, locale)"
         }
       ]
@@ -392,7 +387,7 @@
       "id": "browser-server",
       "from": "browser",
       "to": "server",
-      "label": "GET /api/uid/:uid",
+      "label": "GET /api/accounts/:uid",
       "fromSide": "right",
       "toSide": "left",
       "labelDy": -40
@@ -401,7 +396,7 @@
       "id": "server-fetch",
       "from": "server",
       "to": "fetcher",
-      "label": "POST /api/fetch",
+      "label": "POST /api/accounts/:uid/refresh",
       "variant": "dashed",
       "fromSide": "top",
       "toSide": "bottom",
@@ -411,7 +406,7 @@
       "id": "server-db",
       "from": "server",
       "to": "db",
-      "label": "loadUid()",
+      "label": "loadAccount()",
       "fromSide": "right",
       "toSide": "left",
       "labelDy": -40
@@ -530,7 +525,7 @@
       "dot": "cyan",
       "title": "入口与落库",
       "items": [
-        "CLI 与 POST /api/fetch 共用同一个抓取器：microgg 优先、enka.network 兜底，全失败才报错",
+        "CLI 与 POST /api/accounts/:uid/refresh 共用同一个抓取器：microgg 优先、enka.network 兜底，全失败才报错",
         "库里只存数字 id（uid / avatarId / itemId / propId / setId）与官方文案 hash，不存中文名",
         "enka 只给展柜那 8–12 个角色，靠 SQLite 跨多次抓取累积"
       ]
@@ -539,8 +534,8 @@
       "dot": "emerald",
       "title": "怎么调 miao 内核",
       "items": [
-        "src/index.js 先 import resources/meta-gs/* 完成 Meta 注册，再原样导出内核模块；#miao 走 package.json imports 映射，不改写上游 import",
-        "materialize.js 把库里的 id 翻译成 miao 认识的中文名与真 Artis 实例，并用 Attr.create().calc() 算出面板",
+        "src/index.ts 先 import resources/meta-gs/* 完成 Meta 注册，再原样导出内核模块；#miao 走 package.json imports 映射，不改写上游 import",
+        "materialize.ts 把库里的 id 翻译成 miao 认识的中文名与真 Artis 实例，并用 Attr.create().calc() 算出面板",
         "唯一评分入口是 ArtisMark.getMarkDetail(profile, true)；权重由 ArtisMarkCfg.getCfg 取，角色规则是能读武器 / 命座 / 面板的函数",
         "圣遗物只喂 mainId / attrIds 原始数组，属性由内核自己解析 —— 重复次数是算副词条有效率的依据，外面先聚合就丢了",
         "CLI 不经 HTTP，与 HTTP 服务共用同一条读路径：repo 取行 → 组装 profile → 打分"
@@ -550,8 +545,8 @@
       "dot": "rose",
       "title": "出口与多语言",
       "items": [
-        "shape.js 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死",
-        "评分输出必须与 miao 逐字一致：改内核或数据层后跑 test/verify.mjs 对基线，diff 为空才算过"
+        "shape.ts 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死",
+        "评分输出必须与 miao 逐字一致：改内核或数据层后跑 test/verify.ts 对基线，diff 为空才算过"
       ]
     }
   ]
