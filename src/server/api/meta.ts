@@ -1,9 +1,13 @@
 /*
- * GET /api/meta —— 进页面时调一次：语言表、界面文案、权重筛选项。
- * 界面文案和权重选项一起给，前端切语言就不用再问一次。
+ * GET /api/meta   —— 进页面时调一次：语言表、界面文案、权重筛选项。
+ * GET /api/health —— 存活探针 / 部署自检：回库里的 uid 数。
+ *
+ * 两个都是「系统信息」：只读元数据与库概况，不碰业务数据，所以不限流
+ * （探活被限住会误报故障）。放一个文件是因为它们就十来行，各占一个文件只是多两份 import。
  */
 import { i18n } from '../../index.ts'
 import { weightFilterOptions } from '../../view/shape.ts'
+import * as repo from '../../store/repo.ts'
 import { sendJson } from '../http.ts'
 import type { Handler } from './context.ts'
 
@@ -22,4 +26,8 @@ export const meta: Handler = (_ctx, _req, res, url) => {
       weightOptions: weightFilterOptions(loc)
     }
   })
+}
+
+export const health: Handler = (ctx, _req, res) => {
+  sendJson(res, 200, { ok: true, data: { uids: repo.listUids(ctx.db).length } })
 }

@@ -37,11 +37,12 @@ async function fetchUid (uid) {
   btn.textContent = T('fetching')
   showLoading(T('fetchingLong'))
   try {
-    const data = await api('/api/fetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: Number(uid), locale: state.locale })
-    })
+    /* 刷新 = 让后端拿这个 uid 去打一次 enka。uid 在路径里、locale 在 query 里，
+       没有请求体，所以也不用带 Content-Type。 */
+    const data = await api(
+      `/api/accounts/${encodeURIComponent(uid)}/refresh?locale=${encodeURIComponent(state.locale)}`,
+      { method: 'POST' }
+    )
     state.selectedAvatarId = null
     persistUid(uid)
     applyView(data)

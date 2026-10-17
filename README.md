@@ -17,7 +17,7 @@
 | 拿游戏客户端算的最终面板**对拍**我们自己算的面板 | `npm run score -- --check` |
 | 多语言：简体 / 繁體 / English / 日本語 / 한국어 | 页面右上角，或 `--locale` |
 | 本地缓存：enka 只给展柜那 8–12 个角色，跨多次抓取累积 | 自动 |
-| JSON 接口 | `GET /api/uid/:uid?locale=en` |
+| JSON 接口 | `GET /api/accounts/:uid?locale=en` |
 
 ## 快速开始
 
@@ -154,10 +154,10 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 |---|---|
 | `GET /api/meta` | 有哪些语言、多语言表在不在、以及当前语言的**界面文字表** |
 | `GET /api/health` | 库里有几个 uid |
-| `GET /api/uids` | uid 列表（昵称、等级、角色数、最后抓取时间） |
-| `GET /api/uid/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
-| `GET /api/uid/:uid/character/:avatarId/damage` | 单个角色的伤害计算（明细页下侧那张表）。`data` 为 `null` = 这个角色算不出伤害（没配 calc.js 等） |
-| `POST /api/fetch` | `{uid, locale}` 从 enka 现抓一份并入库，直接回视图 |
+| `GET /api/accounts` | 账号列表（昵称、等级、角色数、最后抓取时间） |
+| `GET /api/accounts/:uid?locale=en` | 整包视图：账号 + 全部角色（面板/套装/圣遗物主副词条） |
+| `GET /api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算（明细页下侧那张表）。`data` 为 `null` = 这个角色算不出伤害（没配 calc.js 等） |
+| `POST /api/accounts/:uid/refresh?locale=en` | 从 enka 现抓一份并入库，直接回视图（无请求体） |
 | `GET /assets/<路径>` | 图片素材（扩展名白名单 + 目录穿越防护 + 一天缓存） |
 | `GET /` | H5 页面 |
 
@@ -166,7 +166,7 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 
 ### 限流
 
-公网一开放，`POST /api/fetch` 就是个「拿你的服务去打 enka」的口子 —— 上游一限流就是全站 502，
+公网一开放，`POST /api/accounts/:uid/refresh` 就是个「拿你的服务去打 enka」的口子 —— 上游一限流就是全站 502，
 所以自带三档闸：
 
 | 档位 | 默认 | 挡的是 |
@@ -192,6 +192,20 @@ npm run server -- --no-rate-limit                  # 本地调试时整个关掉
 不值得为省一张路由表把依赖撑大。运行时依赖只有两个：`lodash`（miao 内核本来就要）和
 `limiter`（限流的令牌桶，零传递依赖）。`test/arch.ts` 盯着这个清单 —— 加依赖前先算账：
 省下的行数配不配得上它的体积。
+
+### 分开部署：前端单独托管（GitHub Pages）
+
+页面是**纯静态**的（原生 ES 模块、零构建），可以脱离后端单独托管；但**数据不行** ——
+评分和伤害计算要跑 miao 内核（读 `vendor/` 里的权重表、角色表）+ 读 SQLite，浏览器做不到。
+所以「上 Pages」的正确姿势是拆两半：
+
+| 一半 | 放哪 | 内容 |
+|---|---|---|
+| 前端（静态） | GitHub Pages | 整个 `src/server/public/`，含约 101MB 图片素材 |
+| 后端（接口） | 一台有公网地址的机器 | `/api/*`，前端跨域去调 |
+
+完整的三步走、相对路径为什么不需要改写、子路径与安全的注意事项，
+都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
 ## 多语言
 
@@ -300,9 +314,19 @@ seiten-suikyou/
 │   │   └── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
 │   ├── cli/score.ts          # 命令行评分入口
 │   └── server/
-│       ├── index.ts          #   node:http 路由（API + 通用静态页），零新依赖
+│       ├── index.ts          #   装配：起服务 / 按路由限流 / 按前缀分派（零新依赖）
+│       ├── http.ts           #   响应原语：发 JSON / 发文件
+│       ├── static.ts         #   静态托管：/assets/* 与 public/（扩展名白名单 + 穿越防护）
+│       ├── cors.ts           #   跨域：白名单许可头 + 预检 204（默认不开）
+│       ├── rate-limit.ts     #   限流三档（只认档位，不认路径）
+│       ├── api/              #   接口：路由表 + 按资源分文件（契约见 docs/API.md）
+│       │   ├── index.ts      #     路由表：方法 / 路径模板 / 限流档 / handler（唯一列 URL 的地方）
+│       │   ├── context.ts    #     共用上下文：db / viewOf / handleFetch
+│       │   ├── meta.ts       #     GET /api/meta · GET /api/health
+│       │   ├── accounts.ts   #     GET /api/accounts · /api/accounts/:uid · POST …/refresh
+│       │   └── characters.ts #     GET /api/accounts/:uid/characters/:avatarId/damage
 │       └── public/           #   页面：原生 ES 模块，无框架无 CDN（type="module"，零构建）
-│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚），引 /bootstrap.js
+│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
 │           ├── bootstrap.js  #     入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
 │           ├── core.js       #     基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
 │           ├── roster.js     #     feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
@@ -322,6 +346,7 @@ seiten-suikyou/
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
 │   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）
+│   ├── export_pages.py       # 导出可静态托管的前端目录（前后端分开部署时用，见 README「分开部署」）
 │   ├── list_assets.ts        # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
 │   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
 │   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）

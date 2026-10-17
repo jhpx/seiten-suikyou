@@ -28,7 +28,7 @@ import type { EnkaPayload } from '../domain/enka.ts'
 import { errMessage, sendError, sendFile } from './http.ts'
 import { applyCors } from './cors.ts'
 import { PUBLIC, serveAsset, servePublic } from './static.ts'
-import { routeApi } from './api/index.ts'
+import { matchRoute } from './api/index.ts'
 import type { ApiContext } from './api/context.ts'
 
 /* ---------------- 应用 ---------------- */
@@ -95,15 +95,6 @@ export function createApp ({
        必须排在限流前面，原因写在 cors.ts。 ---- */
     if (applyCors(req, res, corsOrigins)) return
 
-    /* 限流卡在所有业务之前 —— 坏请求也得占配额，否则刷 400 比刷 200 还省 */
-    if (gate) {
-      const wait = gate.check(req, pathname)
-      if (wait) {
-        return sendError(res, 429, 'rate_limited', '请求太频繁了，过一会儿再试',
-          { 'Retry-After': String(wait) })
-      }
-    }
-
     /* ---- 静态：素材、首页、public/ 下其余文件 ---- */
     if (isGet && pathname.startsWith('/assets/')) return serveAsset(res, pathname)
     if (isGet && (pathname === '/' || pathname === '/index.html')) return sendFile(res, path.join(PUBLIC, 'index.html'))
@@ -111,9 +102,22 @@ export function createApp ({
        但 /api/* 是接口，绝不能让静态分支抢走（否则 /api/health 等 GET 接口会被当文件 404）。 */
     if (isGet && !pathname.startsWith('/api/')) return servePublic(res, pathname)
 
-    /* ---- 接口：交给 api/ 的路由表 ---- */
-    if (await routeApi(ctx, req, res, url)) return
-    sendError(res, 404, 'not_found', `没有这个接口：${req.method} ${pathname}`)
+    /* ---- 接口：先匹配路由，再按那条路由标的档位过闸门，最后跑 handler ----
+       顺序为什么是这样：限流档位写在路由表里（它是接口的属性），所以得先知道命中谁。
+       但闸门仍然卡在 handler 前面 —— 坏请求只要命中了路由就照样占配额，
+       否则拿着 /refresh 刷 400 比刷 200 还省。 */
+    const hit = matchRoute(req.method, pathname)
+    if (!hit) return sendError(res, 404, 'not_found', `没有这个接口：${req.method} ${pathname}`)
+
+    if (gate && hit.limit !== 'none') {
+      const wait = gate.check(req, hit.limit)
+      if (wait) {
+        return sendError(res, 429, 'rate_limited', '请求太频繁了，过一会儿再试',
+          { 'Retry-After': String(wait) })
+      }
+    }
+
+    await hit.handler(ctx, req, res, url, hit.params)
   }
 
   const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {

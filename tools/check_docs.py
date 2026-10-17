@@ -17,7 +17,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # 只查这几份「给人看」的文档；生成物（VENDOR.md / reports）不查
-DOCS = ("README.md", "docs/DESIGN.md", "docs/DESIGN-DATA-MODEL.md")
+DOCS = ("README.md", "docs/DESIGN.md", "docs/DESIGN-DATA-MODEL.md",
+        "docs/API.md", "docs/DEPLOY.md")
 SKIP_DIRS = (".git", "node_modules", ".tmp", "__pycache__")
 
 # 仓库里实际存在的文件（相对 ROOT、用 / 分隔）

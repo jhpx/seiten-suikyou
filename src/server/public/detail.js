@@ -349,7 +349,7 @@ async function loadDamage (av, box) {
   box.append(dmgStatus(T('dmgLoading')))
   let dmg = null
   try {
-    dmg = await api(`/api/uid/${av.uid}/character/${av.avatarId}/damage`)
+    dmg = await api(`/api/accounts/${av.uid}/characters/${av.avatarId}/damage`)
   } catch (e) {
     if (state.selectedAvatarId !== av.avatarId) return
     console.error('[damage] 明细页伤害计算失败:', e)

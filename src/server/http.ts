@@ -1,17 +1,18 @@
 /*
- * HTTP 响应原语 —— 发 JSON、发文件、读请求体。
+ * HTTP 响应原语 —— 发 JSON、发文件。
  *
- * 只跟 ServerResponse / IncomingMessage 打交道，不认识业务：谁调用、回什么状态码由上层决定。
+ * 只跟 ServerResponse 打交道，不认识业务：谁调用、回什么状态码由上层决定。
  * 静态托管（static.ts）和接口（api/）都从这里取件，所以它属于 server 层，不属于 api 层。
+ *
+ * 没有「读请求体」：接口参数一律从 URL 取（uid 在路径里、locale 在 query 里），
+ * 没有任何接口需要 JSON body —— 少一套解析与校验就少一类 400。
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { ServerResponse } from 'node:http'
 
 /** 额外的响应头（按需） */
 export type Headers = Record<string, string>
-
-const BODY_LIMIT = 64 * 1024
 
 /** 扩展名 → Content-Type。静态页与素材共用一张表，改这里一处生效。 */
 export const MIME_TYPES: Record<string, string> = {
@@ -57,23 +58,4 @@ export function sendFile (res: ServerResponse, file: string, { cache = 'no-cache
     'Cache-Control': cache
   })
   res.end(buf)
-}
-
-/* 请求体 JSON —— 形状由各接口自己认（这里只保证「是个对象」）。空体回 {}，坏 JSON 抛错。 */
-export function readBody (req: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => {
-      size += c.length
-      if (size > BODY_LIMIT) { reject(new Error('请求体过大')); req.destroy(); return }
-      chunks.push(c)
-    })
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8').trim()
-      if (!raw) return resolve({})
-      try { resolve(JSON.parse(raw)) } catch { reject(new Error('请求体不是合法 JSON')) }
-    })
-    req.on('error', reject)
-  })
 }

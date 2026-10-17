@@ -95,7 +95,7 @@ export async function api (path, opts) {
 
 /* 按当前语言取某个账号的接口地址（locale 一律跟 state.locale 走） */
 export function uidApiUrl (uid) {
-  return `${API_BASE}/api/uid/${uid}?locale=${encodeURIComponent(state.locale)}`
+  return `${API_BASE}/api/accounts/${uid}?locale=${encodeURIComponent(state.locale)}`
 }
 
 /* ───────────────────────── 提示条 ───────────────────────── */

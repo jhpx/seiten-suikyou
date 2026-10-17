@@ -1,8 +1,7 @@
 /*
- * 接口层的共用上下文 —— 路由匹配到之后，各 handler 从这里取「库 / 视图 / 抓取」。
+ * 接口层的共用类型 —— 路由匹配到之后，handler 从这里取「库 / 视图 / 抓取」。
  *
- * 这样 handler 不必知道这些是怎么装配的：db 从哪来、并发抓取怎么合并，
- * 都留在 server/index.ts。handler 只负责「拿数据、回响应」。
+ * handler 不必知道这些怎么装配：db 从哪来、并发抓取怎么合并，都留在 server/index.ts。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -19,11 +18,19 @@ export interface ApiContext {
   handleFetch: (uid: number) => Promise<IngestResult>
 }
 
-/** 统一签名：路由负责匹配，handler 只管回响应。params 是正则捕获组（uid / avatarId）。 */
+/** 路径里的动态段（`:uid` / `:avatarId`）。模板只收数字，所以这里直接是 number。 */
+export type RouteParams = Record<string, number>
+
+/** 统一签名：路由负责匹配与取参，handler 只管「拿数据、回响应」。 */
 export type Handler = (
   ctx: ApiContext,
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  params: string[]
+  params: RouteParams
 ) => void | Promise<void>
+
+/** 「库里没这个账号」的 404 文案 —— 顺带告诉调用方怎么把数据弄进来。
+ *  接口路径只写在这一处，改路径不用满仓库找提示语。 */
+export const noData = (uid: number): string =>
+  `库里没有 uid ${uid}。先抓一次：POST /api/accounts/${uid}/refresh`

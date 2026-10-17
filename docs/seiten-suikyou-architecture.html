@@ -5037,8 +5037,8 @@
         <path data-edge-from="fetcher" data-edge-to="enka" data-edge-label="HTTPS" data-edge-key="1" data-edge-id="fetch-enka" data-composition-points="352,120;384,120" d="M 352 120 L 384 120" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="fetcher" data-edge-to="ingest" data-edge-label="原始响应" data-edge-key="2" data-edge-id="fetch-ingest" data-composition-points="289,150;289,174;360,174;360,228;384,228" d="M 289 150 L 289 166 Q 289 174 297 174 L 352 174 Q 360 174 360 182 L 360 220 Q 360 228 368 228 L 384 228" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="ingest" data-edge-to="db" data-edge-label="落库" data-edge-key="3" data-edge-id="ingest-db" data-composition-points="454,256;454,330" d="M 454 256 L 454 330" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="browser" data-edge-to="server" data-edge-label="GET /api/uid/:uid" data-edge-key="4" data-edge-id="browser-server" data-composition-points="180,360;212,360" d="M 180 360 L 212 360" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="server" data-edge-to="fetcher" data-edge-label="POST /api/fetch" data-edge-key="5" data-edge-id="server-fetch" data-composition-points="275,330;275,150" d="M 275 330 L 275 150" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="browser" data-edge-to="server" data-edge-label="GET /api/accounts/:uid" data-edge-key="4" data-edge-id="browser-server" data-composition-points="180,360;212,360" d="M 180 360 L 212 360" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="server" data-edge-to="fetcher" data-edge-label="POST /api/accounts/:uid/refresh" data-edge-key="5" data-edge-id="server-fetch" data-composition-points="275,330;275,150" d="M 275 330 L 275 150" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="server" data-edge-to="db" data-edge-label="loadUid()" data-edge-key="6" data-edge-id="server-db" data-composition-points="352,360;384,360" d="M 352 360 L 384 360" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="db" data-edge-to="materialize" data-edge-label="行数据" data-edge-key="7" data-edge-id="db-materialize" data-composition-points="524,360;556,360" d="M 524 360 L 556 360" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="materialize" data-edge-to="attr" data-edge-label="Attr.create().calc()" data-edge-key="8" data-edge-id="materialize-attr" data-composition-points="626,390;626,414;704,414;704,478;728,478" d="M 626 390 L 626 406 Q 626 414 634 414 L 696 414 Q 704 414 704 422 L 704 470 Q 704 478 712 478 L 728 478" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
@@ -5249,13 +5249,13 @@
           <rect x="439" y="260" width="30" height="14" rx="3" class="c-mask"/>
           <text x="454" y="270" class="t-muted" font-size="8" text-anchor="middle">落库</text>
         </g>
-        <g data-detail="context" data-edge-from="browser" data-edge-to="server" data-edge-label="GET /api/uid/:uid" data-edge-key="4" data-edge-id="browser-server">
+        <g data-detail="context" data-edge-from="browser" data-edge-to="server" data-edge-label="GET /api/accounts/:uid" data-edge-key="4" data-edge-id="browser-server">
           <rect x="150.2" y="300" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="196" y="310" class="t-muted" font-size="8" text-anchor="middle">GET /api/uid/:uid</text>
+          <text x="196" y="310" class="t-muted" font-size="8" text-anchor="middle">GET /api/accounts/:uid</text>
         </g>
-        <g data-detail="context" data-edge-from="server" data-edge-to="fetcher" data-edge-label="POST /api/fetch" data-edge-key="5" data-edge-id="server-fetch">
+        <g data-detail="context" data-edge-from="server" data-edge-to="fetcher" data-edge-label="POST /api/accounts/:uid/refresh" data-edge-key="5" data-edge-id="server-fetch">
           <rect x="234" y="270" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="275" y="280" class="t-messagebus" font-size="8" text-anchor="middle">POST /api/fetch</text>
+          <text x="275" y="280" class="t-messagebus" font-size="8" text-anchor="middle">POST /api/accounts/:uid/refresh</text>
         </g>
         <g data-detail="context" data-edge-from="server" data-edge-to="db" data-edge-label="loadUid()" data-edge-key="6" data-edge-id="server-db">
           <rect x="341.4" y="300" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
@@ -5520,7 +5520,7 @@
           <h3>入口与落库</h3>
         </div>
         <ul>
-          <li>&bull; CLI 与 POST /api/fetch 共用同一个抓取器：microgg 优先、enka.network 兜底，全失败才报错</li>
+          <li>&bull; CLI 与 POST /api/accounts/:uid/refresh 共用同一个抓取器：microgg 优先、enka.network 兜底，全失败才报错</li>
           <li>&bull; 库里只存数字 id（uid / avatarId / itemId / propId / setId）与官方文案 hash，不存中文名</li>
           <li>&bull; enka 只给展柜那 8–12 个角色，靠 SQLite 跨多次抓取累积</li>
         </ul>

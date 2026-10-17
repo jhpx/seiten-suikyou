@@ -95,8 +95,8 @@ console.log('=== 1. 元信息与健康检查 ===')
 
 console.log('\n=== 2. uid 列表 ===')
 {
-  const r = await json('/api/uids')
-  eq(r.data.length, 1, '/api/uids 有 1 条')
+  const r = await json('/api/accounts')
+  eq(r.data.length, 1, '/api/accounts 有 1 条')
   eq(r.data[0].uid, UID, 'uid 对得上')
   eq(r.data[0].avatarCount, summary.characterCount, '角色数与 ingest 一致')
 
@@ -118,7 +118,7 @@ console.log('\n=== 2. uid 列表 ===')
 console.log('\n=== 3. 视图（locale=chs）===')
 let chsView = null
 {
-  const r = await json(`/api/uid/${UID}?locale=chs`)
+  const r = await json(`/api/accounts/${UID}?locale=chs`)
   chsView = r.data
   eq(r.data.count, summary.characterCount, '角色数一致')
   eq(r.data.locale, 'chs', '回显语言')
@@ -134,7 +134,7 @@ let chsView = null
     ok(diluc.sets.length > 0, `套装 ${diluc.sets.map((s: any) => s.name + '×' + s.count).join(' ')}`)
     /* 套装视图拿「花」（部位 1）那张部位图当整套的代表图，2+2 时两张各裁一半拼。
        钉死在 /1.webp：哪天改成别的部位，卡片上认套的线索就断了 */
-    ok(diluc.sets.every((s: any) => /^\/assets\/meta-gs\/artifact\/imgs\/[^/]+\/1\.webp$/.test(s.icon || '')),
+    ok(diluc.sets.every((s: any) => /^assets\/meta-gs\/artifact\/imgs\/[^/]+\/1\.webp$/.test(s.icon || '')),
       '每个套装都带花的部位图', JSON.stringify(diluc.sets.map((s: any) => s.icon)))
     const withSubs = diluc.artifacts.filter((a: any) => !a.empty && a.subs.length)
     ok(withSubs.length > 0, '圣遗物带副词条')
@@ -149,7 +149,7 @@ let chsView = null
      注意夹具里所有角色共用同一个 stamp，所以「改了迪卢克、其它人不变」才算真证明。 */
   const seed = '2026-01-02T03:04:05.000Z'
   app.db.prepare('UPDATE character SET fetched_at = ? WHERE avatar_id = ?').run(seed, diluc.avatarId)
-  const again = (await json(`/api/uid/${UID}?locale=chs`)).data
+  const again = (await json(`/api/accounts/${UID}?locale=chs`)).data
   const d2 = again.avatars.find((a: any) => a.avatarId === diluc.avatarId)
   ok(!!d2?.fetchedAt, '角色视图带自己的数据时间')
   eq(new Date(String(d2?.fetchedAt).replace(' ', 'T')).getTime(), new Date(seed).getTime(),
@@ -165,7 +165,7 @@ let chsView = null
 
 console.log('\n=== 4. 视图（en / ja / cht）===')
 {
-  const en = (await json(`/api/uid/${UID}?locale=en`)).data
+  const en = (await json(`/api/accounts/${UID}?locale=en`)).data
   const diluc = en.avatars.find((a: any) => a.nameZh === '迪卢克')
   if (chsView && en.locale === 'en') {
     ok(diluc && diluc.name !== diluc.nameZh,
@@ -181,10 +181,10 @@ console.log('\n=== 4. 视图（en / ja / cht）===')
     console.log(`  （语言表里没有 en，跳过英文断言 —— 先跑 tools/sync_i18n.py）`)
   }
 
-  const ja = (await json(`/api/uid/${UID}?locale=ja`)).data
+  const ja = (await json(`/api/accounts/${UID}?locale=ja`)).data
   ok(ja.locale === (ja.locale === 'ja' ? 'ja' : 'chs'), 'ja 认得出或退回 chs')
 
-  const cht = (await json(`/api/uid/${UID}?locale=CHT`)).data
+  const cht = (await json(`/api/accounts/${UID}?locale=CHT`)).data
   ok(cht.locale === 'cht' || cht.locale === 'chs', '大小写混写（CHT）也能认')
 }
 
@@ -192,9 +192,9 @@ console.log('\n=== 4. 视图（en / ja / cht）===')
 
 console.log('\n=== 5. 语言归一 ===')
 {
-  const alias = (await json(`/api/uid/${UID}?locale=zh-cn`)).data
+  const alias = (await json(`/api/accounts/${UID}?locale=zh-cn`)).data
   eq(alias.locale, 'chs', 'zh-cn → chs')
-  const weird = (await json(`/api/uid/${UID}?locale=klingon`)).data
+  const weird = (await json(`/api/accounts/${UID}?locale=klingon`)).data
   eq(weird.locale, 'chs', '认不出的语言退回默认')
 }
 
@@ -202,25 +202,20 @@ console.log('\n=== 5. 语言归一 ===')
 
 console.log('\n=== 6. 错误形状 ===')
 {
-  const r404 = await get(`/api/uid/999999`)
+  const r404 = await get(`/api/accounts/999999`)
   eq(r404.status, 404, '库里没有的 uid → 404')
   const b404 = await readJson(r404)
   eq(b404.ok, false, '失败响应带 ok:false')
   ok(!!b404.error?.code && !!b404.error?.message, `错误体有 code/message（${b404.error?.code}）`)
 
-  const rBad = await fetch(app.url + '/api/fetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid: 'not-a-number' })
-  })
-  eq(rBad.status, 400, 'uid 不是数字 → 400')
+  /* uid 在路径里，模板只收数字 —— 非数字根本匹配不上路由，所以是 404 而不是 400。
+     （参数都在 URL 里的好处：没有请求体要解析，也就没有 bad_body / bad_uid 这两类 400。） */
+  const rBad = await fetch(`${app.url}/api/accounts/not-a-number/refresh`, { method: 'POST' })
+  eq(rBad.status, 404, 'uid 不是数字 → 404（路径匹配不上）')
 
-  const rJunk = await fetch(app.url + '/api/fetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{{'
-  })
-  eq(rJunk.status, 400, '请求体不是 JSON → 400')
+  /* 方法对不上也没有路由：账号详情是只读的，POST 它不属于任何接口 */
+  const rMethod = await fetch(`${app.url}/api/accounts/${UID}`, { method: 'POST' })
+  eq(rMethod.status, 404, '方法对不上 → 404')
 
   const rNo = await get('/api/nope')
   eq(rNo.status, 404, '不存在的接口 → 404')
@@ -228,18 +223,15 @@ console.log('\n=== 6. 错误形状 ===')
 
 /* ---------------- 7. 抓取（注入假 enka，不联网）---------------- */
 
-console.log('\n=== 7. POST /api/fetch（用假 enka，不联网）===')
+console.log('\n=== 7. POST /api/accounts/:uid/refresh（用假 enka，不联网）===')
 {
   const app2 = await startServer({
     port: 0,
     dbFile: ':memory:',
     fetchImpl: async (uid) => ({ ...REAL, uid })
   })
-  const res = await fetch(app2.url + '/api/fetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid: UID, locale: 'chs' })
-  })
+  /* 刷新不要请求体：uid 在路径里、locale 在 query 里 */
+  const res = await fetch(`${app2.url}/api/accounts/${UID}/refresh?locale=chs`, { method: 'POST' })
   const body = await readJson(res)
   eq(res.status, 200, '抓取成功')
   eq(body.meta.fetched, summary.characterCount, 'meta.fetched 是本轮抓到的角色数')
@@ -251,10 +243,7 @@ console.log('\n=== 7. POST /api/fetch（用假 enka，不联网）===')
     port: 0, dbFile: ':memory:',
     fetchImpl: async () => { throw new Error('enka: 查不到这个 UID') }
   })
-  const r3 = await fetch(app3.url + '/api/fetch', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid: 123 })
-  })
+  const r3 = await fetch(`${app3.url}/api/accounts/123/refresh`, { method: 'POST' })
   eq(r3.status, 502, 'enka 业务错误 → 502')
   eq((await readJson(r3)).error.message, 'enka: 查不到这个 UID', '错误原文透传给人看')
   app3.server.close()
@@ -270,7 +259,9 @@ console.log('\n=== 8. 静态文件 ===')
   ok((r.headers.get('content-type') || '').includes('text/html'), '内容是 html')
   const html = await r.text()
   ok(html.includes('星天水镜'), '页面里有标题')
-  ok(html.includes('/bootstrap.js') && html.includes('/style.css'), '页面引了脚本和样式')
+  /* 引用写成**相对路径**（不是 /bootstrap.js）：GitHub Pages 的项目站挂在 /<repo>/ 下，
+     写成根绝对路径会指到域名根去，页面直接白屏。这条钉住这个部署前提。 */
+  ok(html.includes('src="bootstrap.js"') && html.includes('href="style.css"'), '页面引了脚本和样式（相对路径）')
 
   const js = await get('/bootstrap.js')
   ok((js.headers.get('content-type') || '').includes('javascript'), 'js 的 content-type 对')
@@ -336,7 +327,7 @@ console.log('\n=== 9. 武器三态 ===')
     const sum = ingestPayload(raw, { source: 'enka' })
     const a = await startServer({ port: 0, dbFile: ':memory:' })
     repo.saveFetch(a.db, { ...sum, stamp: '2026-09-13T00:00:00.000Z' })
-    const view = await readJson(await fetch(a.url + `/api/uid/${sum.account.uid}`))
+    const view = await readJson(await fetch(a.url + `/api/accounts/${sum.account.uid}`))
     const w = view.data.avatars.find((x: any) => x.avatarId === 10000016).weapon
     a.server.close()
 
@@ -348,7 +339,7 @@ console.log('\n=== 9. 武器三态 ===')
     /* 名字是空串：文案由前端按 state 选（「未知武器」/「无武器」），后端不写死 */
     eq(w.name, '', '  名字留空，不写死文案')
     if (c.expect === 'unknown') {
-      ok(/^\/assets\/common\/item\/atk-[a-z]+\.webp$/.test(w.icon || ''),
+      ok(/^assets\/common\/item\/atk-[a-z]+\.webp$/.test(w.icon || ''),
         `  退回**武器类型**通用图（${String(w.icon).split('/').pop()}）`)
       /* 关键：等级/精炼是 enka 给的，跟元数据认不认识无关，必须留 */
       eq(w.level, 90, '  等级留着（证明是「装备着」而不是「没装备」）')
@@ -364,7 +355,7 @@ console.log('\n=== 9. 武器三态 ===')
 
 /* ---------------- 10. 限流 ---------------- */
 /*
- * 公网一开放，/api/fetch 就是个「拿你的服务去打 enka」的口子，上游一限流全站 502，
+ * 公网一开放，POST /api/accounts/:uid/refresh 就是个「拿你的服务去打 enka」的口子，上游一限流全站 502，
  * 所以必须有闸。这里钉死三件事：
  *   ① 限的是**每个 IP**，不是一个 IP 超了就全站锁死；
  *   ② 还有一档**全局**的（换 IP 绕不过去），那是替 enka 上游挡的；
@@ -376,7 +367,7 @@ console.log('\n=== 9. 武器三态 ===')
 
 console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
 {
-  const r = await json(`/api/uid/${UID}/character/10000016/damage`)
+  const r = await json(`/api/accounts/${UID}/characters/10000016/damage`)
   eq(r.ok, true, '接口 ok')
   ok(!!r.data, '迪卢克算得出伤害')
   if (r.data) {
@@ -393,7 +384,7 @@ console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
     ok(r.data.rows.every((x: any) => typeof x.unit === 'string'), 'unit 恒为串（没有单位就是空串）')
 
     /* 迪奥娜：护盾量与治疗量不吃暴击 —— dmg 为 null，页面上期望值独占一行 */
-    const diona = (await json(`/api/uid/${UID}/character/10000039/damage`)).data
+    const diona = (await json(`/api/accounts/${UID}/characters/10000039/damage`)).data
     eq(diona.rows.map((x: any) => x.dmg), ['4,029', null, null], '护盾/治疗两条没有暴击伤害')
     /* buff 串按「来源：描述」拆成两列（内核给的是拼好的整串） */
     eq(diona.buffs[0], { title: '迪奥娜天赋', desc: '长按E获得75%护盾吸收量加成' }, 'buff 首条钉真值')
@@ -401,10 +392,10 @@ console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
   }
 
   /* 两种 404 语义不同：uid 不存在 ≠ 角色不在这个 uid 下 */
-  const noUid = await get(`/api/uid/123456789/character/10000016/damage`)
+  const noUid = await get(`/api/accounts/123456789/characters/10000016/damage`)
   eq(noUid.status, 404, '不存在的 uid → 404')
   eq((await readJson(noUid)).error.code, 'no_data', '错误码 no_data')
-  const noChar = await get(`/api/uid/${UID}/character/999999/damage`)
+  const noChar = await get(`/api/accounts/${UID}/characters/999999/damage`)
   eq(noChar.status, 404, 'uid 下没有的角色 → 404')
   eq((await readJson(noChar)).error.code, 'no_character', '错误码 no_character')
 }
@@ -412,11 +403,8 @@ console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
 console.log('\n=== 11. 限流 ===')
 {
   const fakeFetch = async (uid: number | string): Promise<unknown> => ({ ...REAL, uid })
-  const post = (url: string, uid: number, headers: Record<string, string> = {}): Promise<Response> => fetch(url + '/api/fetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ uid })
-  })
+  const post = (url: string, uid: number, headers: Record<string, string> = {}): Promise<Response> =>
+    fetch(`${url}/api/accounts/${uid}/refresh`, { method: 'POST', headers })
 
   /* ① 每 IP 一档 */
   {
@@ -471,10 +459,10 @@ console.log('\n=== 11. 限流 ===')
     })
     repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
     const g = (p: string): Promise<Response> => fetch(a.url + p, { headers: { 'X-Forwarded-For': '203.0.113.30' } })
-    eq((await g(`/api/uid/${UID}`)).status, 200, '  读接口：第 1 次放行')
-    eq((await g(`/api/uid/${UID}`)).status, 200, '  第 2 次放行')
-    eq((await g(`/api/uid/${UID}`)).status, 429, '  第 3 次被拦（读上限 2）')
-    eq((await g(`/api/uid/${UID}/character/10000016/damage`)).status, 429,
+    eq((await g(`/api/accounts/${UID}`)).status, 200, '  读接口：第 1 次放行')
+    eq((await g(`/api/accounts/${UID}`)).status, 200, '  第 2 次放行')
+    eq((await g(`/api/accounts/${UID}`)).status, 429, '  第 3 次被拦（读上限 2）')
+    eq((await g(`/api/accounts/${UID}/characters/10000016/damage`)).status, 429,
       '  伤害接口也走读档（要跑内核，不设限能拿它打满 CPU）')
     eq((await g('/api/health')).status, 200, '  /api/health 不限（探活被拦会误报故障）')
     eq((await g('/')).status, 200, '  静态页不限')
@@ -488,7 +476,7 @@ console.log('\n=== 11. 限流 ===')
       rateLimit: { read: { limit: 1, windowMs: 300 } }
     })
     repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
-    const g = () => fetch(a.url + `/api/uid/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.40' } })
+    const g = () => fetch(a.url + `/api/accounts/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.40' } })
     eq((await g()).status, 200, '  短窗口：第 1 次放行')
     eq((await g()).status, 429, '  紧接着再来 → 429')
     await new Promise(r => setTimeout(r, 400))
@@ -506,7 +494,7 @@ console.log('\n=== 11. 限流 ===')
       rateLimit: { read: { limit: 2, windowMs: 1000 } }
     })
     repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
-    const g = () => fetch(a.url + `/api/uid/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.50' } })
+    const g = () => fetch(a.url + `/api/accounts/${UID}`, { headers: { 'X-Forwarded-For': '203.0.113.50' } })
     eq((await g()).status, 200, '  打满前：第 1 次放行')
     eq((await g()).status, 200, '  第 2 次放行（配额刚好用尽）')
     const r3 = await g()
@@ -515,6 +503,71 @@ console.log('\n=== 11. 限流 ===')
       `  Retry-After 是「补 1 个」而不是整窗口（${r3.headers.get('retry-after')} 秒）`)
     await new Promise(r => setTimeout(r, 700))
     eq((await g()).status, 200, '  等 700ms（> 补充间隔、< 窗口）→ 已恢复，没被窗口锁死')
+    a.server.close()
+  }
+}
+
+/* ---------------- 12. 跨域（前端单独托管时才用得上）---------------- */
+/*
+ * 本地运行时用不着（一个进程既给页面又给接口，压根不触发跨域）—— 而且开了就是
+ * 允许任意站点的脚本读走这里的数据，所以**必须显式配白名单才生效**。
+ * 前端单独托管（比如丢到 GitHub Pages）+ 后端另放 VPS 时，页面域名和接口域名不是一回事，
+ * 这时才需要：启动加 --cors-origin=https://xxx.github.io。
+ */
+console.log('\n=== 12. 跨域 ===')
+{
+  /* ① 默认不开：没配白名单时，来访 Origin 一律拿不到许可头（请求本身照常通） */
+  {
+    const r = await fetch(app.url + '/api/health', { headers: { Origin: 'https://pages.example' } })
+    eq(r.status, 200, '不配白名单：请求照样通（跨域拦不拦是浏览器的事，服务端照常回）')
+    eq(r.headers.get('access-control-allow-origin'), null, '不配白名单：不给 CORS 头')
+  }
+
+  /* ② 白名单要**一字不差**对上；回的是来访的 Origin 本身，不是通配符 */
+  {
+    const a = await startServer({ port: 0, dbFile: ':memory:', corsOrigins: ['https://pages.example'] })
+    const hit = await fetch(a.url + '/api/health', { headers: { Origin: 'https://pages.example' } })
+    eq(hit.headers.get('access-control-allow-origin'), 'https://pages.example', '白名单内：回来访的 Origin')
+    eq(hit.headers.get('vary'), 'Origin', '白名单内：带 Vary: Origin（免得缓存把给 A 的许可回给 B）')
+
+    const miss = await fetch(a.url + '/api/health', { headers: { Origin: 'https://evil.example' } })
+    eq(miss.status, 200, '白名单外：请求本身还是通的')
+    eq(miss.headers.get('access-control-allow-origin'), null, '白名单外：不给 CORS 头')
+
+    /* 同源请求不带 Origin，不需要许可头 */
+    const same = await fetch(a.url + '/api/health')
+    eq(same.headers.get('access-control-allow-origin'), null, '不带 Origin：不需要 CORS 头')
+    a.server.close()
+  }
+
+  /* ③ 预检（OPTIONS）：跨域请求只要带了自定义头，浏览器就会先探一发，
+        这里不回 204 真正的请求就发不出去；而且预检**不该占限流配额**。 */
+  {
+    const a = await startServer({
+      port: 0, dbFile: ':memory:', corsOrigins: ['https://pages.example'],
+      rateLimit: { read: { limit: 1, windowMs: 60000 } }   /* 一分钟只够一次正常请求 */
+    })
+    /* 新实例是空库，得自己播种 —— 不然账号接口是 404 不是 200，测的就不是限流了 */
+    repo.saveFetch(a.db, { ...summary, stamp: '2026-09-13T00:00:00.000Z' })
+    const pre = () => fetch(`${a.url}/api/accounts/${UID}/refresh`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://pages.example',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type'
+      }
+    })
+    const p1 = await pre()
+    eq(p1.status, 204, '预检：回 204（不是 404/405，否则刷新按钮直接哑火）')
+    eq(p1.headers.get('access-control-allow-methods'), 'GET, POST, OPTIONS', '预检：放行的方法含 POST')
+    ok((p1.headers.get('access-control-allow-headers') || '').toLowerCase().includes('content-type'),
+      '预检：放行的头含 Content-Type（跨域带自定义头时靠它过预检）')
+
+    /* 连刷预检不占配额：配额只有 1，刷完 5 发预检后正常 GET 仍要能过一次，第二次才 429 */
+    for (let i = 0; i < 5; i++) eq((await pre()).status, 204, `预检连发 ${i + 1}/5 仍是 204（不计入限流）`)
+    const g = () => fetch(a.url + `/api/accounts/${UID}`)
+    eq((await g()).status, 200, '  预检刷完，正常请求照样放行')
+    eq((await g()).status, 429, '  配额用尽后才 429')
     a.server.close()
   }
 }

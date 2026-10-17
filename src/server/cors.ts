@@ -22,8 +22,8 @@ function corsHeaders (req: IncomingMessage, allowed: string[]): Headers {
  * 处理跨域。返回 true = 这是一发预检（OPTIONS），已经回完了，调用方直接 return；
  * 返回 false = 许可头已挂到 res 上（没配白名单时什么都没挂），继续走业务。
  *
- * 预检必须**先于限流**调用：浏览器跨域 POST（/api/fetch 带 Content-Type: application/json）
- * 之前会先探一发 OPTIONS，这里不回 204 它就拦掉，真正的请求根本发不出去。
+ * 预检必须**先于限流**调用：浏览器在跨域请求带自定义头时会先探一发 OPTIONS，
+ * 这里不回 204 它就拦掉，真正的请求根本发不出去。
  * 预检也不该计入限流 —— 它不是业务请求，刷它没有意义，算了反而让「刷新」连点几下就误伤。
  */
 export function applyCors (req: IncomingMessage, res: ServerResponse, allowed: string[]): boolean {

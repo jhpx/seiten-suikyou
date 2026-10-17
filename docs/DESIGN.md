@@ -91,7 +91,7 @@ miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / ima
 内核 `getDetail()` 却按 `旅行者/<elem>` 取数，少这一层旅行者伤害必炸。
 所以 GLOBS 里 `data.json` 有深度 1 和深度 2 两条。
 
-**页面接线**（2026-10-13）：`GET /api/uid/:uid/character/:avatarId/damage` 出视图对象
+**页面接线**（2026-10-13）：`GET /api/accounts/:uid/characters/:avatarId/damage` 出视图对象
 （`shape.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
 明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `miao.css` 的 `.dmg-cont`）。
 两个 deliberate 的偏差：表格用 **grid 而非上游的 display:table**（上游让不吃暴击的行把

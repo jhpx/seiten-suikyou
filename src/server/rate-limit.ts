@@ -3,8 +3,10 @@
  *
  * 对外只有一个入口 createRateGate()：
  *   const gate = createRateGate({ trustProxy, rules: rateLimit })   // rules 传 false = 整个关掉
- *   const wait = gate.check(req, pathname)                          // 放行 null；拦下 = 还要等几秒
+ *   const wait = gate.check(req, tier)                              // 放行 null；拦下 = 还要等几秒
  * 于是主服务里限流只占三行，档位、取 IP、429 该等多久都不用它操心。
+ * **哪个接口走哪档不在这里判断** —— 那是接口的属性，写在 api/index.ts 的路由表里；
+ * 这里只认 tier，所以改路径、加接口都不用回来动这个文件。
  *
  * 为什么用令牌桶而不是「整分钟清零」：固定窗口在边界上能翻倍（第 59 秒打满、第 61 秒又能打满，
  * 两秒里放了两次配额）。令牌桶匀速补充、没这个缝，同时允许短时突发（桶满时可一次取光），
@@ -32,13 +34,17 @@ export interface RateRule { limit: number; windowMs: number }
 /** 三档限流的档位（fetch 每 IP / fetchAll 全局 / read 每 IP） */
 export interface RateRules { fetch: RateRule; fetchAll: RateRule; read: RateRule }
 
+/** 接口能选的档位。哪个接口走哪档写在 api/index.ts 的路由表里，这里只管怎么算。 */
+export type RateTier = 'read' | 'fetch'
+
 /*
  * 三档而不是一刀切：
  *   fetch    —— 会联网打 enka。上游有频率限制，打爆了就是全站 502，所以这档最要紧。
  *   fetchAll —— 全局一档，不分 IP。enka 限的是「我们这个出口」，
  *               一百个人各刷 5 次，对上游来说跟一个人刷 500 次没区别。
  *   read     —— 只读本地库，代价低，宽松些；但仍然要设上限，挡住脚本把 uid 扫一遍。
- * 静态文件和 /api/meta、/api/health 故意不限：health 是探活用的，被限住会误报故障。
+ * 静态文件和标了 none 的接口（/api/meta、/api/health）故意不限：health 是探活用的，
+ * 被限住会误报故障。
  *
  * 三档都能用环境变量改（RATE_FETCH / RATE_FETCH_ALL / RATE_READ，填每分钟几次）；
  * 本地调试想彻底关掉就加 --no-rate-limit。
@@ -171,7 +177,7 @@ function createBuckets ({ now = () => Date.now() }: { now?: () => number } = {})
  *  trustProxy 含义见 clientIp；now 是时间源（测试用）。 */
 export interface RateGate {
   rules: RateRules
-  check: (req: IncomingMessage, pathname: string) => number | null
+  check: (req: IncomingMessage, tier: RateTier) => number | null
   readonly size: number
 }
 
@@ -190,19 +196,15 @@ export function createRateGate ({ trustProxy = false, rules, now = () => Date.no
     return t.ok ? 0 : Math.max(1, Math.ceil(t.retryAfterMs / 1000))
   }
 
-  /* 这次请求放不放行：null = 放行；数字 = 拦下，且还要等这么多秒 */
-  function check (req: IncomingMessage, pathname: string): number | null {
+  /* 这次请求放不放行：null = 放行；数字 = 拦下，且还要等这么多秒。
+     档位由调用方按路由表给（哪个接口走哪档是接口的属性，不归这里猜），这里只认 tier。 */
+  function check (req: IncomingMessage, tier: RateTier): number | null {
     const ip = clientIp(req, trustProxy)
     /* 抓取要连过两档才算过 —— 本 IP 一档、全局一档（保护 enka 上游） */
-    if (req.method === 'POST' && pathname === '/api/fetch') {
+    if (tier === 'fetch') {
       return hit(r.fetch, `ip:${ip}:fetch`) || hit(r.fetchAll, 'all:fetch') || null
     }
-    /* 读档纳入「角色伤害计算」：它只读库，但要跑一遍评分内核（比拼视图对象贵一个量级），
-       不设限的话拿这个接口轮询打满 CPU 比扫 uid 还省事。 */
-    if (req.method === 'GET' && (pathname === '/api/uids' || /^\/api\/uid\/\d+(\/character\/\d+\/damage)?$/.test(pathname))) {
-      return hit(r.read, `ip:${ip}:read`) || null
-    }
-    return null
+    return hit(r.read, `ip:${ip}:read`) || null
   }
 
   return { rules: r, check, get size () { return buckets.size } }
