@@ -22,18 +22,21 @@
 ## 快速开始
 
 ```bash
+git clone --recursive <仓库地址>    # 前端是 submodule，漏了 --recursive 页面会 404
 npm install                        # 两个运行时依赖：lodash + limiter
 npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
-npm run sync:assets                # 从 miao-plugin 全量复制图片素材（可选，不跑则用 CSS 色块占位）
 npm run server                     # 打开 http://127.0.0.1:8787
 ```
 
 - **运行时要求**：Node ≥ 22.18（`.ts` 直接跑，靠内置类型剥离，零构建）。本地库走 Node 自带的 `node:sqlite`，不引原生模块
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
-- **不跑 `sync:assets` 也能用**，只是角色立绘、圣遗物图标会退化成 CSS 色块。
+- **前端是 git submodule**：`web/` 是前端子仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)
+  的检出。clone 母仓库要带 `--recursive`（或 clone 后 `git submodule update --init`）—— 漏了这步，
+  接口照常跑、页面全 404。约 100MB 图片素材已随子仓库提交，开箱即用。
 - `sync:assets` 从 miao-plugin 的 `resources/` 整目录复制，**全程离线**：不联网、不按需、不猜名字
   （素材源：`MIAO_PLUGIN_PATH`，默认 `../miao-plugin`，跟 `npm run sync` 一个约定）。
+  落盘到 `web/assets/`（子仓库里）—— 同步完在子仓库提交，母仓库再更新子模块指针。
   全量约 100 MB、1900+ 个文件，一次跑完以后随便加角色都不用再管。
   miao 仓库里唯一没有的 7 张元素符号，作为种子放在 `tools/assets-seed/` 里随仓库走。
 - 想对账「页面要的图是不是都落盘了」：`npm run list:assets && npm run sync:assets`。
@@ -164,7 +167,7 @@ npm run server -- --host 127.0.0.1                     # 只给本机用，不�
 | `GET /assets/<路径>` | 图片素材（扩展名白名单 + 目录穿越防护 + 一天缓存） |
 | `GET /` | H5 页面 |
 
-静态页走**通用静态服务**：整个 `public/` 目录按扩展名白名单 + 目录穿越防护托管（`/` 与 `/index.html` 给首页，`/bootstrap.js` 等 ES 模块逐个加载，`/style.css`、`/miao.css` 给样式），`/api/*` 一律交给接口、不会被静态分支抢走。
+静态页走**通用静态服务**：整个 `web/` 目录（前端子仓库的检出）按扩展名白名单 + 目录穿越防护托管（`/` 与 `/index.html` 给首页，`/bootstrap.js` 等 ES 模块逐个加载，`/style.css`、`/miao.css` 给样式），`/api/*` 一律交给接口、不会被静态分支抢走。
 失败一律同一个形状：`{ ok:false, error:{ code, message } }`。
 
 ### 限流
@@ -198,15 +201,17 @@ npm run server -- --no-rate-limit                  # 本地调试时整个关掉
 
 ### 分开部署：前端单独托管（GitHub Pages）
 
-页面是**纯静态**的（原生 ES 模块、零构建），可以脱离后端单独托管；但**数据不行** ——
+前端是独立仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)（本仓库以 submodule 挂在 `web/`），
+纯静态、零构建，可以脱离后端单独托管；但**数据不行** ——
 评分和伤害计算要跑 miao 内核（读 `vendor/` 里的权重表、角色表）+ 读 SQLite，浏览器做不到。
 所以「上 Pages」的正确姿势是拆两半：
 
 | 一半 | 放哪 | 内容 |
 |---|---|---|
-| 前端（静态） | GitHub Pages | 整个 `src/server/public/`，含约 101MB 图片素材 |
+| 前端（静态） | GitHub Pages | 前端子仓库 seiten-suikyou-web 整仓，含约 101MB 图片素材 |
 | 后端（接口） | 一台有公网地址的机器 | `/api/*`，前端跨域去调 |
 
+导出工具 `export_pages.py` 跟着前端走，在前端子仓库里跑（用法见其 README）。
 完整的三步走、相对路径为什么不需要改写、子路径与安全的注意事项，
 都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
@@ -326,7 +331,7 @@ seiten-suikyou/
 │   └── server/
 │       ├── index.ts          #   装配：起服务 / 按路由限流 / 按前缀分派（零新依赖）
 │       ├── http.ts           #   响应原语：发 JSON / 发文件
-│       ├── static.ts         #   静态托管：/assets/* 与 public/（扩展名白名单 + 穿越防护）
+│       ├── static.ts         #   静态托管：/assets/* 与 web/ 子模块（扩展名白名单 + 穿越防护）
 │       ├── cors.ts           #   跨域：白名单许可头 + 预检 204（默认不开）
 │       ├── rate-limit.ts     #   限流三档（只认档位，不认路径）
 │       ├── api/              #   接口：路由表 + 按资源分文件（契约见 docs/API.md）
@@ -335,19 +340,19 @@ seiten-suikyou/
 │       │   ├── meta.ts       #     GET /api/meta · GET /api/health
 │       │   ├── accounts.ts   #     GET /api/accounts · /api/accounts/:uid · POST …/refresh
 │       │   └── characters.ts #     GET /api/accounts/:uid/characters/:avatarId/damage
-│       └── public/           #   页面：原生 ES 模块，无框架无 CDN（type="module"，零构建）
-│           ├── index.html    #     外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
-│           ├── bootstrap.js  #     入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
-│           ├── core.js       #     基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
-│           ├── roster.js     #     feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
-│           ├── filter.js     #     feature：筛选条 = 排序｜视图切换｜漏斗多选面板（元素 / 评分 / 权重）
-│           ├── sort.js       #     feature：多条件排序（至多 3 字段的排序链）
-│           ├── detail.js     #     feature：角色明细画布 + 缩放
-│           ├── i18n.js       #     feature：loadMeta / 切语言 / 静态文案
-│           ├── history.js    #     feature：UID 历史（localStorage）
-│           ├── style.css     #     外壳样式
-│           ├── miao.css      #     评分卡样式（miao 的 profile-detail.css 移植版）
-│           └── assets/       #     图片素材（sync:assets 从 miao-plugin 复制，约 100MB，随仓库提交）
+├── web/                      # 前端子仓库 seiten-suikyou-web 的检出（submodule，见「快速开始」）
+│   ├── index.html            #   外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
+│   ├── bootstrap.js          #   入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
+│   ├── core.js               #   基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
+│   ├── roster.js             #   feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
+│   ├── filter.js             #   feature：筛选条 = 排序｜视图切换｜漏斗多选面板（元素 / 评分 / 权重）
+│   ├── sort.js               #   feature：多条件排序（至多 3 字段的排序链）
+│   ├── detail.js             #   feature：角色明细画布 + 缩放
+│   ├── i18n.js               #   feature：loadMeta / 切语言 / 静态文案
+│   ├── history.js            #   feature：UID 历史（localStorage）
+│   ├── style.css             #   外壳样式
+│   ├── miao.css              #   评分卡样式（miao 的 profile-detail.css 移植版）
+│   └── assets/               #   图片素材（sync:assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
@@ -355,8 +360,7 @@ seiten-suikyou/
 │   ├── sync.py               # ★ 同步上游的唯一入口（编排下面三个，按依赖顺序跑）
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
-│   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，全程离线）
-│   ├── export_pages.py       # 导出可静态托管的前端目录（前后端分开部署时用，见 docs/DEPLOY.md）
+│   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，落盘 web/assets/，全程离线）
 │   ├── list_assets.ts        # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
 │   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）
 │   ├── shot.ts               # headless chrome 截图

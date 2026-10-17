@@ -5,7 +5,7 @@
 
 后端源码：`src/server/api/index.ts` 的路由表（**唯一**列出 URL 的地方）+ 同目录各资源文件
 （`meta.ts` / `accounts.ts` / `characters.ts`）+ `src/view/shape.ts` 视图整形；
-前端调用集中封装在 `src/server/public/core.js` 的 `api()` / `uidApiUrl()`。
+前端调用集中封装在前端子仓库 seiten-suikyou-web 的 `core.js` 的 `api()` / `uidApiUrl()`。
 
 ---
 

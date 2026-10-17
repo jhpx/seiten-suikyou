@@ -194,7 +194,7 @@ for (const o of leftovers.slice(0, 20)) console.log('        ' + o)
 // ─────────────────────────────────── 6. 属性图标 SVG 的洁净度与单一配色
 console.log('\n=== 6. 属性图标 SVG（assets/character/svgs/）===')
 
-const SVG_DIR = path.join(ROOT, 'src/server/public/assets/character/svgs')
+const SVG_DIR = path.join(ROOT, 'web/assets/character/svgs')
 const svgs = fs.readdirSync(SVG_DIR).filter(f => f.endsWith('.svg')).sort()
 ok(svgs.length === 16, `16 张属性图标齐（实际 ${svgs.length}）`)
 

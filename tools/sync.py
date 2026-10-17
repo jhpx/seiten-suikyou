@@ -68,7 +68,7 @@ STEPS: list[tuple[str, str, str]] = [
     ("i18n", "sync_i18n.py",
      "从官方 TextMap 提取多语言名字表 → vendor/i18n/names.json，产出 i18n-report.md"),
     ("assets", "sync_assets.py",
-     "全量复制图片素材 → src/server/public/assets/（约 100MB / 1886 文件）"),
+     "全量复制图片素材 → web/assets/（前端子仓库，约 100MB / 1886 文件）"),
 ]
 
 GREEN, RED, YELLOW, DIM, RESET = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
@@ -192,7 +192,7 @@ def do_check() -> int:
     print(f"上游：{miao}")
     checks = [
         ("vendor/miao", miao, "内核代码 / 权重表 / 元数据"),
-        ("src/server/public/assets", miao / "resources", "图片素材"),
+        ("web/assets", miao / "resources", "图片素材"),
     ]
     total_diff = 0
     for rel, base, what in checks:

@@ -187,7 +187,7 @@ enka 原始响应
 
 ## 三、页面
 
-页面在 `src/server/public/`，原生 JS + `<template>` 克隆，无框架、无 CDN。
+页面在独立的前端子仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)，母仓库以 submodule 挂在 `web/`：原生 JS + `<template>` 克隆，无框架、无 CDN。
 分两个视图，都在同一个 HTML 里切换。首页与明细页都是**照着 miao 的出图还原**的。
 
 本目录下放着两份还原用的参考稿，改版式前先看它们：
@@ -263,8 +263,9 @@ enka 原始响应
 ### 图片素材
 
 `vendor/miao/` 只同步代码与元数据，**不同步二进制图片**（太大）。页面要还原 miao 的评分卡，
-需要三类素材：角色立绘、圣遗物/武器图标、UI 小图。它们落在 `src/server/public/assets/`，
-**不进 git**，按需下载（命令见 README）。
+需要三类素材：角色立绘、圣遗物/武器图标、UI 小图。它们落在前端子仓库的 `web/assets/`，
+**随子仓库提交**（约 100 MB / 1886 个文件）—— 重建依赖本地 miao-plugin 目录在、且版本对得上，
+换了机器素材不能凭空长出来。更新用 `npm run sync:assets`（全量复制，命令见 README）。
 
 三个设计点：
 
@@ -342,9 +343,9 @@ enka 原始响应
    （`test/pipeline.ts` 断言「空库的列 == 模型 COLS」）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
-   ⚠️ `src/server/public/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件），
-   并不在 `.gitignore` 里。理由是重新 `sync:assets` 依赖本地那个 miao-plugin 目录在、且版本对得上，
-   换了机器素材就全没了。这条约定写在 `.gitignore` 自己的注释里。
+   ⚠️ `web/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件）——
+   前端已拆成独立子仓库 seiten-suikyou-web，素材随那个仓库提交，母仓库这边只存子模块指针。
+   理由是重新 `sync:assets` 依赖本地那个 miao-plugin 目录在、且版本对得上，换了机器素材就全没了。
 10. **`--check` 只能对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
     （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。离库打分时 `--offline --check` 会提示做不了。
 11. **同步完记得提交**：报告里「相对上一版」的基准是**最后一个动过 `vendor/miao` 的 git 提交**。

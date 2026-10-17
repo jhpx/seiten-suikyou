@@ -6,7 +6,7 @@ __pycache__/
 *.pyc
 *.log
 .DS_Store
-# 图片素材（约 100MB）**随仓库走，要提交**：虽然能靠 npm run sync:assets 从 miao-plugin 重建，
-# 但重建依赖本地那个 miao-plugin 目录在、且版本对得上 —— 换了机器素材就全没了。
-# 仓库里留一份，clone 下来页面直接是完整的。
+# 图片素材已随前端子仓库 seiten-suikyou-web 提交（母仓库的 web/ 只是子模块指针）：
+# 重建依赖本地 miao-plugin 目录在、且版本对得上 —— 换了机器素材就全没了，所以前端仓库里留一份，
+# clone 下来页面直接是完整的。本仓库不再新增这 100MB 的历史。
 /.workbuddy

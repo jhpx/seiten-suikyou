@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-把 miao-plugin 的图片素材**全量**复制进 src/server/public/assets/。
+把 miao-plugin 的图片素材**全量**复制进 web/assets/（前端子仓库 seiten-suikyou-web 的检出）。
+
+落盘点在子仓库里：同步完素材的变动要在 web/ 里提交，母仓库再跟着更新子模块指针。
 
 为什么是「本地全量复制」而不是「按需从远端下载」：
 
@@ -18,7 +20,7 @@
 用法：
     python tools/sync_assets.py
     MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_assets.py
-    python tools/sync_assets.py --out src/server/public/assets
+    python tools/sync_assets.py --out web/assets
 
 全程离线，一张图都不从网络下。唯一的例外是 7 张元素符号（common/elem/{元素}.png）：
 miao 整个仓库没有这图，所以把它们（7 张共 45KB）直接放在仓库里当种子
@@ -32,7 +34,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUT = ROOT / "src" / "server" / "public" / "assets"
+DEFAULT_OUT = ROOT / "web" / "assets"
 DEFAULT_LIST = ROOT / ".tmp" / "asset-list.json"
 # 仓库自带的种子素材：miao 那边找不到、又必须有的图放这里，进 git
 SEED = ROOT / "tools" / "assets-seed"
