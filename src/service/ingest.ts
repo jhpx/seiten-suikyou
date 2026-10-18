@@ -5,7 +5,6 @@
  * 之后每次请求调 `fetch(uid)`。控制器不碰 inflight，也不需要知道上游是谁。
  *
  * ⚠️ 失败也记 fetch_log（ok=0）：上游抖过多少次、为什么抖，只留痕在这里。
- * 同一 uid 的并发被 inflight 合并，所以失败也只记一行。
  */
 import type { Db } from '../repository/db.ts'
 import * as repo from '../repository/index.ts'

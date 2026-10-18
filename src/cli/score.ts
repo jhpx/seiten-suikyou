@@ -70,7 +70,7 @@ function renderCharacter (character: Character, profile: MiaoProfile, result: Ma
   const talent = deriveTalent(char, character.skillLevelMap || {})
   const talentStr = ['a', 'e', 'q'].filter(k => talent[k]).map(k => `${k.toUpperCase()}${talent[k]}`).join(' ')
   const name = charName(profile, locale)
-  /* 与网页一个口径（shape.ts 的 weapon.state）：装备了但元数据不认识 → 「未知武器」，
+  /* 与网页一个口径（view.ts 的 weapon.state）：装备了但元数据不认识 → 「未知武器」，
      真没装备才是「无武器」。别写成「（未识别）」—— 那是角色行的词，用在这里会被读成角色没认出来。 */
   const wname = (character.weapon.equipped ? i18n.weaponName(character.weapon.itemId, locale) : null) ||
     profile.weapon.name || ui(character.weapon.equipped ? 'unknownWeapon' : 'noWeapon')
@@ -87,7 +87,7 @@ function renderCharacter (character: Character, profile: MiaoProfile, result: Ma
     const entry = result.artis?.[pos]
     if (!entry || !entry.name) { out.push(`  ${pos} ${slotLabel(pos, locale)}  ——`); continue }
     const artifact = artifactByPos.get(pos)
-    /* 显示数值优先用 enka 原始值、内核值兜底（见 shape.ts 的 attrValueText / enkaNumsOf） */
+    /* 显示数值优先用 enka 原始值、内核值兜底（见 view.ts 的 attrValueText / enkaNumsOf） */
     const enka = enkaNumsOf(artifact)
     const { main: rawMain, sub: rawSub } = rawNumsOf(profile.artis?.artis?.[pos])
     const aname = (artifact?.nameHash && i18n.name(artifact.nameHash, locale)) || entry.name

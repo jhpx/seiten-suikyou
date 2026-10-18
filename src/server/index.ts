@@ -4,19 +4,17 @@
  * `server/` 和 `cli/` 是一对：两个进程入口，一个对外（HTTP），一个对内（命令行）。
  * 装配之外的东西都不该长在这里 —— 接口实现去 rest/，用例去 service/。
  *
- * 分层（从外到内，四层 + 三个横向件）：
- *   server/      本目录：装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
+ * 目录速查：
+ *   server/      装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
  *   rest/        控制器：一个资源一个文件（accounts / characters / meta），加两个共用件 params / reply
- *   service/     用例编排（抓取落库、账号视图成型）+ 对控制器的能力契约（context）。业务层不懂 HTTP
+ *   service/     用例编排（抓取落库、账号视图成型）+ 对控制器的能力契约（context）
  *   domain/      领域模型：Account / Character / Weapon / Artifact
  *   repository/  仓储与 DAO：聚合读写 + 一行一表的 SQL
- *
- * 横向件（不参与那条竖向流水线）：
  *   upstream/    对外部数据源：抓取（enka）+ 原始响应翻译成实体（enka-account）
  *   kernel/      对 miao 评分内核：materialize（实体 → profile）、damage（伤害出口）
- *   common/      字典与通用小件：names（官方文案表）、ui（界面文案）、util（纯函数）
+ *   common/      config（全局默认值）、i18n（多语言门面）、names（官方文案表）、ui（界面文案）、util
  *
- * 装配顺序也是有讲究的：cors 必须在限流前（预检不占配额），静态托管必须在路由后
+ * 装配顺序：cors 必须在限流前（预检不占配额），静态托管必须在路由后
  * （能命中接口的路径先被路由回掉，剩下的才当文件找）。
  */
 import os from 'node:os'
@@ -130,8 +128,8 @@ export function createApp ({
  * 起监听。其余选项原样转给 createApp。
  *
  * host 默认**回环**而不是对外：调用方有两类 —— 一类是已经想清楚要暴露到哪的（文件末尾的 CLI
- * 入口，显式传 config 的 DEFAULT_HOST），另一类是测试和脚本，后者不传 host 时不该在不知情的情况下
- * 开一个局域网端口（测试的内存库里有真实 UID 数据）。对外服务是正式入口的显式决定，不是库的默认。
+ * 入口，显式传 DEFAULT_HOST），另一类是测试和脚本，后者不传 host 时不该在不知情的情况下
+ * 开一个局域网端口。对外服务是正式入口的显式决定，不是库的默认。
  */
 export function startServer ({ port = DEFAULT_PORT, host = LOCAL_HOST, ...appOpts }: { port?: number, host?: string } & AppOptions = {}) {
   const created = createApp(appOpts)

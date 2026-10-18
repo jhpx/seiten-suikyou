@@ -92,7 +92,7 @@ miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / ima
 所以 GLOBS 里 `data.json` 有深度 1 和深度 2 两条。
 
 **页面接线**（2026-10-13）：`GET /api/accounts/:uid/characters/:avatarId/damage` 出视图对象
-（`shape.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
+（`view.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
 明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `miao.css` 的 `.dmg-cont`）。
 两个 deliberate 的偏差：表格用 **grid 而非上游的 display:table**（上游让不吃暴击的行把
 期望值单元格设 `width:200%` 冒充跨列，自动布局下会把暴击列撑到 311px、期望列压到 56px，
@@ -235,7 +235,7 @@ enka 原始响应
   生命 / 攻 / 防 / 精通 + 双暴 + 充能 + 三种加成（元素伤 / 物伤 / 治疗）—— 顺序照面板从上往下读，
   加成按用得多寡排（元素伤 >> 物伤 > 治疗），治疗垫底。
   ⚠️ `dmg` 那条显示**官方全称「元素伤害加成」**，不是 miao 表里那句简称「伤害增加」——
-  三行加成连着读，简称看不出是哪个加成。改在 `shape.ts` 的 `STAT_TITLE_FIX`（改上游表会被同步覆盖）。
+  三行加成连着读，简称看不出是哪个加成。改在 `view.ts` 的 `STAT_TITLE_FIX`（改上游表会被同步覆盖）。
   只收权重表里**真会出现**的键；大/小词条（atk / atkPlus…）永远成对出现、权重相等，所以一条只挂一个键。
   选中数在漏斗图标上挂角标
 
@@ -363,7 +363,7 @@ enka 原始响应
 13. **评分权重表不是每个角色都有的**。上游 `artis-mark.js` 的 `usefulAttr` 收录不全时，
     内核拿通用表兜底（`ArtisMarkCfg.js:99`：`atk75/cpct100/cdmg100/dmg100/phy100`），
     但标题照旧拼 `${char.abbr}-通用` —— 看着像上游给这个角色定过一套权重。
-    所以内核在 `getCfg` 里透出 `isDefaultWeight`，view 层（`shape.ts` 的 `classTitleOf`）
+    所以内核在 `getCfg` 里透出 `isDefaultWeight`，view 层（`service/view.ts` 的 `classTitleOf`）
     据此把前缀换成「默认」：**默认-通用**。只换前缀、保留场景词（通用/护摩/绝缘4），
     「用的哪套权重」和「命中哪个场景」仍然分得开。
     同步上游会自然消掉这件事（沃雅妮莎、薇斯纳就是 2026-10-06 同步时补进来的），
@@ -388,6 +388,12 @@ enka 原始响应
     ⚠️ `isDefaultWeight` 必须**无条件**改前缀：`def()` 内部的绝缘4/西风特判对兜底角色同样生效，
     写成「标题带场景词就不改」会漏掉「默认-绝缘4」。
     ⚠️ 比对权重差异时**「缺失的键」必须与 0 视为等价** —— 直接 `JSON.stringify` 比会把「缺 4 个 0」误判成不一致。
+
+15. **分层方向不许反向**（2026-10-18 定稿）：`server → rest → service → repository → domain` 只能从上往下引；
+    `upstream` / `kernel` / `common` 是横向叶子，不参与这条流水线。几条硬规矩：
+    控制器只认 `service/context.ts` 这一份能力契约（**不给 db**，否则迟早顺手拼个 SELECT）；
+    `rest/` 控制器平铺、不许 `rest/controllers/`；`server/` 只装配（URL 表在 `routes.ts`，
+    装配顺序 cors → 路由 → 静态 → 兜底）。全部由 `test/arch.ts` 断言钉住，改结构先跑它。
 
 ---
 

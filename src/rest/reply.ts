@@ -1,10 +1,7 @@
 /*
  * 响应原语。整个服务只有一种成功形状和一种失败形状：
  *   成功 { ok: true, data }（可选 meta）   失败 { ok: false, error: { code, message } }
- * 前端只认这两种，所以别在某个接口里另发明一种。
- *
- * 这一层只被控制器用，另外 server/ 的兜底（notFound / onError）也借它保持同一种形状 ——
- * 业务层（service）不该知道 HTTP 长什么样，它判空就返回 null / 判别结果，状态码在这里才变成数字。
+ * 前端只认这两种。server/ 的兜底（notFound / onError）也借它保持同一种形状。
  */
 import type { Context } from 'hono'
 

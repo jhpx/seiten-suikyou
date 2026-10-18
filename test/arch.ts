@@ -90,15 +90,8 @@ console.log('\n=== 2. 本地替代的边界（Cfg / Version / Data.getRoot）===
 ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Cfg.js')), '_local/Cfg.js 存在（生成物）')
 ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Version.js')), '_local/Version.js 存在（生成物）')
 
-/* Cfg.get 查不到键时**必须回落到调用点给的 def** —— 这是「本地替代」唯一的对外行为约定。
-   上游那句 `lodash.isUndefined(cfg) ? def : ret` 判断的是**整个 cfg 对象**，而上游的 cfg
-   永远不是 undefined（它是「schema 默认值 + 用户存档」合并出来的），所以那是死代码。
-   上游实际给出的就是 **schema 默认值**；我们手上没有那份 schema，只能靠调用点自带的默认值还原。
-   ⚠️ 这条断言原来写反了（当时写的是「→ undefined，上游就是这么写的」），
-   于是把一个 bug 当成规矩钉死在这里，谁也没发现：
-   `components/Format.js` 的 `Cfg.get('commaGroup', 3)` 拿到 undefined 后，
-   千分位正则 `\d(?=(\d{undefined})+$)` 一个都匹配不上 → **全站数字丢掉千分位**
-   （面板写 17395、词条写 +4778.6），而 miao 自己的结果图是 `+4,778.6` / `18,926`。 */
+/* Cfg.get 查不到键时**必须回落到调用点给的 def** —— 这是「本地替代」唯一的对外行为约定：
+   我们手上没有上游那份 schema，只能靠调用点自带的默认值还原。 */
 /* 本地替身 Cfg.get 的 def 在 vendored JS 里只推得到 string；实际什么都收（上游 schema 的默认值）。
    这条要钉的正是「**数字** def 也能原样回落」，所以绕过那个推断。 */
 const cfgGet = comp.Cfg.get as (key: string, def?: unknown) => unknown
@@ -117,10 +110,10 @@ eq(path.resolve(comp.Data.getRoot('miao')), VENDOR, 'Data.getRoot("miao") → ve
 // ─────────────────────────────────────────────────────────── 3. 依赖策略
 console.log('\n=== 3. 依赖策略（公共依赖用真的，云崽专属才做替身）===')
 
-/* 依赖策略（2026-10-08 用户校准）：核心是「代码最精简 + 依赖量最小」，
-   **允许加轻量第三方库**，所以这里盯的是「清单里都有谁」，而不是「只能有一个」。
+/* 依赖策略：核心是「代码最精简 + 依赖量最小」—— 允许加轻量第三方库，
+   所以这里盯的是「清单里都有谁」：
    - lodash：miao 内核本来就要，公共依赖用真的，不自造替代
-   - limiter：限流的令牌桶，零传递依赖、103KB、原生 ESM
+   - limiter：限流的令牌桶，零传递依赖、原生 ESM
    - hono / @hono/node-server：HTTP 框架（路由、跨域、静态托管），零传递依赖、纯 JS
    - drizzle-orm：SQL 查询与表定义。纯 JS，不引原生驱动（库还是 node:sqlite 自带那个）
    新加依赖时想清楚：省下的行数配不配得上这个体积，以及是不是纯 JS。 */
@@ -137,7 +130,7 @@ eq(Object.keys(pkg.devDependencies || {}).sort(), ['@types/node', 'drizzle-kit',
 
 /* node_modules 的 JS 不在 allowJs 扫描范围内 → 动态 import 会报「找不到声明文件」。
    用 createRequire 取同一个模块（CJS 的 module.exports 就是 lodash 本体），
-   免得为一条「依赖是真的」的断言去引 @types/lodash —— arch 自己钉着 devDeps 只许 TS 工具链。 */
+   免得为一条「依赖是真的」的断言去引 @types/lodash。 */
 const lodash = createRequire(import.meta.url)('lodash')
 ok(typeof lodash.get === 'function' && typeof lodash.isUndefined === 'function',
   'lodash 真的可加载（不是自造 stub）')
@@ -202,13 +195,12 @@ const SVG_DIR = path.join(ROOT, 'web/assets/character/svgs')
 const svgs = fs.readdirSync(SVG_DIR).filter(f => f.endsWith('.svg')).sort()
 ok(svgs.length === 16, `16 张属性图标齐（实际 ${svgs.length}）`)
 
-/* 这批 SVG 是从 FIGHT_PROP_* 官方资源导出的，第一版带着一堆导出残留：
- * `class="SvgIcon FIGHT_PROP_*"`、`style="undefined"`、`id="svg-…__path6"`、
- * `data-name="Livello 2"`、Inkscape 的 `<defs><style>.cls-1{fill:…}</style></defs>`
- * 和 `-inkscape-stroke:none;paint-order:…`（那些图根本没有 stroke，全是废话）。
- * 2026-10-07 一次性清干净了，这里钉住 —— **手改 SVG 时最容易漏的就是 style**，
- * 而在 mask 下颜色类属性对渲染**没有任何影响**（只取 alpha），漏了肉眼根本看不出来。
- */
+/* 这批 SVG 是从 FIGHT_PROP_* 官方资源导出的，这里钉住「导出残留清干净了」：
+   `class="SvgIcon FIGHT_PROP_*"`、`style="undefined"`、`id="svg-…__path6"`、
+   `data-name="Livello 2"`、Inkscape 的 `<defs><style>.cls-1{fill:…}</style></defs>`
+   和 `-inkscape-stroke:none;paint-order:…`（那些图根本没有 stroke，全是废话）。
+   手改 SVG 时最容易漏的就是 style —— 而在 mask 下颜色类属性对渲染**没有任何影响**（只取 alpha），
+   漏了肉眼根本看不出来。 */
 const JUNK: Array<[RegExp, string]> = [
   [/class="SvgIcon/, '导出残留 class="SvgIcon …"'],
   [/style="undefined"/, '导出残留 style="undefined"'],
@@ -286,7 +278,7 @@ ok(sharedOffenders.length === 0, 'src/common/util.ts 零依赖（不引 node: �
 for (const o of sharedOffenders.slice(0, 20)) console.log('        ' + o)
 
 /* common/ 内部的方向也是单向的，别再绕成环：names.ts 只放官方文案表 + 认语言，
-   「把界面文字也接进来」是 i18n.ts 门面的活。以前包在 names.ts 里，造成 names ⇄ ui 互相 import。 */
+   「把界面文字也接进来」是 i18n.ts 门面的活。 */
 const NAMES_FILE = path.join(COMMON_DIR, 'names.ts')
 const UI_FILE = path.join(COMMON_DIR, 'ui.ts')
 const namesToUi = specifiersOf(NAMES_FILE)
@@ -305,16 +297,7 @@ for (const [spec, line] of configToSrc) console.log(`        src/common/config.t
 // ────────────────────────── 8. 分层：server(+cli) → rest → service → repository → domain
 console.log('\n=== 8. 分层方向（server / rest → service → repository → domain，只能从上往下引）===')
 
-/* 2026-10-18 用户三次校准：
- * ① 后端按 rest / service / repository / domain 分目录；
- * ② `server` 与 `cli` 是**一对进程入口**（一个对外 HTTP、一个对内命令行），server 要保留，
- *   而 rest/ 只放控制器；
- * ③ `adapter / i18n / shared / view` 四个横向目录与 `rest/config` 位置不对 ——
- *   adapter 被拆成 upstream（对外部数据源）/ kernel（对 miao 内核），view 并入 service，
- *   i18n + shared 合成 common，rest/config 的共用件各归各位（context → service，params / reply → rest）。
- *   ——「i18n」这词不该消失（第二次校准）：它作为**目录**不回来，但 `common/i18n.ts` 作为
- *   names + ui 两张表的门面回来（下面第 8 节末尾有断言钉住它不再绕成环）。
- * 于是形状是：
+/* 当前形状：
  *     server/      装配（createApp / startServer / CLI 入口）+ URL 表 + 限流   ← 与 cli/ 平级
  *     rest/        控制器：一个资源一个文件，直接平铺，外加 params / reply 两个共用件
  *     service/     用例编排 + 视图组装 + 能力契约（context）
@@ -328,8 +311,7 @@ console.log('\n=== 8. 分层方向（server / rest → service → repository �
  *   ② service 不碰 server / rest（业务层不该知道 HTTP 存在，判空就返回 null / 判别结果）；
  *   ③ rest 不碰 server —— 装配与路由在外层，控制器不该反过来看它，也不能自己起服务 / 托管静态；
  *      控制器还不直接引 repository / service，只认 context 给的那组用例能力；
- *   ④ upstream / kernel 是**叶子适配层**：只认识 domain / common / 三方，不向上引
- *      （否则「谁依赖谁」立刻变成一团，改内核还会牵出 service 的循环）；
+ *   ④ upstream / kernel 是**叶子适配层**：只认识 domain / common / 三方，不向上引；
  *   ⑤ dao 不许反向引 ../index.ts（仓储门面引 dao，dao 再引回去就成环）。
  * 反过来允许：server → rest / service（装配点要 openDb、要接能力集；例外只开给这一个目录）。 */
 const SRC = path.join(ROOT, 'src')
@@ -367,7 +349,7 @@ for (const layer of ['server', 'rest', 'service', 'repository', 'domain']) {
 }
 /* server 与 cli 是并列的两个进程入口，缺一个都说不通 */
 ok(fs.existsSync(path.join(SRC, 'cli')), 'src/cli/ 与 src/server/ 并列（命令行入口 / HTTP 入口）')
-/* 三个横向件：不参与竖向流水线，但也得有明确位置，别再散回顶层 */
+/* 三个横向件：不参与竖向流水线，位置固定 */
 for (const side of ['upstream', 'kernel', 'common']) {
   ok(fs.existsSync(path.join(SRC, side)), `src/${side}/ 是横向件目录之一`)
 }
@@ -389,7 +371,7 @@ const ctlFiles = fs.readdirSync(REST, { withFileTypes: true })
   .filter(e => e.isFile() && e.name.endsWith('.ts') && !SHARED_IN_REST.has(e.name))
   .map(e => path.join(REST, e.name))
 
-/* 用户明确要「rest/xxx.ts」而不是「rest/controllers/xxx.ts」—— 这一层别再长回来 */
+/* rest 顶层就是控制器：一个资源一个文件，不再套 controllers/ 一层 */
 ok(!fs.existsSync(path.join(REST, 'controllers')), 'rest 顶层就是控制器（不再套 controllers/ 一层）')
 
 const repoUp = [

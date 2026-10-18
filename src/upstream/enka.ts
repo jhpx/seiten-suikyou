@@ -1,23 +1,13 @@
 /*
- * 按 uid 从上游取原始数据 —— 只负责「把 JSON 拿回来」，字段怎么翻译是 ingest 的事。
+ * 按 uid 从上游取原始数据 —— 只负责「把 JSON 拿回来」，字段怎么翻译是 enka-account.ts 的事。
  *
- * ── 一组源，**同时打，谁先成功用谁**（hedged request）
+ * 一组源，**同时打，谁先成功用谁**（hedged request）：上游在国内不稳，两条线的耗时曲线叠不起来，
+ * 并行的总耗时是 min(两源) —— 代价是每次打扰两个上游，量由限流挡着。
  *
- * 上游在国内不稳：enka 曾 TCP 阶段就超时（09-30）；microgg 缓存热时 0.35s，但它要回源米游社 ——
- * 冷缓存实测 5.9~6.2s、抖起来 5~10s、连打还回 429。两条耗时曲线叠不起来，所以串行两种写法都亏：
- * 等 microgg 就得陪着它偶尔的 6 秒；按超时砍它又等于把这个源废掉（曾压到 3s，结果它次次被砍）。
- * 并行后总耗时是 min(两源)、实测 0.5~2.7s，代价是每次打扰两个上游 —— 都是只读展柜查询，量由限流挡着。
- *
- * ⚠️ 串行时代有条规则「上游明确答复（404 / 424）→ 不换源」，并行后必须废掉，因为它在 microgg 上是错的：
- *    它回 424 的原话是 "Can't contact the data service..." —— 那是**它自己回源失败**，不是玩家没开展柜，
- *    而同一时刻 enka 往往正常返回。按老规则会把上游故障当业务结论抛给用户（明明开了展柜却看到「未公开」）。
- *    现行规则：**有一个源成功就用它，全失败才谈错误**；只有「所有源都是同一个非 429 的 4xx」才收敛成
- *    一句业务文案（见 summarize）。429 例外是因为它说的是「这个源现在忙」，不是对这条请求的答复。
- * ⚠️ 错误信息**不要挂源名当硬前缀** —— 旧代码硬编码 `enka:`，于是 microgg 回 429 时报的是「enka: 请求太频繁」。
- *
- * 代理：Node 22 的 fetch **不认** HTTPS_PROXY（NODE_USE_ENV_PROXY 是 Node 24 才有的），也没有可导入的
- * undici（只暴露全局 fetch，不暴露 ProxyAgent）。要挂得自己用 node:net 手写 CONNECT 隧道、或引
- * proxy-agent（会破 test/arch.ts 的依赖断言）。目前靠国内镜像解决，不需要代理。
+ * ⚠️ 424 在两个源上语义不同（enka = 玩家没开展柜，microgg = 它自己回源失败），所以**有一个源成功
+ *    就用它，全失败才谈错误**；只有「所有源都是同一个非 429 的 4xx」才收敛成一句业务文案（见 summarize）。
+ *    429 例外是因为它说的是「这个源现在忙」，不是对这条请求的答复。
+ * ⚠️ 错误信息**不挂源名当硬前缀** —— 那是把个别源的故障说成全局结论。
  *
  * 可调项：ENKA_SOURCE=microgg 只打某个源（排查用）、ENKA_TIMEOUT_MS=8000 改超时
  * （源表、超时、UA 的默认值都在 `common/config.ts`）。
@@ -29,8 +19,7 @@ import type { EnkaPayload } from '../domain/enka.ts'
 import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../common/config.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。
-   ⚠️ 424 在两个源上语义不同（enka = 玩家没开展柜，microgg = 它自己回源失败），分不开 ——
-   所以文案取中性说法，不替用户下结论。 */
+   424 的文案取中性说法，不替用户下结论（分不清是没开展柜还是上游回源失败）。 */
 const ERRORS: Record<number, string> = {
   400: 'UID 格式不对',
   404: '查不到这个 UID',
@@ -97,8 +86,7 @@ async function trySource (
 }
 
 /* 全失败时说一句能直接看懂的话。所有源都回同一个 4xx（都没开展柜 / 都没这个人）→ 那是业务结论，
-   报一句就够 —— 尤其 424，「去游戏资料页开展柜」这个动作得让用户看到，而不是看两个源各骂一句。
-   其余情况逐个源列原因：只说「拿不到数据」等于把排查成本原样转嫁给下一个人。 */
+   报一句就够；其余情况逐个源列原因：只说「拿不到数据」等于把排查成本转嫁给下一个人。 */
 function summarize (sources: Array<{ name: string }>, fails: SourceError[]): string {
   const status = fails[0].status
   if (status && status < 500 && status !== 429 && fails.every(f => f.status === status)) return fails[0].message

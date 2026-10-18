@@ -4,8 +4,7 @@
  * 它做三件事：把仓储读出来的聚合交给视图层成型（accountView）、给列表页出摘要、
  * 判断伤害请求该 404 还是给数据。控制器因此不需要知道「聚合怎么拼」「视图怎么建」。
  *
- * 注意这里**不出现 StatusCode** —— 判空、判不存在就返回判别结果（null / kind），
- * 由 rest 层决定回 404 还是 200。业务层不该懂 HTTP。
+ * 这里**不出现状态码** —— 判空、判不存在就返回 null / 判别结果，由 rest 层决定回什么。
  */
 import type { Db } from '../repository/db.ts'
 import * as repo from '../repository/index.ts'

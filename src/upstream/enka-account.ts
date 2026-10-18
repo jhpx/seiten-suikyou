@@ -1,14 +1,11 @@
 /*
  * enka-account —— 把 enka 的原始响应翻译成「账号 + 名下角色」
  *
- * 和 service/ingest.ts 分工：那边是**用例**（并发去重、落库、失败留痕），
- * 这边只做纯翻译 —— 不进库、不联网、不知道 HTTP。名字也就别叫 ingest 了，两个 ingest 撞名会要命。
- *
- * 只做三件事：挑字段、算一次抓取的指纹、组装成一个 Account（含名下 Character）。
- * 「字段长什么样、装备怎么映射到部位」交给模型自己的 `ofEnka`，这里不逐字段抄。
+ * 纯翻译：不进库、不联网、不知道 HTTP。只做三件事：挑字段、算一次抓取的指纹、组装成一个 Account。
+ * 「用例」部分（并发去重、落库、失败留痕）在 service/ingest.ts。
  *
  * 它**不解析属性**：mainPropId / appendPropIdList 原样存库，id → 属性 交给 miao 内核 ——
- * 内核靠「同一个 id 出现几次」算词条数，提前解析会把这信息丢掉（见 docs/DESIGN-DATA-MODEL.md）。
+ * 内核靠「同一个 id 出现几次」算词条数，提前解析会把这信息丢掉。
  */
 import { createHash } from 'node:crypto'
 
@@ -34,7 +31,7 @@ export function ingestPayload (payload: EnkaPayload, { source = 'enka' }: { sour
 
   const account = Account.ofEnka(info, uid)
   /* 指纹只算「会不会影响评分」的部分（ttl 这类每次都变的不算）。它是「这一次抓取」的元信息、
-     不是玩家属性，而且要 node:crypto —— 所以留在适配层算，模型只负责存下来（domain 不许碰 crypto）。 */
+     不是玩家属性，而且要 node:crypto —— 所以留在这一层算，模型只负责存下来。 */
   account.payloadHash = createHash('sha1')
     .update(JSON.stringify({ info, list: avatars }))
     .digest('hex')

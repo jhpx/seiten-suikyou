@@ -3,14 +3,14 @@
  *
  * 名字叫 view 但**没有任何前端渲染**（页面在 web/ 子仓库）：这里是后端的输出组装，
  * 接口返回什么形状、命令行打什么形状，都由它决定。放在 service/ 是因为它和用例同层 ——
- * 它要读领域模型、要调内核（见 kernel/），比 service 低的东西都不该反过来引它。
+ * 它要读领域模型、要调内核。
  *
  * 整条链路前面几步只碰数字 id，到这儿才出中文名，而**给人看的这一份**要按用户选的语言渲染 ——
  * 所以这里是「id → 文本」的第二条出口，语言由 locale 决定。
  *
  * 三条底线：
  *   1. 名字优先查 i18n 表，查不到才退回 miao 的中文名（中文至少是对的，不是乱码）。
- *   2. 圣遗物名用库里存的 hash 查（enka 白给的官方文案主键），比拿中文名对字符串稳，也不受 miao 改名影响。
+ *   2. 圣遗物名用库里存的 hash 查（enka 白给的官方文案主键），不受 miao 改名影响。
  *   3. 词条数值一律用 miao 格式化好的串 —— 自己重算就可能和内核不一致。只有面板（attr）是裸数字。
  *      例外只有一处：**怎么显示**（不是算多少）—— 整数词条要收整、百分比要按十进制舍，见 attrValueText。
  */
@@ -103,7 +103,7 @@ function shortLabel (key: string, locale: string): string {
  * `dmg` 在 miao 的 i18n 表里是「伤害增加」/ “DMG Bonus”（它自己出图时的简称），
  * 但游戏里这一条就叫**元素伤害加成**。面板上物伤/治疗/元素伤三行连着读，
  * 写成「伤害增加」看不出到底是哪个加成 —— 所以按官方名改。
- * ⚠️ 改**这里**而不是改 vendor/i18n/names.json：那份是同步脚本的生成物，改了下次同步就被覆盖回去。
+ * ⚠️ 别改 vendor/i18n/names.json：那是同步脚本的生成物，改了会被覆盖。
  */
 const STAT_TITLE_FIX: Record<string, Record<string, string>> = {
   dmg: {
@@ -121,15 +121,13 @@ export function statLabel (key: string, locale: string): string {
 
 /*
  * 首页「按属性权重筛选」的选项：命中判据是**这一项权重不为 0** ——
- * 权重表里给 0 的，就是这个角色不吃这条属性（点出空结果也是有效信息：「我这号里没人吃防御」）。
+ * 权重表里给 0 的，就是这个角色不吃这条属性。
  *
- * 收哪些键：只用 miao 权重表里**真的会出现**的键（实测 57 人：recharge 50、cpct 40、
- * atk 37、cdmg 34、dmg 29、mastery 23、heal 16、hp 13、def 3、phy 1）。
- * ⚠️ 大/小词条（atk / atkPlus、hp / hpPlus、def / defPlus）**永远成对出现、权重相等**
- *   （实测 57 人无一例外），所以一条只挂一个键 —— 挂两个就是两颗筛出来一模一样的 chip。
+ * 收哪些键：只用 miao 权重表里**真的会出现**的键。
+ * ⚠️ 大/小词条（atk / atkPlus、hp / hpPlus、def / defPlus）**成对出现、权重相等**，
+ *   所以一条只挂一个键 —— 挂两个就是两颗筛出来一模一样的 chip。
  * ⚠️ dmg / phy / heal 是三种加成，各占游戏里一个位置：**按角色挑**，不用三个都出。
- * 顺序按「面板里从上往下的读法」排：生命 → 攻/防 → 精通 → 双暴 → 充能 → 三种加成，
- * 加成里按「谁用得多」排（元素伤 >> 物伤 > 治疗），治疗垫底 —— 只有少数角色吃这条。
+ * 顺序按「面板里从上往下的读法」排。
  */
 export function weightFilterOptions (locale: string): Array<{ key: string; label: string }> {
   return ['hp', 'atk', 'def', 'mastery', 'cpct', 'cdmg', 'recharge', 'dmg', 'phy', 'heal']
@@ -137,10 +135,10 @@ export function weightFilterOptions (locale: string): Array<{ key: string; label
 }
 
 /*
- * 词条数值 → 给人看的串。**数值来源（2026-10-12 起）**：优先 enka 的原始 `statValue`，拿不到才退回内核算的值。
+ * 词条数值 → 给人看的串。**数值来源**：优先 enka 的原始 `statValue`，拿不到才退回内核算的值。
  * 因为 miao 的基准表是 float32 —— 5★ 生之花满级主词条它算 4,778.6 而游戏真值 4,780（enka 给的就是 4780），
  * 精通真值 33 它算 32.6。enka 是官方算好的，直接用它才和游戏一模一样。
- * 内核只剩两个用途：给评分（不碰显示）、以及老库没存 enka 值时的兜底。
+ * 内核只剩两个用途：给评分（不碰显示）、以及没存 enka 值时的兜底。
  *
  * ⚠️ 「显示」和「算分」是两条路：改这里的口径不影响任何评分（评分仍 100% 走内核）。
  * 两处「怎么显示」的修正仍然需要：
@@ -150,8 +148,8 @@ export function weightFilterOptions (locale: string): Array<{ key: string; label
  *      内核裸数字是 float32 精度的十进制（5★ 大生命第 3 档真值 0.0525，内核表里 0.05249999836087227）→
  *      显成 5.2%，而游戏按十进制四舍五入是 5.3%。enka 的 statValue 是**已乘 100 的十进制**（5.8、46.6），
  *      没有这个噪声 → 有 enka 值时直接 decRound 到 1 位；没有时才回去舍内核的 float32 裸数字。
- * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num*1).toFixed(fix)`，Number('1,015.8') 是 NaN，
- *    会原样吐出 'NaN'。先剥逗号再进。（「哪些词条是整数口径」的判据在 domain/stat.ts 的 isIntegerStatKey）
+ * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num*1).toFixed(fix)`，Number('1,015.8') 是 NaN。
+ *    先剥逗号再进。（「哪些词条是整数口径」的判据在 domain/stat.ts 的 isIntegerStatKey）
  */
 /* 十进制四舍五入前「推一把」的量，为什么需要见 decRound */
 const ROUND_NUDGE = 1e-9
@@ -167,7 +165,7 @@ function decRound (v: unknown, fix = 1): string {
   return (Number(n.toFixed(6)) + ROUND_NUDGE * Math.sign(n)).toFixed(fix)
 }
 
-/* 百分比统一走这里，别再用 Format.pct —— 理由见上面 ② */
+/* 百分比统一走这里，别用 Format.pct —— 理由见上面 ② */
 const pctText = (v: unknown): string => decRound(v) + '%'
 
 /*
@@ -179,9 +177,9 @@ const pctText = (v: unknown): string => decRound(v) + '%'
  *   enkaVal  enka 的原始 statValue（优先用它；混不到时 null / undefined）
  */
 export function attrValueText (key: string, value: string, coreRaw?: unknown, enkaVal?: number | null): string {
-  /* ⚠️ enkaVal 由调用方从**模型字段**取来（enkaNumsOf / subStatTotals），已是 number|null —— 直接 ?? null，
-     不重复 num（类型在 constructor 就固定了）。这儿**绝不能**退化成 Number()：`Number(null) === 0` 会把
-     「没有 enka 值」读成「值 = 0」，老库（<v3）那两列是 NULL，主词条会显示成 0 / 0.0% 且兜底整条失效。 */
+  /* ⚠️ enkaVal 由调用方从**模型字段**取来，已是 number|null —— 直接 ?? null，不重复 num。
+     这儿**绝不能**退化成 Number()：`Number(null) === 0` 会把「没有 enka 值」读成「值 = 0」，
+     主词条会显示成 0 / 0.0% 且兜底整条失效。 */
   const enka = enkaVal ?? null
   if (isIntegerStatKey(key)) {                                   // 整数词条（精通/小攻/小生/小防）：一律收整
     const n = enka ?? num(String(value).replace(/,/g, ''))
@@ -203,8 +201,7 @@ export function rawNumsOf (artisEntry: any): { main: unknown; sub: Map<string, u
 }
 
 /** 从一件圣遗物（模型）取 enka 的原始数值，按 miao key 归拢 —— 显示数值的第一来源。
- *  主词条只有一个 key、由调用方用 `marked.main.key` 定位，不在这儿再解一遍；副词条的 key 走 Stat.key。
- *  老库（<v3）这两处是空的 → 返回空，调用方自然退回内核值。 */
+ *  主词条只有一个 key、由调用方用 `marked.main.key` 定位，不在这儿再解一遍；副词条的 key 走 Stat.key。 */
 export function enkaNumsOf (artifact: Artifact | null | undefined): { main: number | null; sub: Map<string, number> } {
   const sub = new Map<string, number>()
   for (const stat of artifact?.subStats || []) {
@@ -251,8 +248,8 @@ function assetSeg (s: string | null | undefined): string {
 }
 
 /*
- * 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。vendor 里那个被 sync
- * 脚本整体置空了（要读磁盘、依赖 image-size），而这里要的只是拼路径，上游本来就是纯字符串拼接。
+ * 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。
+ * vendor 里那个被 sync 脚本整体置空了（要读磁盘、依赖 image-size），而这里要的只是拼路径。
  *
  * 三条规则一个字都不能改：① 天赋 A 的图标按**武器类型**取公共图（普攻图标本来就是武器图标）；
  * ② 天赋 E/Q 的图标**就是提升它的那个命座图标**（talentCons 里写的 3 / 5），角色目录里没有 talent-e.webp；
@@ -290,14 +287,13 @@ const ATTR_TABLE: Array<[string, string]> = [
 /*
  * 三种加成单列：元素伤害 / 物伤加成 / 治疗加成 —— **按角色挑，不是三个都出**。
  * 它们互斥且各占游戏里一个位置（dmg 是 4 号杯主词条之一、phy 只能当副词条、heal 是 5 号杯主词条之一），
- * 一个人不会同时堆三种，出三行有两行永远是 0.0%（实测七七那页）。
+ * 一个人不会同时堆三种，出三行有两行永远是 0.0%。
  *
  * 挑哪几行**只看权重表**：权重 > 0 才出，**面板实际值不参与判断**。
- * ⚠️ 别把「面板值 > 0」也加进判据（第一版就错了）：迪奥娜权重 heal=100/dmg=0，她身上碰巧带了元素增伤
- *    圣遗物（面板 18.0%），按「或」会多出一行元素伤害 —— 可权重表明确说了她只吃治疗。多出来那行不是
- *    「她的面板」而是「圣遗物的面板」；这个模块存在的意义是回答「该关注什么」，混进无关加成反而看不清主次。
- * ⚠️ 也别改成「只挑一个」：实测 121 个角色里 8 个**真的两项都要**（优菈 phy100/dmg40、雷泽 dmg100/phy100、
- *    心海 dmg100/heal100…），雷泽那两项还完全相等，硬压成一行等于藏掉他真正需要的词条。
+ * ⚠️ 别把「面板值 > 0」也加进判据：角色可能碰巧带了不符合权重表的圣遗物，
+ *    多出来那行不是「她的面板」而是「圣遗物的面板」。
+ * ⚠️ 也别改成「只挑一个」：有角色**真的两项都要**（优菈 phy100/dmg40、雷泽 dmg100/phy100），
+ *    硬压成一行等于藏掉他真正需要的词条。
  */
 const DMG_ATTRS: Array<[string, string]> = [['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']]
 
@@ -313,8 +309,8 @@ const ATTR_TITLE_ZH: Record<string, string> = {
 }
 
 /* 导出供测试断言用：属性名的三套用字（面板 / 圣遗物卡 / 汇总短标题）很容易改串，钉在测试里比钉截图靠谱。
-   ⚠️ 入参只要 `attr` / `base` 两栏（Pick 出来的）—— 写成整个 MiaoProfile 会害得「只想验排版」的调用方
-   凭空造一个假 profile。 */
+   ⚠️ 入参只要 `attr` / `base` 两栏（Pick 出来的）—— 写成整个 MiaoProfile 会害得
+   「只想验排版」的调用方凭空造一个假 profile。 */
 export function attrTableOf (profile: Pick<MiaoProfile, 'attr' | 'base'>, locale: string, charWeight: Record<string, number> = {}, elem = ''): AttrRow[] {
   const attr = profile.attr || {}
   const base = profile.base || {}
@@ -539,8 +535,8 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     uid: profile.uid,
     avatarId: profile.id,
     /* 这个角色**自己**上一次被同步的时刻（character 表那行），不是整个 UID 的最后一次抓取 —— 展柜是子集、
-       每次只覆盖展柜里那几个，所以角色之间能差好几天（实测本库有 10-11 与 10-06 并存）。列表页页脚报的
-       是 UID 级时间（见 buildAccountView 的 fetchedAt），两处语义不同，别混。 */
+       每次只覆盖展柜里那几个，所以角色之间能差好几天。列表页页脚报的是 UID 级时间
+       （见 buildAccountView 的 fetchedAt），两处语义不同，别混。 */
     fetchedAt: fmtTime(ch.fetchedAt),
     name: i18n.avatarName(profile.id, loc) || char.name,
     nameZh: char.name,
@@ -627,9 +623,7 @@ export interface DamageView {
  * 脚本算崩了（calcDamage 内部已打日志）、或 materialize 搭不出 profile（元数据不认识的角色）。
  * 语义区别由调用方在调本函数前自己查（server 路由分 404 / 200+null）。
  *
- * ⚠️ 这是 shape.ts 里唯一的 async 函数 —— 伤害计算是内核跑一遍，不是纯字符串拼接。
- * ⚠️ 敌人名（enemyName）只有 miao 的中文（'小宝'），和 elemText 一个情况：内核没给别的语言，
- *    不为它多同步一轮 i18n。
+ * ⚠️ 敌人名（enemyName）只有 miao 的中文（'小宝'），和 elemText 一个情况：内核没给别的语言。
  */
 export async function damageOf (ch: Character): Promise<DamageView | null> {
   const profile = toMiaoProfile(ch)

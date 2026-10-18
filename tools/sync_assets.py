@@ -76,7 +76,7 @@ WEAPON_TYPES = ["sword", "claymore", "bow", "catalyst", "polearm"]
 TRAVELER_ELEMS = ["anemo", "geo", "electro", "dendro", "hydro", "pyro", "cryo"]
 
 """
-角色要拷哪些图 —— 与 src/view/shape.js 的 charImgs() 一一对应。
+角色要拷哪些图 —— 与 src/service/view.ts 的 charImgs() 一一对应。
 
 talent-e / talent-q 是**可选**的：miao 的规则是「哪个命座提升这个天赋就用哪个命座图标，
 否则才用 talent-{e,q}.webp」，所以绝大多数角色目录里根本没有这俩文件（121/126 都没有）。
@@ -225,7 +225,7 @@ def check_against_list(out: Path, stats):
     """
     拿「页面真正会请求的图」的清单反查一遍落盘。
 
-    这一层防的是另一类错：shape.js 拼了个源端没有的路径（比如改了 imgs 名、
+    这一层防的是另一类错：view.ts 拼了个源端没有的路径（比如改了 imgs 名、
     或某个角色 miao 侧真的没素材）。全量复制解决不了这种错，只能对账。
     清单由 tools/list_assets.mjs 生成，不在就跳过这一步。
     """

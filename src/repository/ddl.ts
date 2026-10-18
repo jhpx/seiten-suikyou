@@ -1,13 +1,11 @@
 /*
  * 表定义 → DDL。
  *
- * 为什么不是 drizzle-kit 生成：kit 的 push/studio 确实能连 node:sqlite，但它只认**文件**库
- * —— 而 openDb 与测试用的是同进程的 DatabaseSync（含 :memory:），交给 CLI 就够不着了。
- * 所以建表语句从 drizzle 自己的表元数据（getTableConfig）现算：结构仍然只写一份（schema.ts），
- * 只是不落成 .sql 文件、也不记迁移历史。
+ * 建表语句从 drizzle 自己的表元数据（getTableConfig）现算：结构仍然只写一份（schema.ts），
+ * 只是不落成 .sql 文件、也不记迁移历史。drizzle-kit 的 CLI 连不上 node:sqlite 的进程内库
+ * （含 :memory:），所以不走它。
  *
  * 覆盖范围 = 本项目用到的：单列/复合主键、NOT NULL、自增、外键、普通索引。
- * 将来加唯一约束 / CHECK / 生成列时在这里补一条，别让它被静默丢掉。
  */
 import { is, getTableName } from 'drizzle-orm'
 import { SQLiteTable, getTableConfig } from 'drizzle-orm/sqlite-core'

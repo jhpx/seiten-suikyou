@@ -33,7 +33,7 @@
       "sources": [
         {
           "path": "src/cli/score.ts",
-          "line": 199,
+          "line": 198,
           "label": "toMiaoProfile + getMarkDetail"
         }
       ]
@@ -100,7 +100,7 @@
       "id": "ingest",
       "type": "backend",
       "label": "入库整形",
-      "sublabel": "ingest.ts",
+      "sublabel": "enka-account.ts",
       "pos": [
         384,
         200
@@ -148,7 +148,7 @@
       "sources": [
         {
           "path": "src/server/index.ts",
-          "line": 69,
+          "line": 71,
           "label": "createApp：装配 db → service → 路由"
         }
       ]
@@ -293,7 +293,7 @@
     {
       "id": "shape",
       "type": "backend",
-      "label": "shape.ts",
+      "label": "view.ts",
       "sublabel": "视图整形",
       "pos": [
         910,
@@ -327,7 +327,7 @@
       "sources": [
         {
           "path": "src/common/names.ts",
-          "line": 95,
+          "line": 85,
           "label": "name(hash, locale)"
         }
       ]
@@ -545,7 +545,7 @@
       "dot": "rose",
       "title": "出口与多语言",
       "items": [
-        "shape.ts 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死",
+        "view.ts 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死",
         "评分输出必须与 miao 逐字一致：改内核或数据层后跑 test/verify.ts 对基线，diff 为空才算过"
       ]
     }

@@ -5,9 +5,9 @@
  * Account 是「一个 UID 下的全部」，Character 是「其中一个角色」。
  *
  * ⚠️ 账号信息是**分批变**的：有时只抓到角色列表、没抓到账号详情。所以写库时「本次没给值」的列
- *    用 COALESCE 保留库里旧值 —— `KEEP` 就是这份清单。
+ *    用 COALESCE 保留库里旧值（清单在 repository/dao/account.ts 的 keepOld）。
  * ⚠️ payloadHash（原始响应指纹）不是玩家属性，是「这一次抓取」的元信息，所以只在这儿**存着**，
- *    怎么算交给适配层（domain 不许碰 node:crypto）。
+ *    怎么算交给上游层（domain 不碰 node:crypto）。
  */
 import { num, str } from '../common/util.ts'
 import type { Character } from './character.ts'
@@ -47,13 +47,8 @@ export class Account {
     this.characters = characters
   }
 
-  /* ⚠️ 账号信息是**分批变**的：有时只抓到角色列表、没抓到账号详情。写库时「本次没给值」的列
-     要保留库里旧值（这份清单在 repository/dao/account.ts 的 keepOld 那几行里）。
-     ⚠️ payloadHash（原始响应指纹）不是玩家属性，是「这一次抓取」的元信息，所以只在这儿**存着**，
-        怎么算交给适配层（domain 不许碰 node:crypto）。 */
-
   /* enka 的 playerInfo → Account（不含 characters 与 payloadHash ——
-     前者由调用方按 avatarInfoList 挂上，后者是适配层算的指纹）。 */
+     前者由调用方按 avatarInfoList 挂上，后者是上游层算的指纹）。 */
   static ofEnka (info: EnkaPlayerInfo, uid: number): Account {
     return new Account({
       uid,

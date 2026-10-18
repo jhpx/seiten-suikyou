@@ -7,9 +7,9 @@
  * 落库：character 表那一行 + 它的 1 把武器（weapon 表）+ 5 件圣遗物（artifact 表）——
  * 三张表都以 (uid, avatar_id) 为键，各张表的列由各自的模型负责映射，Character 只管自己那一行。
  *
- * ⚠️ 三条不变量（跟评分有关，改错了分就变）：库里只存 id 与**原始值**，不存名字、不存解析后的属性
- * （见 docs/DESIGN-DATA-MODEL.md）；`skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推、
- * 这里不猜；圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
+ * ⚠️ 三条不变量（跟评分有关）：库里只存 id 与**原始值**，不存名字、不存解析后的属性；
+ * `skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推、这里不猜；
+ * 圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
  */
 import { num } from '../common/util.ts'
 import { Weapon } from './weapon.ts'

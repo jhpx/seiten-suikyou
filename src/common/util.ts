@@ -1,19 +1,15 @@
 /*
- * util —— 跨层通用小工具（纯 TS、零依赖）
+ * util —— 跨层通用小工具（纯 TS、零依赖，谁都能引、它谁也不引）
  *
- * 三条规矩：① **谁都能引，它谁也不引**（domain 也引它，所以不碰 node: 内置模块）；
- * ② 只收「不属于任何一层」的东西（只服务一层的工具搬回那一层去）；
- * ③ 于是留下的天然是同一类活：**把外部进来的原始形状解析成程序能用的值**
- *    —— 上游 JSON 的字符串数字、命令行的 argv，都是「外部形状」。
- *    （库里的 JSON 列不在这儿：drizzle 的 json mode 直接给对象，不经我们手。）
+ * 只收「不属于任何一层」的东西：把外部进来的原始形状解析成程序能用的值 ——
+ * 上游 JSON 的字符串数字、命令行的 argv，都是「外部形状」。
  */
 
 /*
  * 脏值 → number|null —— 全项目数字归一的唯一点。只该用在两处：
  *   ① 模型的 constructor（对象诞生时把 enka JSON / DB 列归一，每个实例只转这一次）；
  *   ② **出口**解析内核给的字符串数字（Format 出的 "4,778.6"）—— 那是另一条来源，不算重复。
- * ⚠️ 不能用 Number() 顶替：`Number(null)` 和 `Number('')` 都是 0，会把「没这个值」读成「值是 0」
- *    —— 老库 main_stat_value 是 NULL 时，主词条显示成「生命值 0」就是这么来的。
+ * ⚠️ 不能用 Number() 顶替：`Number(null)` 和 `Number('')` 都是 0，会把「没这个值」读成「值是 0」。
  * ⚠️ 转不出来给 **null**，不拿 0 充数：等级 0 和「没这个字段」是两回事。
  */
 export const num = (v: unknown): number | null => {
@@ -26,9 +22,8 @@ export const str = (v: unknown): string | null => (typeof v === 'string' ? v : n
 
 /*
  * argv → 选项对象：`--key value` 收成 `key: 'value'`，`--flag`（后面没跟值）收成 `true`。
- * 也认 `--key=value`（等号写法）—— 不认的话 `--port=8787` 会被当成一个名叫
- * "port=8787" 的开关，参数**静默失效**，排查起来很坑（踩过一次）。
- * 非 `--` 开头的直接忽略 —— 两个调用方（cli / server）都不认位置参数，uid 也得写成 `--uid 123`。
+ * 也认 `--key=value`（等号写法）—— 不认的话 `--port=8787` 会被当成一个名叫 "port=8787" 的开关，
+ * 参数静默失效。非 `--` 开头的直接忽略 —— 两个调用方（cli / server）都不认位置参数。
  */
 export interface ParsedArgs { [key: string]: string | true }
 

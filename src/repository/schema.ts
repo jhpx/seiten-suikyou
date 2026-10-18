@@ -1,11 +1,10 @@
 /*
  * 库结构 —— drizzle 表定义，也是**唯一的结构来源**（没有 schema.sql，没有迁移目录）。
  *
- * 进程启动时按这份定义现算 CREATE TABLE 并执行（见 ddl.ts）：空库自动建表，
- * 内存库（测试）同一个路径。改结构就改这里；老库缺列时按 db.ts 的 SCHEMA_VERSION 报错要求删库重抓，
- * 开发期也可以 `npm run db:push` 让 drizzle-kit 直接 ALTER 上去。
+ * 进程启动时按这份定义现算 CREATE TABLE 并执行（见 ddl.ts）：空库自动建表，内存库（测试）同一个路径。
+ * 老库缺列时按 db.ts 的 SCHEMA_VERSION 报错要求删库重抓。
  *
- * 三条不变量（改错了分就变，详见 docs/DESIGN-DATA-MODEL.md）：
+ * 三条不变量（改错了分就变）：
  *   ① 只存数字 id，不存名字 —— 名字是多语言的渲染结果。
  *   ② append_prop_ids 保序保重复 —— 内核靠「同一个 id 出现几次」算词条数。
  *   ③ level 存 enka 原值（1 基），出口组装 profile 时才减 1。

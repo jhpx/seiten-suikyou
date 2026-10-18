@@ -104,7 +104,7 @@ console.log('\n=== 2. uid 列表 ===')
   eq(r.data[0].uid, UID, 'uid 对得上')
   eq(r.data[0].avatarCount, summary.characterCount, '角色数与 ingest 一致')
 
-  /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 shape.ts 的 fmtTime）。
+  /* 抓取时间在**出口**转成本地时区文本（库里存的仍是 ISO UTC，见 view.ts 的 fmtTime）。
      断言刻意写成与时区无关 —— 换台机器跑也得过，所以拆成两条：
        ① 格式：没有 T/Z，就是「YYYY-MM-DD HH:mm:ss」
        ② 换算：把结果按本地时间解析回去，应当与库里那个 UTC 时刻**同一毫秒**

@@ -3,16 +3,14 @@
  *
  * 处理逻辑一律在 rest/ 顶层（拿参数、判 404、拼响应都在那边，一个资源一个文件）。
  * 想改接口路由，只动这里；想改某个接口的行为，去 rest/<资源>.ts。
- * 表放在 server/ 而不是 rest/：路由是「装配这台服务的表面」的活，和 createApp 一起看才完整。
  *
  * 路径规矩：资源复数，层级只到资源 —— /api/accounts、/api/accounts/:uid、
- * 其下的 /characters/:avatarId/damage；抓取是从 enka 取一份新的，挂成动作子资源 /refresh。
+ * 其下的 /characters/:avatarId/damage；抓取挂成动作子资源 /refresh。
  *
  * `:uid{[0-9]+}` 把动态段限死数字：非数字的路径根本匹配不上（直接 404），
- * 端点里就不用再校验一遍 id 合不合法。也正因为参数都在 URL 里，没有任何接口需要请求体，
- * 于是没有 body 解析、没有 bad_body 那一类 400。
+ * 端点里就不用再校验一遍 id 合不合法。也正因为参数都在 URL 里，没有任何接口需要请求体。
  *
- * 限流档位是**接口的属性**，写在它的路由上：read = 只读库；fetch = 会联网打 enka，最紧；
+ * 限流档位写在每条路由自己的中间件上：read = 只读库；fetch = 会联网打 enka，最紧；
  * 不挂 = 不限（探活与元信息）。
  */
 import type { Hono } from 'hono'

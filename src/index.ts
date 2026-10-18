@@ -1,9 +1,10 @@
 /*
  * 评分内核出口 —— 星天水镜
  *
- * 职责只有两件：
+ * 职责三件：
  *   1. 注册 miao 的元数据（词条基准、权重表、角色规则）
- *   2. 原样导出 miao 的评分模块
+ *   2. 原样导出 miao 的评分 / 伤害模块
+ *   3. 以 `i18n` 名义导出多语言门面（common/i18n.ts）
  *
  * 所有 miao 源码都在 ../vendor/miao/ 下，由 python tools/sync_miao.py 从 miao-plugin 搬运。
  * 别名 #miao / #miao.models / #miao.path 由 package.json 的 imports 字段解析，

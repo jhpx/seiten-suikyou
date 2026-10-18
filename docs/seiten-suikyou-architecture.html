@@ -5103,15 +5103,15 @@
         <text data-detail="fine" x="626" y="142" class="t-backend" font-size="7" text-anchor="middle">注册 Meta</text>
         </g>
 
-        <g id="node-ingest" data-node-id="ingest" data-node-label="入库整形" tabindex="0" role="button" aria-label="聚焦入库整形，ingest.ts, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="ingest.ts" data-node-tag="只存数字 id" data-node-context="架构组件">
-          <title>入库整形 · ingest.ts · 架构组件 · 只存数字 id</title>
+        <g id="node-ingest" data-node-id="ingest" data-node-label="入库整形" tabindex="0" role="button" aria-label="聚焦入库整形，ingest.ts, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="enka-account.ts" data-node-tag="只存数字 id" data-node-context="架构组件">
+          <title>入库整形 · enka-account.ts · 架构组件 · 只存数字 id</title>
           <rect x="384" y="200" width="140" height="56" rx="6" class="c-mask"/>
           <rect x="384" y="200" width="140" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(390 206) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="454" y="226" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">入库整形</text>
-        <text data-detail="context" x="454" y="242" class="t-muted" font-size="9" text-anchor="middle">ingest.ts</text>
+        <text data-detail="context" x="454" y="242" class="t-muted" font-size="9" text-anchor="middle">enka-account.ts</text>
         <text data-detail="fine" x="454" y="248" class="t-backend" font-size="7" text-anchor="middle">只存数字 id</text>
         </g>
 
@@ -5210,14 +5210,14 @@
         <text data-detail="context" x="798" y="492" class="t-muted" font-size="9" text-anchor="middle">算面板 + 解析词条</text>
         </g>
 
-        <g id="node-shape" data-node-id="shape" data-node-label="shape.ts" tabindex="0" role="button" aria-label="聚焦shape.ts，视图整形, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="视图整形" data-node-context="架构组件">
-          <title>shape.ts · 视图整形 · 架构组件</title>
+        <g id="node-shape" data-node-id="shape" data-node-label="view.ts" tabindex="0" role="button" aria-label="聚焦view.ts，视图整形, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="视图整形" data-node-context="架构组件">
+          <title>view.ts · 视图整形 · 架构组件</title>
           <rect x="910" y="330" width="140" height="60" rx="6" class="c-mask"/>
           <rect x="910" y="330" width="140" height="60" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(916 336) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="980" y="358" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">shape.ts</text>
+          <text data-node-label="" data-detail-anchor="" x="980" y="358" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">view.ts</text>
         <text data-detail="context" x="980" y="374" class="t-muted" font-size="9" text-anchor="middle">视图整形</text>
         </g>
 
@@ -5546,7 +5546,7 @@
           <h3>出口与多语言</h3>
         </div>
         <ul>
-          <li>&bull; shape.ts 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死</li>
+          <li>&bull; view.ts 把分数、词条、套装拼成展示文本；i18n 按 locale 供名字与界面文字，前端一个词条名都不写死</li>
           <li>&bull; 评分输出必须与 miao 逐字一致：改内核或数据层后跑 test/verify.ts 对基线，diff 为空才算过</li>
         </ul>
       </div>

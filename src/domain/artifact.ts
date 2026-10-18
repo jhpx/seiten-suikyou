@@ -2,11 +2,11 @@
  * Artifact —— 一件圣遗物的领域模型
  *
  * 进出都走这个类，内存形状就不再由 DB 列名决定：
- *   enka 装备 ──ofEnka──▶ Artifact ──toValues──▶ 一行 ──fromRow──▶ Artifact
+ *   enka 装备 ──ofEnka──▶ Artifact ──仓储映射──▶ 一行 ──仓储映射──▶ Artifact
  *
- * 三条不变量（改错了分就变）：`appendPropIds` **保序、保重复** —— 内核靠「同一 id 出现几次」算词条数，
+ * 三条不变量：`appendPropIds` **保序、保重复** —— 内核靠「同一 id 出现几次」算词条数，
  * 而 `subStats` 是 enka **合过**的那一份、只能用于显示；`mainPropId` 是数字 id（14001）；
- * 库里只存 id 与原始值，**不存名字**（名字是多语言的，见 docs/DESIGN-DATA-MODEL.md）。
+ * 库里只存 id 与原始值，**不存名字**（名字是多语言的）。
  */
 import { Stat } from './stat.ts'
 import type { EnkaEquip } from './enka.ts'
@@ -25,7 +25,7 @@ const POS_BY_EQUIP_TYPE: Record<string, number> = {
 const POS_BY_ID_DIGIT: Record<string, number> = { 4: 1, 2: 2, 5: 3, 1: 4, 3: 5 }
 
 export class Artifact {
-  /* 字段必须显式声明（TS 不从 constructor 赋值反推）—— 这几行就是「标量一律 number|null」的出处 */
+  /* 字段必须显式声明（TS 不从 constructor 赋值反推）*/
   pos: number | null
   itemId: number | null
   levelRaw: number | null
@@ -41,8 +41,8 @@ export class Artifact {
     pos, itemId, levelRaw, star, mainPropId, appendPropIds,
     mainStatValue, subStats, nameHash, setHash
   }: {
-    /* 外部原始值一律 unknown（enka JSON、库行、被手工改过的库什么都可能给）；num() 在这儿归一到
-       number|null，**唯一的一次**。两个数组字段（enka 给 Stat 实例、库行给普通对象）因此收两种形状。 */
+    /* 外部原始值一律 unknown；num() 在这儿归一到 number|null，唯一的一次。
+       两个数组字段（enka 给 Stat 实例、库行给普通对象）因此收两种形状。 */
     pos?: unknown; itemId?: unknown; levelRaw?: unknown; star?: unknown; mainPropId?: unknown
     appendPropIds?: number[]; mainStatValue?: unknown
     subStats?: Array<Stat | { prop: string; value: unknown }>
@@ -75,10 +75,9 @@ export class Artifact {
       star: equip.flat?.rankLevel ?? 5,
       mainPropId: relq.mainPropId,
       appendPropIds: (relq.appendPropIdList || []).map(Number),  // 保序保重复，不能去重/过滤
-      /* enka 的 flat 里带着官方算好的 statValue：显示层直接用它 —— 内核那份基准表有 float 误差
-         （满级花主词条算成 4,778.6，真值 4,780）。 */
+      /* enka 的 flat 里带着官方算好的 statValue：显示层直接用它（内核重算有 float 误差） */
       mainStatValue: equip.flat?.reliquaryMainstat?.statValue,
-      /* ⚠️ flat.reliquarySubstats 是**合并后**的（同一词条多条 roll 合成一条），
+      /* flat.reliquarySubstats 是**合并后**的（同一词条多条 roll 合成一条），
          与 reliquary.appendPropIdList（逐次 roll、保序保重复）不是一回事 —— 两份都要留。 */
       subStats: (equip.flat?.reliquarySubstats || [])
         .filter(s => s && s.appendPropId)
@@ -98,9 +97,8 @@ export class Artifact {
    * 初始副词条条数 —— 5★ 下就是「初始三词条(3) / 初始四词条(4)」。
    * 每 4 级升一档，一档要么新增一条、要么强化已有的，所以「现在 roll 的总数 − 升级档数 = 初始条数」。
    *
-   * ⚠️ 减数必须用**减过 1 的等级**（enka 1 基、内核 0 基）：直接拿 levelRaw 算会在 4 的倍数边界上错 ——
-   *    归一后 3 级（升过 0 档）的原始值是 4，`4 // 4` 会被当成升过 1 档。
-   * ⚠️ 夹具里的圣遗物是为算分造的、roll 条数与等级并不自洽（满级却只有 4 条），对它调本函数会得负数。
+   * ⚠️ 减数必须用**减过 1 的等级**（enka 1 基、内核 0 基）：直接拿 levelRaw 算会在 4 的倍数边界上错。
+   * ⚠️ 测试夹具里的圣遗物 roll 条数与等级并不自洽（满级却只有 4 条），对它调本函数会得负数。
    */
   quality (): number {
     const level = Math.max(0, (Number(this.levelRaw) || 1) - 1)

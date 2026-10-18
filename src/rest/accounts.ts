@@ -2,7 +2,6 @@
  * 账号控制器：列表 / 单账号 / 刷新。
  *
  * 只做 HTTP 关切 —— 取参、把 service 的结果翻成状态码与响应形状。
- * 「聚合怎么拼」「抓取怎么落库」都在 service 层，这里看不见。
  */
 import type { Handler } from 'hono'
 

@@ -22,7 +22,7 @@
 
 ```bash
 git clone --recursive <仓库地址>    # 前端是 submodule，漏了 --recursive 页面会 404
-npm install                        # 四个运行时依赖：lodash / limiter / hono / drizzle-orm
+npm install                        # 五个运行时依赖：lodash / limiter / hono / @hono/node-server / drizzle-orm
 npm run score -- --uid 101242308   # 抓一次 enka 并打分（先有数据，页面才有东西看）
 npm run server                     # 打开 http://127.0.0.1:8787
 ```
@@ -191,7 +191,7 @@ npm run server -- --no-rate-limit                  # 本地调试时整个关掉
 
 HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizzle](https://orm.drizzle.team)（SQL 与表定义），
 两个都是纯 JS、零传递依赖 —— 库还是 Node 自带的 `node:sqlite`，不引任何原生模块。
-运行时就这四样：`lodash`（miao 内核本来就要）、`limiter`（限流的令牌桶）、`hono` + `drizzle-orm`。
+运行时就这五样：`lodash`（miao 内核本来就要）、`limiter`（限流的令牌桶）、`hono` + `@hono/node-server`（路由 / 跨域 / 静态托管 / 监听）、`drizzle-orm`（SQL 与表定义）。
 `test/arch.ts` 盯着这个清单 —— 加依赖前先算账：省下的行数配不配得上它的体积、是不是纯 JS。
 
 ### 分开部署：前端单独托管（GitHub Pages）
@@ -306,7 +306,7 @@ npm test
 ```
 seiten-suikyou/
 ├── src/
-│   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分模块
+│   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分/伤害模块 + 以 i18n 名义导出多语言门面
 │   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
 │   ├── repository/           # 数据层：一张表怎么存、一个聚合怎么拼
 │   │   ├── schema.ts         #   表结构权威定义（drizzle sqliteTable，没有 schema.sql / 迁移目录）

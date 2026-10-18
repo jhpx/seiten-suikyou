@@ -6,9 +6,7 @@
  * 另存了一份 byId.avatar 补这一跳。
  *
  * 出口一律容错：表没同步、某语言缺条目、id 不在表里，都返回 null，不抛。
- *
- * 这里只管「官方这张表 + 认语言」；自己页面的界面文字在 ui.ts，两张表的统一出口在 i18n.ts，
- * 默认语言（`DEFAULT_LOCALE`）是部署决策，在 config.ts。
+ * 界面文字在 ui.ts，两张表的统一出口在 i18n.ts；默认语言在 config.ts。
  */
 import fs from 'node:fs'
 import path from 'node:path'

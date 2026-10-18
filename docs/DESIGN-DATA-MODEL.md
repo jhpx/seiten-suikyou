@@ -74,7 +74,8 @@ cdTime (data) {
 ```
 enka 原始响应 (JSON)
       │
-      │  ① ingest：把响应组装成领域模型（见 §2.1），挑字段与映射交给模型的 ofEnka；
+      │  ① enka-account：把响应翻译成领域模型（见 §2.1），挑字段与映射交给模型的 ofEnka；
+      │            用例编排（并发去重 / 落库 / 失败留痕）在 service/ingest.ts
       │            原始 id 原样保留、记 source、带走官方文案 key
       ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -117,7 +118,8 @@ enka 原始响应 (JSON)
 （`accountRow`/`accountOf`、`characterRow`/`characterOf` …）。
 于是加一列只动**两处**：`schema.ts` 的表定义 + `repository/index.ts` 的映射（各一行），
 领域模型本身只在「这条数据对领域有意义」时才动。
-`ingest` 只做编排，「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`。
+`upstream/enka-account.ts` 只做纯翻译（不联网、不落库），「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`；
+`service/ingest.ts` 只做用例编排（inflight 去重、写库、失败留痕）。
 
 数据层内部的再分工（2026-10-18）：`repository/dao/` 是一张表一行的 SQL，只认行类型；
 `repository/index.ts` 是仓储门面，认聚合（`Account` + 角色 + 武器 + 圣遗物）与事务边界。

@@ -270,7 +270,7 @@ ok(!/[\u4e00-\u9fa5]/.test(中文字), '库行里没有中文名（存储层只�
 console.log('\n=== 2b. 类型归一只在 constructor 做一次（之后字段类型固定）===')
 
 /* 守的是「数据进对象时转一次」这条：脏值（字符串数字 / null / undefined）经 constructor
-   之后，模型字段一律是 number|null —— 所以 ofEnka / fromRow / 出口都不必再 num。
+   之后，模型字段一律是 number|null —— 所以 ofEnka / 仓储映射 / 出口都不必再 num。
    把这些断言拆掉，就得在别处补一堆防御式 num，类型也就谈不上「固定」了。 */
 
 /* ① 脏值直接进 constructor */
@@ -570,8 +570,8 @@ for (const name of fallbackChars.slice(0, 3)) {
 }
 
 /* ⚠️ 兜底分支不能只靠「真实存在但没被收录的角色」来测 ——
-   2026-10-06 同步补进沃雅妮莎/薇斯纳之后，fallbackChars 就空了，上面那个循环
-   一次都不跑，兜底分支从此无人看守（哪天内核把 isDefaultWeight 传错也全绿）。
+   权重表同步补进新角色后，fallbackChars 就空了，上面那个循环一次都不跑，
+   兜底分支从此无人看守（哪天内核把 isDefaultWeight 传错也全绿）。
    所以这里**构造**一个表里查不到的角色，把这条分支钉死。 */
 const fakeName = '__不存在的角色__'
 ok(!usefulAttr[fakeName], `构造：${fakeName} 确实不在权重表里（兜底前提）`)
@@ -850,14 +850,13 @@ const { attrValueText } = await import('../src/service/view.ts')
   }
 }
 {
-  /* 拿不到裸数字（汇总过的串、CLI 那些老调用方）时原样用内核的串 —— 不许瞎猜 */
+  /* 拿不到裸数字（汇总过的串、CLI 那些调用方）时原样用内核的串 —— 不瞎猜 */
   ok(attrValueText('hp', '5.2%') === '5.2%', '没有裸数字 → 原样用内核的串（不猜）')
   ok(attrValueText('hp', '') === '', '空值原样返回')
 
-  /* ⚠️ 老库（<v3）主词条那两列是 NULL。传进来必须被当成「没有 enka 值」，而不是 0 ——
+  /* ⚠️ enka 值可能是 null / undefined。传进来必须被当成「没有 enka 值」，而不是 0 ——
      `Number(null) === 0` 会把主词条钉成 0（整数词条）/ 0.0%（百分比词条），
-     兜底逻辑整条失效；真实库上就是这么被看见的（满级花主词条显示「生命值 0」）。
-     三种「空」各钉一条：null / undefined / 空串（走 num()，不走 Number()）。 */
+     兜底逻辑整条失效。三种「空」各钉一条：null / undefined / 空串（走 num()，不走 Number()）。 */
   ok(attrValueText('hp', '46.6%', 46.62, null) === '46.6%',
     'enka 值为 null → 退回内核值，不当成 0（百分比）')
   ok(attrValueText('hp', '46.6%', 46.62, undefined) === '46.6%',
@@ -914,7 +913,7 @@ console.log('\n=== 13. 圣遗物显示用 enka 原始数值（不走内核重算
   /* 没有 enka 数值的老行：退回内核值，不炸。
      造法就是「把模型里那两处留空」—— 展开字段重新构造一个（模型只有字段、
      行为都在原型上，构造出来的东西与原来逐字段相同）。
-     ⚠️ 不能「展开成一个纯对象」直接喂下去：那样 TS 是对的（纯对象没有 toValues），
+     ⚠️ 不能「展开成一个纯对象」直接喂下去：那样 TS 是对的（纯对象只是缺了原型上的方法），
      而且出口哪天开始调方法就会当场炸 —— 构造回模型才是造夹具的正路。 */
   const noEnka = new DomainCharacter({
     ...row,

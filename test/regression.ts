@@ -47,10 +47,8 @@ eq(marks.every((m) => m >= 0 && m <= 66), true, '每件得分都在 0~66 区间'
 eq(marks.length, 5, '五件圣遗物都有分')
 
 console.log('\n=== 软校验：随版本可能变化 ===')
-/* 角色数 119 → 121：2026-10-06 同步上游时补进了沃雅妮莎、薇斯纳两行。
-   121 → 123：2026-10-12 同步上游（miao v2.3.3）时补进米提亚、瓦列里两行。
-   下面两条 `watch` 就是这两个角色的权重 —— 补它们进来是因为「权重表少人」会静默
-   让人物掉进内核的通用兜底（显示成 atk 75 那种），页面上看着还挺像回事。 */
+/* 下面两条 `watch` 是这两个角色的权重 —— 「权重表少人」会静默让人物掉进内核的
+   通用兜底（显示成 atk 75 那种），页面上看着还挺像回事，所以钉住。 */
 watch(Object.keys(arti.usefulAttr || {}).length, 123, '默认权重表角色数')
 watch(arti.usefulAttr?.['沃雅妮莎'], { hp: 100, atk: 0, def: 0, cpct: 0, cdmg: 0, mastery: 0, dmg: 0, phy: 0, recharge: 0, heal: 75 }, '沃雅妮莎权重（生命模组，hp 100 / atk 0）')
 watch(arti.usefulAttr?.['胡桃'], { hp: 80, atk: 50, def: 0, cpct: 100, cdmg: 100, mastery: 75, dmg: 100, phy: 0, recharge: 0, heal: 0 }, '胡桃默认权重')

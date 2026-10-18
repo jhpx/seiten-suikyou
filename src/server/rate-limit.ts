@@ -12,14 +12,11 @@
  * 两秒里放了两次配额）。令牌桶匀速补充、没这个缝，同时允许短时突发（桶满时可一次取光），
  * 对「玩家连着换几次展柜再刷新」更友好。
  *
- * ⚠️ **用 TokenBucket，不要用同库的 RateLimiter**（2026-10-11 踩出来的）。RateLimiter 名字像令牌桶，
- *    其实是「令牌桶 + 每窗口次数上限」两层（它自己的类注释就写着 "a token bucket plus an additional
- *    check to limit how many tokens we can remove each interval"）—— 窗口里打满 N 次后，哪怕令牌桶
- *    3 秒就补回 1 个，也得干等整个窗口翻页：实测桶将空时 getWaitTime(1) 返回 59997ms。我们只要令牌桶。
+ * ⚠️ 用 TokenBucket，不要用同库的 RateLimiter：它名字像令牌桶，其实是「令牌桶 + 每窗口次数上限」
+ *    两层 —— 窗口里打满 N 次后，哪怕令牌桶 3 秒就补回 1 个，也得干等整个窗口翻页。我们只要令牌桶。
  *
- * 依赖策略：`limiter` 零传递依赖、103KB、原生 ESM，比自己写补充速率与边界取整划算（2026-10-08 定）。
  * 库管不了的只有两件事，都在这儿：**按什么分桶**（库一个实例只管一条流，我们要按「IP + 接口类型」
- * 动态开桶）与**桶的回收**（每个来过的 IP 一个桶，不回收就是内存泄漏 —— 有人换着 IP 来能撑爆）。
+ * 动态开桶）与**桶的回收**（每个来过的 IP 一个桶，不回收就是内存泄漏）。
  *
  * ⚠️ 生效范围只有**单进程**。多实例部署（Serverless、多容器）各数各的，那种场景得换成外部存储（Redis）。
  */
@@ -37,7 +34,7 @@ export interface RateRule { limit: number; windowMs: number }
 /** 三档限流的档位（fetch 每 IP / fetchAll 全局 / read 每 IP） */
 export interface RateRules { fetch: RateRule; fetchAll: RateRule; read: RateRule }
 
-/** 接口能选的档位。哪个接口走哪档写在 api/index.ts 的路由表里，这里只管怎么算。 */
+/** 接口能选的档位。哪个接口走哪档写在 server/routes.ts 的路由表里，这里只管怎么算。 */
 export type RateTier = 'read' | 'fetch'
 
 /*

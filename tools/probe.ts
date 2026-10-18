@@ -1,8 +1,8 @@
 /*
  * 在真实页面里跑一段 JS，把结果取回来 —— 量真实布局（元素尺寸 / 折行数 / 计算样式）。
  *
- * 不数截图像素：页头、立绘、账户卡自身就有大片白/深色像素，按颜色扫边界会被它们骗（实测踩过两次，
- * 把立绘深色衣服当背景、把浅色头发当评分文字）。DOM 直读没这歧义，还能拿到截图量不出的计算字号/行高。
+ * 不数截图像素：页头、立绘、账户卡自身就有大片白/深色像素，按颜色扫边界会被它们骗。
+ * DOM 直读没这歧义，还能拿到截图量不出的计算字号/行高。
  * 原理：拉一个带 --remote-debugging-port 的 chrome，用 CDP 的 Runtime.evaluate 丢表达式；不动产品代码。
  * chrome 用 .tmp/chs/chrome-headless-shell-win64/（准备方法见 tools/shot.ts 头部）。
  *
@@ -108,7 +108,7 @@ try {
   ws?.close()
   child.kill()
   /* 等 chrome 真退干净再删临时 profile：Windows 上进程没退完时 chrome_debug.log 还锁着，
-     rmSync 会 EBUSY，把已经量到的结果一起吞掉（实测踩过）。删不掉就算了，本来就在系统临时目录里。 */
+     rmSync 会 EBUSY。删不掉就算了，本来就在系统临时目录里。 */
   await new Promise(resolve => { child.once('exit', resolve); setTimeout(resolve, 1500) })
   try { fs.rmSync(profileDir, { recursive: true, force: true }) } catch { /* 占着就留着 */ }
 }

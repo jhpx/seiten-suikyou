@@ -73,8 +73,7 @@ export function toMiaoProfile (character: Character): MiaoProfile | null {
   for (const artifact of character.artifacts || []) {
     const meta = MiaoArtifact.get(artifact.itemId)   // 元数据里没有这个部件（`!meta` 把 miao 的 `false` 一并收掉）
     if (!meta) continue
-    /* 等级基数：库里存的是 enka 原值（1 基，5★ 满级 21），内核要 0 基（满级 20），两边刚好差 1。
-       全项目只此一处需要「猜」上游语义，不另立模块；将来接了米游社那类 0 基的源，这儿要按 source 分叉。 */
+    /* 等级基数：库里存的是 enka 原值（1 基，5★ 满级 21），内核要 0 基（满级 20），两边刚好差 1 */
     artis.setArtis(artifact.pos as number, {
       name: meta.name,
       level: Math.max(0, (Number(artifact.levelRaw) || 1) - 1),
@@ -111,11 +110,10 @@ export function toMiaoProfile (character: Character): MiaoProfile | null {
     artis
   }
 
-  /* 天赋等级：域模型存的是 {天赋id: 等级}（enka 的 skillLevelMap），
-     换算成内核要的 {a/e/q: 等级}。没有技能数据时给空对象 —— 内核那边按 1 级兜底。 */
+  /* 天赋等级：域模型存的是 {天赋id: 等级}（enka 的 skillLevelMap），换算成内核要的 {a/e/q: 等级} */
   profile.talent = deriveTalent(char, character.skillLevelMap)
 
-  /* 面板属性不是数据源给的，是 miao 按「基础值 + 武器 + 圣遗物」算的（上游 Avatar.js:320）。
+  /* 面板属性不是数据源给的，是 miao 按「基础值 + 武器 + 圣遗物」算的。
      base 也一并留下 —— Attr 算完 final 后内部还记着哪些是基础值，页面要拿它渲染「基础值 + 绿字」。 */
   const attrCalc = Attr.create(profile)
   profile.attr = attrCalc.calc()

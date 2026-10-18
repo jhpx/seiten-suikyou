@@ -1,17 +1,16 @@
 /*
  * 词条（stat）—— 领域层
  *
- * 「词条」是全项目最需要小心的一小块：同一个东西有三套名字，混一次就会把大生命当成小生命
- * （或把 4,780 显示成 46.6%）。这里把三套名字摆在**同一张表**里，一行就是一条词条：
+ * 同一个东西有三套名字，混一次就会把大生命当成小生命。这里把三套名字摆在**同一张表**里，一行就是一条词条：
  *
  *   语义名（HP_PERCENT）                          代码里引用它，比裸字符串分得清
  *   enka 的字符串 prop（FIGHT_PROP_HP_PERCENT）   网络上的形状，也是库里 sub_stats 存的形状
  *   miao 的短 key（hp）                           内核内部的键，显示层一直用它
  *
- * ⚠️ 方向坑（本项目踩过）：**不带 _PERCENT 的是固定值** —— `FIGHT_PROP_HP` 是固定生命（满级花主词条
+ * ⚠️ 方向坑：**不带 _PERCENT 的是固定值** —— `FIGHT_PROP_HP` 是固定生命（满级花主词条
  *    4780）、对应 miao 的 `hpPlus`（小生命）；`FIGHT_PROP_HP_PERCENT`（46.6%）才对应 `hp`（大生命）。
- *    atk / def 同理，三对都这样。反着记（hp → FIGHT_PROP_HP）不会报错、查名也照样对（官方这两条都叫
- *    「生命值」），但一旦拿它对数值，大生命就被指到固定值那一列上了。对数值的判据是 miao 自己的
+ *    atk / def 同理，三对都这样。反着记不会报错、查名也照样对（官方这两条都叫「生命值」），
+ *    但一旦拿它对数值，大生命就被指到固定值那一列上了。对数值的判据是 miao 自己的
  *    `mainIdMap`（14001 → hpPlus、15002 → hp）。
  *
  * ⚠️ 这张表**只用于对数值 / 查名**，不参与算分 —— 评分 100% 走内核，内核自己从 id 解析。
@@ -52,8 +51,8 @@ export const ENKA_PROP_TO_KEY = Object.fromEntries(
 
 /* miao key → enka prop。两个消费者：本文件的 isIntegerStatKey（判整数口径）、
    src/common/names.ts 的 statName（拿 prop 去官方文案表查名）。
-   ⚠️ 这个方向是**唯一正确**的（hp → ..._PERCENT）；反着写（hp → FIGHT_PROP_HP）不会报错、
-   查名也照样对（官方这两条都叫「生命值」），但一旦拿它对数值就把大生命指到了固定值那一列。 */
+   ⚠️ 这个方向是**唯一正确**的（hp → ..._PERCENT）；反着写不会报错、查名也照样对，
+   但一旦拿它对数值就把大生命指到了固定值那一列。 */
 export const KEY_TO_PROP = Object.fromEntries(
   Object.values(STAT_TYPES).map(t => [t.key, t.prop]))
 
