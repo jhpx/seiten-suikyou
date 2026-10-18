@@ -116,14 +116,15 @@ python tools/export_pages.py --out dist/pages --api-base https://<你的后端�
 ```
 
 ```bash
-sudo useradd --system --home /opt/seiten-suikyou --shell /usr/sbin/nologin sss
 sudo mkdir -p /opt/seiten-suikyou/releases /var/lib/seiten-suikyou
-sudo chown -R sss:sss /var/lib/seiten-suikyou
 ```
 
-`/var/lib/seiten-suikyou` 必须归 `sss`：服务以这个用户跑，SQLite 要在该目录里建
-`gs.db` 和它的 `-wal` / `-shm`。库文件本身**第一次启动时自动建**，不用手动初始化，
-没有跑 SQL 这一步。（库结构变了会直接报错提示删库重抓，见 `config/schema.ts` 的 `SCHEMA_VERSION`。）
+服务默认以 **root** 跑（VPS 上只有一个 root 的情况最常见）。想降权就在 unit 里加一行
+`User=xxx`，再把这两个目录 `chown` 给它 —— 但 SQLite 要在 `/var/lib/seiten-suikyou`
+里建 `gs.db` 和它的 `-wal` / `-shm`，权限得给对。
+
+库文件**第一次启动时自动建**，不用手动初始化，没有跑 SQL 这一步。（库结构变了会直接报错
+提示删库重抓，见 `config/schema.ts` 的 `SCHEMA_VERSION`。）
 
 ### 3.2 服务器上装 Node
 
@@ -143,20 +144,21 @@ sudo apt install -y nodejs
 在仓库根目录一条命令：
 
 ```bash
-npm pack                          # → seiten-suikyou-0.1.0.tgz（1.1MB / 697 个文件）
+npm pack                          # → seiten-suikyou-0.1.0.tgz（1.1MB / 699 个文件）
 npm pack --pack-destination ..    # 想让它落在别处就加这个
 ```
 
-**包里只有两样**（外加 npm 自动捎上的 `README.md`，无害）：
+**包里三样**（外加 npm 自动捎上的 `README.md`，无害）：
 
 | 进包 | 为什么 |
 |---|---|
 | `src/` | 后端源码，Node 直接跑 |
 | `vendor/` | miao 内核 + 官方文案表（663 个文件），少了评分算不出来 |
+| `scripts/` | 部署用的两个文件：`unpack.sh`、`seiten-suikyou.service` |
 | `package.json` | `engines`、`#miao` 那三个 import 别名、依赖清单 |
 
 `test/`、`tools/`、`docs/`、`web/`、`data/` **一个都不在**——白名单写在 `package.json`
-的 `files` 字段里，只列了 `src` 和 `vendor`。
+的 `files` 字段里，只列了 `src`、`vendor`、`scripts`。
 所以哪怕仓库里再多一堆开发期目录，也不会被卷进发布物（不加 `files` 时实测打出来 98MB，
 把 `web/` 的 1940 个文件和 `test/`、`tools/`、`docs/` 全带上了）。
 
@@ -173,34 +175,48 @@ npm 打包时**硬性排除** `package-lock.json`（写进 `files` 白名单也�
 
 > 改依赖版本就改 `package.json` 里的数字，别再写回 `^`——发布包能复现靠的就是这一条。
 
-### 3.4 传上去、解开
+### 3.4 传上去、解开（一条命令）
 
 ```bash
 # 本机
+npm pack
 scp seiten-suikyou-0.1.0.tgz root@<服务器>:/tmp/
 
-# 服务器
-sudo mkdir -p /opt/seiten-suikyou/releases/20261018
-sudo tar -xzf /tmp/seiten-suikyou-0.1.0.tgz \
-         --strip-components=1 -C /opt/seiten-suikyou/releases/20261018
-cd /opt/seiten-suikyou/releases/20261018 && ls     # src  vendor  package.json
+# 服务器：包里自带的 unpack.sh 直接抽出来执行
+tar -xzOf /tmp/seiten-suikyou-0.1.0.tgz package/scripts/unpack.sh | bash -s /tmp/seiten-suikyou-0.1.0.tgz
 ```
 
-`--strip-components=1` 不能省：npm 的包是为 `npm install x.tgz` 设计的，
-所有文件套在一层 `package/` 下，剥掉这层才是正常的工程结构。
+它干三件事：建 `releases/今天/`（日期取当天，如 `20261019`）、把包解进去、把
+`current` 软链指过去。输出长这样：
 
-### 3.5 装依赖、挂软链
+```
+✓ 代码  /opt/seiten-suikyou/releases/20261019
+✓ current -> /opt/seiten-suikyou/releases/20261019
+```
+
+同一天发两次会撞目录，那时加 `-f` 覆盖：`bash unpack.sh xxx.tgz -f`。
+装好之后脚本自己也留在 `current/scripts/` 里，以后不必再从包里抽。
+
+它等价于手动这两条（`--strip-components=1` 不能省：npm 的包是为 `npm install x.tgz`
+设计的，所有文件套在一层 `package/` 下，剥掉才是正常工程结构）：
 
 ```bash
-cd /opt/seiten-suikyou/releases/20261018 && sudo npm install --omit=dev
-sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
+sudo mkdir -p /opt/seiten-suikyou/releases/20261019
+sudo tar -xzf /tmp/seiten-suikyou-0.1.0.tgz --strip-components=1 -C /opt/seiten-suikyou/releases/20261019
+sudo ln -sfn /opt/seiten-suikyou/releases/20261019 /opt/seiten-suikyou/current
+```
+
+### 3.5 装依赖
+
+```bash
+cd /opt/seiten-suikyou/current && sudo npm install --omit=dev
 ```
 
 **是 `npm install` 不是 `npm ci`**：包里没有锁定文件（npm 打包时硬排除，见 3.3），
 `npm ci` 会直接报 `EUSAGE`。版本确定性靠 `package.json` 里写死的精确版本。
 
 > 国内机器在这条命令后面加 `--registry=https://registry.npmmirror.com` 能少等很多，
-> 原因见下面「卡住了」那一节。
+> 原因见下面「卡住了」那一节。`cd current` 是软链，npm 会写进真实目录，这样命令永远不用改日期。
 
 生产依赖只有 5 个、全是纯 JS（`node:sqlite` 是 Node 自带，不编译原生模块），装起来很快。
 `node_modules` **不进包**的理由就是这个：让服务器按自己的平台装，别把本机的东西空运过去。
@@ -280,31 +296,21 @@ npm http fetch GET 200 https://registry.npmjs.org/lodash 3002ms
 
 `--timing` 只在结束时给各阶段总耗时（`command:install Completed in 1894ms`），看不了实时进度。
 
-#### 服务器根本连不上 npm 的兜底
+#### 依赖只在服务器上装
 
-把生产依赖在本机装好，连 `node_modules` 一起传上去，服务器一个网络请求都不用发：
+`npm install` 是**唯一**的安装方式。`node_modules` 不从本机搬 —— 搬过去的树绕过了 npm 的版本
+校验，升级时容易半新半旧，现场也没法复现。装不上就是网络问题，按上面那张表排查：换镜像、
+加 `--fetch-timeout` 让它快点报错、实在不通就找运维开代理或配企业源。
 
-```bash
-# 本机（在仓库根）
-npm install --omit=dev
-tar -czf srv-deps.tar.gz src vendor package.json node_modules
-scp srv-deps.tar.gz root@<服务器>:/tmp/
-
-# 服务器（注意：这里**不加** --strip-components，包内没有 package/ 前缀）
-sudo tar -xzf /tmp/srv-deps.tar.gz -C /opt/seiten-suikyou/releases/20261018
-```
-
-生产依赖全是纯 JS（`find node_modules -name '*.node'` 为空），本机装的能直接在 Linux 跑。
-体积：31MB 的 `node_modules` 压完 **2.6MB**，连代码一起 **3.7MB**。
-代价是 `node_modules` 绕过了 npm 的版本校验，以后升级记得连它一起换。
+> 这条是硬约定，不要在它旁边另开一条「离线搬包」的小路。
 
 #### 先手动跑一次，确认能起来
 
-别急着配 systemd，先用同一个用户、同一组参数前台跑一遍（出错信息直接打在眼前）：
+别急着配 systemd，先按 unit 里那组参数前台跑一遍（出错信息直接打在眼前）：
 
 ```bash
 cd /opt/seiten-suikyou/current
-sudo -u sss node --disable-warning=ExperimentalWarning src/server/index.ts \
+node --disable-warning=ExperimentalWarning src/server/index.ts \
      --port 8787 --host 127.0.0.1 --cors-origin '*' --db /var/lib/seiten-suikyou/gs.db
 ```
 
@@ -326,7 +332,15 @@ curl -s -X POST localhost:8787/api/accounts/101242308/refresh | head -c 200   # 
 
 ### 3.6 systemd 常驻
 
-`/etc/systemd/system/seiten-suikyou.service`：
+包里带着样例 `scripts/seiten-suikyou.service`，拷过去、改两处（node 绝对路径、前端域名）就能用：
+
+```bash
+sudo cp /opt/seiten-suikyou/current/scripts/seiten-suikyou.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now seiten-suikyou
+```
+
+它就是下面这个样子：
 
 ```ini
 [Unit]
@@ -336,15 +350,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=sss
 WorkingDirectory=/opt/seiten-suikyou/current
-Environment=PORT=8787
-Environment=CORS_ORIGIN=https://<用户名>.github.io
-Environment=TRUST_PROXY=1
 ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/server/index.ts \
-          --host 127.0.0.1 --db /var/lib/seiten-suikyou/gs.db
+          --host 127.0.0.1 --port 8787 \
+          --db /var/lib/seiten-suikyou/gs.db \
+          --cors-origin *
+Environment=TRUST_PROXY=1
 Restart=always
 RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
@@ -355,15 +370,16 @@ WantedBy=multi-user.target
 | 项 | 为什么这么写 |
 |---|---|
 | `--host 127.0.0.1` | 只让本机的 nginx 转发进来，不直接对公网开端口 |
-| `CORS_ORIGIN` | 只放行 Pages 那个源跨域；不配则浏览器全部拦掉。调通阶段可写 `*`（谁都行），域名定了再收紧 |
+| `--cors-origin` | 只放行 Pages 那个源跨域；不配则浏览器全部拦掉。调通阶段可写 `*`（谁都行），域名定了再收紧 |
 | `TRUST_PROXY=1` | 挂反代后认 `X-Forwarded-For`，否则限流把全网当同一个 IP |
 | `--db` | 库落 `/var/lib/...`，切版本、删 releases 都不影响数据 |
 | `--disable-warning=ExperimentalWarning` | 屏蔽 `node:sqlite` 与剥类型的实验警告，纯粹让日志干净 |
 | `Restart=always` | 进程崩了自动拉起；上游抖动不会让服务躺着 |
 
+`ExecStart` 里 `/usr/bin/node` 要换成 `which node` 的实际结果（nvm 装的尤其要注意，
+systemd 不读 shell 配置）。
+
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now seiten-suikyou
 systemctl status seiten-suikyou          # 看是否 active (running)
 journalctl -u seiten-suikyou -f          # 跟日志，Ctrl+C 退出
 curl -s localhost:8787/api/meta | head   # 本机自测
@@ -407,35 +423,40 @@ python tools/export_pages.py --out dist/pages --api-base https://api.example.com
 
 ### 3.9 升级与回滚
 
-新版本一律开新目录，装完再切软链：
+升级就是再跑一遍 3.4 + 3.5：`unpack.sh` 会按**当天日期**建新目录、切好软链，旧目录原地留着。
 
 ```bash
 # 本机
-npm pack
-scp seiten-suikyou-0.1.0.tgz root@<服务器>:/tmp/
+npm version patch && npm pack          # 0.1.0 → 0.1.1，文件名就是版本凭证
+scp seiten-suikyou-0.1.1.tgz root@<服务器>:/tmp/
 
 # 服务器
-sudo mkdir -p /opt/seiten-suikyou/releases/20261101
-sudo tar -xzf /tmp/seiten-suikyou-0.1.0.tgz \
-         --strip-components=1 -C /opt/seiten-suikyou/releases/20261101
-cd /opt/seiten-suikyou/releases/20261101 && sudo npm install --omit=dev
-sudo ln -sfn /opt/seiten-suikyou/releases/20261101 /opt/seiten-suikyou/current
+tar -xzOf /tmp/seiten-suikyou-0.1.1.tgz package/scripts/unpack.sh | bash -s /tmp/seiten-suikyou-0.1.1.tgz
+cd /opt/seiten-suikyou/current && sudo npm install --omit=dev --registry=https://registry.npmmirror.com
 sudo systemctl restart seiten-suikyou
 ```
 
-> 包文件名带的是 `package.json` 里的 `version`。升级时把它一起往上抬一位（`0.1.1`），
-> 本地就不会出现两个同名包互相覆盖；服务器侧靠 `releases/<日期>` 区分版本，文件名其实不重要。
+依赖没改也照装：新目录里本来就没有 `node_modules`，而且 npm 有缓存，几秒的事。
 
 回滚 —— 软链指回旧目录再重启，数据自始至终没动：
 
 ```bash
-sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
+ls /opt/seiten-suikyou/releases/                  # 看有哪些版本
+sudo ln -sfn /opt/seiten-suikyou/releases/20261019 /opt/seiten-suikyou/current
 sudo systemctl restart seiten-suikyou
 ```
 
-不做「就地覆盖 `current/`」是因为 `src/` 与 `vendor/` 会被拆成两次写，
-中间那几秒新旧混着，正好有请求进来就可能读到半套代码。开新目录再切链，切换是原子的。
-旧目录攒多了随手删（`releases/20261018` 整个 `rm -rf` 即可，库不在里面）。
+不做「就地覆盖 `current/`」是因为 `src/` 与 `vendor/` 会被拆成两次写，中间那几秒新旧混着，
+正好有请求进来就可能读到半套代码。开新目录再切链，切换是原子的。旧目录攒多了随手删
+（`rm -rf /opt/seiten-suikyou/releases/<旧日期>`，库不在里面）。
+
+验证是否真的换上了：
+
+```bash
+curl -s http://127.0.0.1:8787/api/meta | head -c 200
+journalctl -u seiten-suikyou -n 20 --no-pager
+```
+
 
 **改了库结构**（`SCHEMA_VERSION` 变了）不能这样热切：老库会直接抛错。要么删库重抓，
 要么先备份再按新结构重建 —— 抓取数据随时能从上游重来，所以通常就是删了重抓。
@@ -446,7 +467,7 @@ sudo systemctl restart seiten-suikyou
 在线安全备份用 `VACUUM INTO`（服务不用停，一条命令出单个自洽文件）：
 
 ```bash
-sudo -u sss node --input-type=module -e "
+node --input-type=module -e "
 import { DatabaseSync } from 'node:sqlite'
 const db = new DatabaseSync('/var/lib/seiten-suikyou/gs.db')
 db.exec(\"VACUUM INTO '/var/lib/seiten-suikyou/gs-\$(date +%F).db'\")
@@ -455,7 +476,7 @@ db.close()
 ```
 
 挂 crontab 每天一份就够（这库全是能重抓的缓存数据，丢了不致命）：
-`0 4 * * * sudo -u sss node --input-type=module -e "..."`
+`0 4 * * * node --input-type=module -e "..."`
 
 ---
 

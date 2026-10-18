@@ -1,0 +1,29 @@
+# 样例。拷到 /etc/systemd/system/seiten-suikyou.service 后改三处：
+#   /usr/bin/node  → which node 的结果
+#   CORS_ORIGIN    → 前端域名（调通阶段可以先留 *）
+#   想降权跑就加一行 User=xxx（默认 root）
+#
+# 然后：systemctl daemon-reload && systemctl enable --now seiten-suikyou
+
+[Unit]
+Description=seiten-suikyou - 星天水镜接口服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/seiten-suikyou/current
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/server/index.ts \
+          --host 127.0.0.1 --port 8787 \
+          --db /var/lib/seiten-suikyou/gs.db \
+          --cors-origin *
+# 挂在 nginx / Cloudflare Tunnel 后面时必须开，否则所有访客共用一个限流桶
+Environment=TRUST_PROXY=1
+Restart=always
+RestartSec=3
+# SQLite 要收尾，别把进程硬切
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

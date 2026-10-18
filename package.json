@@ -14,7 +14,8 @@
   },
   "files": [
     "src",
-    "vendor"
+    "vendor",
+    "scripts"
   ],
   "dependencies": {
     "@hono/node-server": "2.1.5",
