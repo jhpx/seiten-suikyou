@@ -48,6 +48,8 @@ npm run server -- --port 8787 --trust-proxy \
 ```
 
 - `--cors-origin`：只放行白名单里的源跨域调接口；不配默认不开。
+  调通阶段可以先写 `--cors-origin '*'`（任何来源都放行），等域名定了再换成具体那一个。
+  **引号别省**：`*` 在 shell 里是通配符，不引起来可能被展开成当前目录的文件名。
 - `--trust-proxy`：认 `CF-Connecting-IP` / `X-Forwarded-For` 分桶限流；直接暴露时**别**开（那是请求头，可伪造）。
 - 这台机器**不需要** `web/`（前端不会向后端要图片，见 2.3），clone 时甚至可以不带 `--recursive`。
 
@@ -202,6 +204,32 @@ sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
 
 到这儿进程还没起：`npm install` 只装依赖，`current` 只是给 systemd 一个稳定入口。
 
+#### 先手动跑一次，确认能起来
+
+别急着配 systemd，先用同一个用户、同一组参数前台跑一遍（出错信息直接打在眼前）：
+
+```bash
+cd /opt/seiten-suikyou/current
+sudo -u sss node --disable-warning=ExperimentalWarning src/server/index.ts \
+     --port 8787 --host 127.0.0.1 --cors-origin '*' --db /var/lib/seiten-suikyou/gs.db
+```
+
+另开一个终端验三件事：
+
+```bash
+curl -s localhost:8787/api/health                       # 起来了
+curl -s -D - -o /dev/null -H 'Origin: https://foo.github.io' \
+     localhost:8787/api/meta | grep -i allow-origin     # 跨域头是 *
+curl -s -X POST localhost:8787/api/accounts/101242308/refresh | head -c 200   # 真能抓
+```
+
+`--cors-origin '*'` 是调通阶段的临时设置：**任何来源的页面都能读这个接口**。
+等 `docs/DEPLOY.md` 2.2 那步把前端推到 Pages、知道了确切域名，就换成
+`--cors-origin https://<用户名>.github.io`（CORS 只认字面量，多一个斜杠都算不匹配）。
+
+启动日志里 `serveStatic: root path .../web is not found` 这句**可以无视**：
+这是生产形态（不带 `web/`）的正常现象，静态请求一律 404，接口不受影响。
+
 ### 3.6 systemd 常驻
 
 `/etc/systemd/system/seiten-suikyou.service`：
@@ -233,7 +261,7 @@ WantedBy=multi-user.target
 | 项 | 为什么这么写 |
 |---|---|
 | `--host 127.0.0.1` | 只让本机的 nginx 转发进来，不直接对公网开端口 |
-| `CORS_ORIGIN` | 只放行 Pages 那个源跨域；不配则浏览器全部拦掉 |
+| `CORS_ORIGIN` | 只放行 Pages 那个源跨域；不配则浏览器全部拦掉。调通阶段可写 `*`（谁都行），域名定了再收紧 |
 | `TRUST_PROXY=1` | 挂反代后认 `X-Forwarded-For`，否则限流把全网当同一个 IP |
 | `--db` | 库落 `/var/lib/...`，切版本、删 releases 都不影响数据 |
 | `--disable-warning=ExperimentalWarning` | 屏蔽 `node:sqlite` 与剥类型的实验警告，纯粹让日志干净 |

@@ -60,6 +60,7 @@ export interface AppOptions {
   /** 覆盖限流档位（{ fetch:{limit,windowMs}, … }）；传 false = 不限流 */
   rateLimit?: Partial<RateRules> | false
   /** 跨域白名单（来访的 Origin 一字不差地对上才给 CORS 头）；留空 = 不开跨域（默认）。
+      写 `'*'` = 任何来源都放行（先跑通用的，正式上线建议对准具体域名）。
       前端单独托管（GitHub Pages 之类）+ 后端另放一台机器时才需要，见 docs/DEPLOY.md。 */
   corsOrigins?: string[]
 }
@@ -93,9 +94,18 @@ export function createApp ({
 
   /* 跨域必须排在限流前面：浏览器发带自定义头的跨域请求时会先探一发 OPTIONS，
      这里不回 204 真正的请求根本发不出去；预检也不该占限流配额。
-     没配白名单就压根不挂这个中间件 —— 少一层，也不给任何许可头。 */
+     没配白名单就压根不挂这个中间件 —— 少一层，也不给任何许可头。
+
+     白名单里写 `*` 是「谁都行」：这里必须转成字符串 `'*'` 再交给 hono。
+     因为 hono 收到**数组**时只做字面量比对（`includes(origin)`），`['*']` 对任何真实
+     Origin 都匹配不上，等于没开跨域 —— 这个坑实测过，别改回去。 */
   if (corsOrigins.length) {
-    app.use('*', cors({ origin: corsOrigins, allowMethods: ['GET', 'POST', 'OPTIONS'], maxAge: 86400 }))
+    const anyOrigin = corsOrigins.includes('*')
+    app.use('*', cors({
+      origin: anyOrigin ? '*' : corsOrigins,
+      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      maxAge: 86400
+    }))
   }
 
   /* 每条路由自己挂限流档位；闸门关掉时 guard 是空中间件，调用点不用分支 */
@@ -189,9 +199,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`  客户端  ${trustProxy
     ? '按转发头认（CF-Connecting-IP / X-Forwarded-For）'
     : '按 TCP 对端地址认（挂代理后面要加 --trust-proxy，否则限流形同虚设）'}`)
-  console.log(`  跨域    ${corsOrigins.length
-    ? corsOrigins.join(' ')
-    : '关闭（本地运行不需要；前端单独托管时要加 --cors-origin <前端地址>）'}`)
+  console.log(`  跨域    ${!corsOrigins.length
+    ? '关闭（本地运行不需要；前端单独托管时要加 --cors-origin <前端地址>）'
+    : corsOrigins.includes('*')
+      ? '*（任何来源都能读，先跑通用的）'
+      : corsOrigins.join(' ')}`)
   if (!i18n.available()) {
     console.log('  提示    多语言表还没同步（只有中文）。跑一次：I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py')
   } else {

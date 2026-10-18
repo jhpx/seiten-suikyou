@@ -56,6 +56,9 @@
 由后端启动参数 `--cors-origin`（或环境变量 `CORS_ORIGIN`，逗号分隔多个）控制，
 默认**不开**。命中白名单才回 `Access-Control-Allow-Origin: <Origin>` + `Vary: Origin`。
 
+白名单写 `*` 表示任何来源都放行，此时回的是 `Access-Control-Allow-Origin: *`
+（调通阶段用，正式上线换成具体域名）。
+
 预检 `OPTIONS` 在限流**之前**回 `204`（`Allow-Methods: GET,POST,OPTIONS`、
 `Allow-Headers` 原样回显浏览器要的那些、`Max-Age: 86400`），否则带自定义头的跨域请求发不出去。
 

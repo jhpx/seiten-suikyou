@@ -534,6 +534,7 @@ console.log('\n=== 11. 限流 ===')
  * 允许任意站点的脚本读走这里的数据，所以**必须显式配白名单才生效**。
  * 前端单独托管（比如丢到 GitHub Pages）+ 后端另放 VPS 时，页面域名和接口域名不是一回事，
  * 这时才需要：启动加 --cors-origin=https://xxx.github.io。
+ * 调通阶段懒得对域名就写 --cors-origin='*'（**引号别省**，否则 shell 可能把 `*` 当通配符展开）。
  */
 console.log('\n=== 12. 跨域 ===')
 {
@@ -589,6 +590,23 @@ console.log('\n=== 12. 跨域 ===')
     const g = () => fetch(a.url + `/api/accounts/${UID}`)
     eq((await g()).status, 200, '  预检刷完，正常请求照样放行')
     eq((await g()).status, 429, '  配额用尽后才 429')
+    a.server.close()
+  }
+
+  /* ④ 白名单写 `*` = 谁都行。钉住这件事是因为 hono 收到**数组**只做字面量比对，
+        `['*']` 对任何真实 Origin 都匹配不上 —— 以前这里静默失效，前端在 Pages 上
+        一直报跨域，服务端日志却看不出任何异常。 */
+  {
+    const a = await startServer({ port: 0, dbFile: ':memory:', corsOrigins: ['*'] })
+    for (const origin of ['https://any.example', 'https://another.example']) {
+      const r = await fetch(a.url + '/api/health', { headers: { Origin: origin } })
+      eq(r.headers.get('access-control-allow-origin'), '*', `通配 *：${origin} 也拿到许可头`)
+    }
+    const pre = await fetch(a.url + `/api/accounts/${UID}/refresh`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://any.example', 'Access-Control-Request-Method': 'POST' }
+    })
+    eq(pre.status, 204, '通配 *：预检同样回 204')
     a.server.close()
   }
 }
