@@ -9,6 +9,8 @@
 两种部署形态：**本地运行**（一台机器全包）和 **前后端分离**（前端丢静态托管，后端另放一台机器）。
 没有「同源部署」这种独立概念 —— 本地运行天然同源，无需任何额外配置。
 
+前端已经在 GitHub Pages 上的话，直接看第二节（怎么连）和第三节（后端那台机器怎么上线）。
+
 ---
 
 ## 一、本地运行（一台机器全包）
@@ -86,6 +88,262 @@ python tools/export_pages.py --out dist/pages --api-base https://<你的后端�
 免费 Pages 站点是**公开**的，而本服务**没有登录鉴权** —— 后端那台机器等于对全网开放
 `POST /api/accounts/:uid/refresh`（别人能用你的服务去打 enka）。能接受就接受（展柜数据本来就是公开的），
 不能接受就在反向代理上加一层 Basic Auth 或 IP 白名单，或把 `fetch` 限流调更小。
+
+---
+
+## 三、后端上线（取代码 → systemd）
+
+这一节是形态二里「后端那台机器」的落地细节，Linux 云服务器 + systemd 版本。
+前端已经在 GitHub Pages 上，所以后端**不需要 `web/`**，只出 `/api/*`。
+
+### 3.0 先说清楚：没有 build，也没有打包这一步
+
+项目零构建，Node 22.18+ 运行时自己剥类型，`src/*.ts` **就是**运行产物。
+所以「发布」= 把代码弄到服务器上 + 装依赖 + 起进程，没有编译、没有产物目录、没有
+「改了源码忘了 build」这种事故。下面五步：建目录 → 装 Node → 取代码 → 装依赖 → systemd。
+
+### 3.1 目录怎么摆（数据独立于版本）
+
+```
+/opt/seiten-suikyou/
+├── releases/20261018/     ← 一份代码（clone 出来或解压出来的），一个版本一个目录
+├── current -> releases/20261018
+/var/lib/seiten-suikyou/
+└── gs.db                  ← SQLite 库放外面，换版本不碰数据
+```
+
+```bash
+sudo useradd --system --home /opt/seiten-suikyou --shell /usr/sbin/nologin sss
+sudo mkdir -p /opt/seiten-suikyou/releases /var/lib/seiten-suikyou
+sudo chown -R sss:sss /var/lib/seiten-suikyou
+```
+
+`/var/lib/seiten-suikyou` 必须归 `sss`：服务以这个用户跑，SQLite 要在该目录里建
+`gs.db` 和它的 `-wal` / `-shm`。库文件本身**第一次启动时自动建**，不用手动初始化，
+没有跑 SQL 这一步。（库结构变了会直接报错提示删库重抓，见 `config/schema.ts` 的 `SCHEMA_VERSION`。）
+
+### 3.2 服务器上装 Node
+
+要 **22.18 以上**（剥类型从这个版本开始默认开），推荐 24 LTS：
+
+```bash
+node -v                       # 先看有没有，低于 v22.18 就装
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+> 用 nvm 装的 Node 也能跑，但 systemd 不读 shell 配置，unit 里的 `ExecStart`
+> 必须写绝对路径（`~/.nvm/versions/node/v24.x.x/bin/node`）。新手直接用 NodeSource 省事。
+
+### 3.3 把代码弄上去
+
+两条路，按服务器能不能连 GitHub 选：
+
+| 方式 | 命令 | 什么时候用 |
+|---|---|---|
+| **git** | `git clone`（升级时再 clone 一份新的） | 服务器能访问 GitHub（最省事） |
+| **tar** | 本机一条 `tar -czf` + `scp` | 连不上 GitHub，或者要留一份固定版本的包 |
+
+**方式 A：git**
+
+```bash
+cd /opt/seiten-suikyou/releases
+sudo git clone --depth 1 <母仓库地址> 20261018
+```
+
+**不要加 `--recursive`**：那会把 102MB 的前端素材一起拉下来，而后端根本不用它
+（`web/` 也进不了运行路径，静态请求本来就 404）。
+
+**方式 B：tar**
+
+只有四样东西要传：
+
+```bash
+# 本机
+tar -czf /tmp/seiten-suikyou-20261018.tar.gz \
+  src vendor package.json package-lock.json
+scp /tmp/seiten-suikyou-20261018.tar.gz root@<服务器>:/tmp/
+
+# 服务器
+sudo mkdir -p /opt/seiten-suikyou/releases/20261018
+sudo tar -xzf /tmp/seiten-suikyou-20261018.tar.gz -C /opt/seiten-suikyou/releases/20261018
+```
+
+四样各有理由，少一样就跑不起来：
+
+| 带上 | 为什么 |
+|---|---|
+| `src/` | 后端源码，Node 直接跑 |
+| `vendor/` | miao 内核 + 官方文案表（663 个文件），少了评分算不出来 |
+| `package.json` | 版本号、`engines`、`#miao` 那三个 import 别名 |
+| `package-lock.json` | 服务器靠它 `npm ci` 装出一模一样的依赖 |
+
+不带：`web/`（前端在 Pages）、`test/`、`tools/`、`docs/`、`data/`、`node_modules/`。
+四项合计 4.6MB，压完约 1MB。
+`node_modules` 不带的理由：装包交给服务器上的 `npm ci`，别把本机平台的东西空运过去；
+生产依赖只有 5 个、全是纯 JS（`node:sqlite` 是 Node 自带，不编译原生模块），装起来很快。
+
+### 3.4 装依赖、挂软链
+
+```bash
+cd /opt/seiten-suikyou/releases/20261018 && sudo npm ci --omit=dev
+sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
+```
+
+到这儿进程还没起：`npm ci` 只装依赖，`current` 只是给 systemd 一个稳定入口。
+
+### 3.5 systemd 常驻
+
+`/etc/systemd/system/seiten-suikyou.service`：
+
+```ini
+[Unit]
+Description=seiten-suikyou - 星天水镜接口服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sss
+WorkingDirectory=/opt/seiten-suikyou/current
+Environment=PORT=8787
+Environment=CORS_ORIGIN=https://<用户名>.github.io
+Environment=TRUST_PROXY=1
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/server/index.ts \
+          --host 127.0.0.1 --db /var/lib/seiten-suikyou/gs.db
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+每个参数都在管一件事：
+
+| 项 | 为什么这么写 |
+|---|---|
+| `--host 127.0.0.1` | 只让本机的 nginx 转发进来，不直接对公网开端口 |
+| `CORS_ORIGIN` | 只放行 Pages 那个源跨域；不配则浏览器全部拦掉 |
+| `TRUST_PROXY=1` | 挂反代后认 `X-Forwarded-For`，否则限流把全网当同一个 IP |
+| `--db` | 库落 `/var/lib/...`，切版本、删 releases 都不影响数据 |
+| `--disable-warning=ExperimentalWarning` | 屏蔽 `node:sqlite` 与剥类型的实验警告，纯粹让日志干净 |
+| `Restart=always` | 进程崩了自动拉起；上游抖动不会让服务躺着 |
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now seiten-suikyou
+systemctl status seiten-suikyou          # 看是否 active (running)
+journalctl -u seiten-suikyou -f          # 跟日志，Ctrl+C 退出
+curl -s localhost:8787/api/meta | head   # 本机自测
+```
+
+### 3.6 nginx 反代 + HTTPS
+
+```nginx
+server {
+    listen 80;
+    server_name api.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 30s;      # 抓上游最坏 8s，留足余量
+    }
+}
+```
+
+**HTTPS 不是可选项**：前端 Pages 是 `https://`，页面去调 `http://` 接口会被浏览器按
+混合内容直接拦掉（控制台报 Mixed Content，请求根本不发出去）。所以
+`sudo certbot --nginx -d api.example.com` 这条要跟上，然后确认：
+
+```bash
+curl -s https://api.example.com/api/meta | head    # 通了就成
+```
+
+### 3.7 把前端指过来
+
+前端仓库里重新导一次，把后端地址写进 `env.js`：
+
+```bash
+python tools/export_pages.py --out dist/pages --api-base https://api.example.com
+```
+
+推上去之后，`CORS_ORIGIN` 里配的那个源要和页面实际域名**一字不差**
+（`https://<用户名>.github.io`，项目站也不要带仓库名 —— Origin 头不带路径）。
+
+### 3.8 升级与回滚
+
+新版本一律开新目录，装完再切软链。方式 A（git）：
+
+```bash
+cd /opt/seiten-suikyou/releases
+sudo git clone --depth 1 <母仓库地址> 20261101
+cd 20261101 && sudo npm ci --omit=dev
+sudo ln -sfn /opt/seiten-suikyou/releases/20261101 /opt/seiten-suikyou/current
+sudo systemctl restart seiten-suikyou
+```
+
+方式 B（tar）：
+
+```bash
+# 本机
+tar -czf /tmp/seiten-suikyou-20261101.tar.gz src vendor package.json package-lock.json
+scp /tmp/seiten-suikyou-20261101.tar.gz root@<服务器>:/tmp/
+
+# 服务器
+sudo mkdir -p /opt/seiten-suikyou/releases/20261101
+sudo tar -xzf /tmp/seiten-suikyou-20261101.tar.gz -C /opt/seiten-suikyou/releases/20261101
+cd /opt/seiten-suikyou/releases/20261101 && sudo npm ci --omit=dev
+sudo ln -sfn /opt/seiten-suikyou/releases/20261101 /opt/seiten-suikyou/current
+sudo systemctl restart seiten-suikyou
+```
+
+回滚两种方式通用 —— 软链指回旧目录再重启，数据自始至终没动：
+
+```bash
+sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
+sudo systemctl restart seiten-suikyou
+```
+
+不做「就地覆盖 `current/`（或就地 `git pull`）」是因为 `src/` 与 `vendor/` 会被拆成两次写，
+中间那几秒新旧混着，正好有请求进来就可能读到半套代码。开新目录再切链，切换是原子的。
+旧目录攒多了随手删（`releases/20261018` 整个 `rm -rf` 即可，库不在里面）。
+
+**改了库结构**（`SCHEMA_VERSION` 变了）不能这样热切：老库会直接抛错。要么删库重抓，
+要么先备份再按新结构重建 —— 抓取数据随时能从上游重来，所以通常就是删了重抓。
+
+### 3.9 备份 SQLite
+
+库是 WAL 模式，`gs.db` 旁边有 `-wal` / `-shm`，**只拷 `gs.db` 会丢最近的写入**。
+在线安全备份用 `VACUUM INTO`（服务不用停，一条命令出单个自洽文件）：
+
+```bash
+sudo -u sss node --input-type=module -e "
+import { DatabaseSync } from 'node:sqlite'
+const db = new DatabaseSync('/var/lib/seiten-suikyou/gs.db')
+db.exec(\"VACUUM INTO '/var/lib/seiten-suikyou/gs-\$(date +%F).db'\")
+db.close()
+"
+```
+
+挂 crontab 每天一份就够（这库全是能重抓的缓存数据，丢了不致命）：
+`0 4 * * * sudo -u sss node --input-type=module -e "..."`
+
+### 3.10 服务器不能联外网怎么办
+
+`npm ci` 要访问 npm registry（首次实测约 5 分钟，看网络）。真没外网就在本机装好一起搬：
+
+```bash
+npm ci --omit=dev                        # 本机，装生产依赖
+tar -czf /tmp/seiten-suikyou-deps.tar.gz \
+  src vendor package.json package-lock.json node_modules
+```
+
+生产依赖全是纯 JS、没有 `.node` 原生模块，Windows 上装的直接能在 Linux 跑。
+代价是包体从约 1MB 变成约 8MB，而且 `node_modules` 会越过 `npm ci` 的版本校验，
+以后升级记得连它一起换。
 
 ---
 

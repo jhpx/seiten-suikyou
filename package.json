@@ -26,6 +26,7 @@
     "sync:i18n": "python tools/sync.py i18n",
     "sync:assets": "python tools/sync.py assets",
     "list:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.ts",
+    "gen:artis-table": "node --disable-warning=ExperimentalWarning tools/gen_artis_table.ts",
     "check:docs": "python tools/check_docs.py",
     "db:push": "drizzle-kit push",
     "db:sql": "drizzle-kit export --sql",

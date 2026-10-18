@@ -1,0 +1,365 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "星天水镜 · 前端（seiten-suikyou-web）",
+    "locale": "zh-CN",
+    "output": "seiten-suikyou-web-architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1090,
+      720
+    ],
+    "repository": {
+      "url": "https://github.com/jhpx/seiten-suikyou-web",
+      "revision": "b5218426b88dbdbabf47a5dd49ab647ce604516d"
+    }
+  },
+  "components": [
+    {
+      "id": "page",
+      "type": "frontend",
+      "label": "页面骨架",
+      "sublabel": "index.html",
+      "pos": [
+        445,
+        70
+      ],
+      "size": [
+        200,
+        56
+      ],
+      "tag": "两个 view 切换",
+      "sources": [
+        {
+          "path": "index.html",
+          "line": 49,
+          "label": "type=module 引入口"
+        }
+      ]
+    },
+    {
+      "id": "bootstrap",
+      "type": "frontend",
+      "label": "入口 · 控制器",
+      "sublabel": "bootstrap.js",
+      "pos": [
+        445,
+        176
+      ],
+      "size": [
+        200,
+        56
+      ],
+      "tag": "boot / loadUid / fetchUid",
+      "sources": [
+        {
+          "path": "bootstrap.js",
+          "line": 18,
+          "label": "loadUid / fetchUid / boot"
+        }
+      ]
+    },
+    {
+      "id": "roster",
+      "type": "frontend",
+      "label": "首页",
+      "sublabel": "roster.js",
+      "pos": [
+        74,
+        290
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "账号头 + 网格",
+      "sources": [
+        {
+          "path": "roster.js",
+          "line": 234,
+          "label": "reg.renderRoster"
+        }
+      ]
+    },
+    {
+      "id": "filter",
+      "type": "frontend",
+      "label": "筛选 / 排序",
+      "sublabel": "filter.js · sort.js",
+      "pos": [
+        272,
+        290
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "弹窗，确定才生效",
+      "sources": [
+        {
+          "path": "filter.js",
+          "line": 239,
+          "label": "reg.renderFilterBar"
+        },
+        {
+          "path": "sort.js",
+          "line": 149,
+          "label": "sortAvatars / filteredAvatars"
+        }
+      ]
+    },
+    {
+      "id": "detail",
+      "type": "frontend",
+      "label": "明细页",
+      "sublabel": "detail.js",
+      "pos": [
+        470,
+        290
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "复刻 miao 结果图",
+      "sources": [
+        {
+          "path": "detail.js",
+          "line": 433,
+          "label": "reg.renderDetail"
+        }
+      ]
+    },
+    {
+      "id": "i18n",
+      "type": "frontend",
+      "label": "界面文案",
+      "sublabel": "i18n.js",
+      "pos": [
+        668,
+        290
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "/api/meta 取 ui 表",
+      "sources": [
+        {
+          "path": "i18n.js",
+          "line": 44,
+          "label": "reg.loadMeta"
+        }
+      ]
+    },
+    {
+      "id": "history",
+      "type": "frontend",
+      "label": "UID 历史",
+      "sublabel": "history.js",
+      "pos": [
+        866,
+        290
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "localStorage",
+      "sources": [
+        {
+          "path": "history.js",
+          "line": 42,
+          "label": "reg.renderUidHistory"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "type": "frontend",
+      "label": "core.js 基座",
+      "sublabel": "state · T() · el() · api() · reg",
+      "pos": [
+        215,
+        440
+      ],
+      "size": [
+        680,
+        64
+      ],
+      "tag": "不 import 任何 feature",
+      "sources": [
+        {
+          "path": "core.js",
+          "line": 312,
+          "label": "export const reg"
+        },
+        {
+          "path": "core.js",
+          "line": 85,
+          "label": "api：唯一出口"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "后端 /api/*",
+      "sublabel": "另一个 origin",
+      "pos": [
+        440,
+        615
+      ],
+      "size": [
+        220,
+        64
+      ],
+      "tag": "CORS 白名单"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "前端仓库 seiten-suikyou-web · 纯静态、零构建、零框架",
+      "wraps": [
+        "page",
+        "bootstrap",
+        "roster",
+        "filter",
+        "detail",
+        "i18n",
+        "history",
+        "core"
+      ],
+      "pad": 20
+    }
+  ],
+  "connections": [
+    {
+      "id": "page-bootstrap",
+      "from": "page",
+      "to": "bootstrap",
+      "label": "type=module",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        545,
+        140
+      ]
+    },
+    {
+      "id": "boot-roster",
+      "from": "bootstrap",
+      "to": "roster",
+      "label": "import 即注册",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-filter",
+      "from": "bootstrap",
+      "to": "filter",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-detail",
+      "from": "bootstrap",
+      "to": "detail",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-i18n",
+      "from": "bootstrap",
+      "to": "i18n",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-history",
+      "from": "bootstrap",
+      "to": "history",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "roster-core",
+      "from": "roster",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "filter-core",
+      "from": "filter",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "detail-core",
+      "from": "detail",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "i18n-core",
+      "from": "i18n",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "history-core",
+      "from": "history",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "core-api",
+      "from": "core",
+      "to": "api",
+      "label": "fetch API_BASE + /api/*",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        563,
+        560
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "怎么拆的",
+      "items": [
+        "index.html 只有骨架：顶栏表单 + #view-roster / #view-detail 两个空 div，内容全靠 JS 现填",
+        "bootstrap.js 是控制器：把各 feature 引到一起（副作用 = 往 reg 注册渲染器），再绑顶栏事件、boot()",
+        "core.js 不 import 任何 feature —— 编排函数只从 reg 里取（renderAll / openDetail / refreshRosterGrid）"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "注册表与零循环依赖",
+      "items": [
+        "feature 加载时把渲染器写进 core.reg：renderRoster / renderFilterBar / renderDetail / loadMeta / renderUidHistory",
+        "core 编排时反调 reg.xxx?.()：roster 里也是 reg.renderFilterBar?.() 调筛选条 —— 两个方向都不 import 对方",
+        "所以文件之间只有 feature → core 单向依赖，靠 reg 换掉了循环 import"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "出口与部署",
+      "items": [
+        "core.api() 是唯一出口：API_BASE + path 拼地址，认 {ok,data} / {ok:false,error} 两种形状，非 ok 一律 throw",
+        "API_BASE 来自 env.js，留空 = 同源（本地 npm run server 一台机器全包），填后端域名 = 跨域",
+        "图片是相对路径（assets/...），浏览器按页面所在目录解析；PAGE_BASE 只用来改地址栏，不参与资源加载"
+      ]
+    }
+  ]
+}

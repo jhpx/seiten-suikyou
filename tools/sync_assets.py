@@ -22,9 +22,11 @@
     MIAO_PLUGIN_PATH=/path/to/miao-plugin python tools/sync_assets.py
     python tools/sync_assets.py --out web/assets
 
-全程离线，一张图都不从网络下。唯一的例外是 7 张元素符号（common/elem/{元素}.png）：
-miao 整个仓库没有这图，所以把它们（7 张共 45KB）直接放在仓库里当种子
-tools/assets-seed/，同步时从种子复制 —— 换机器、断网都能重建出完整素材。
+全程离线，一张图都不从网络下。
+
+7 张元素符号（common/elem/{元素}.png）miao 仓库里没有，但它们已经提交在前端子仓库
+web/assets/ 里，不用在这里生成 —— 所以这个脚本只往 out/ 里写 miao 有的东西，
+web/assets/ 里已有的其他图原样保留（复制不是清空）。
 """
 import argparse
 import json
@@ -36,8 +38,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "web" / "assets"
 DEFAULT_LIST = ROOT / ".tmp" / "asset-list.json"
-# 仓库自带的种子素材：miao 那边找不到、又必须有的图放这里，进 git
-SEED = ROOT / "tools" / "assets-seed"
 
 # miao-plugin 在哪：环境变量优先，其次 sibling 目录（跟 tools/sync_miao.py 一个约定）
 _env = os.environ.get("MIAO_PLUGIN_PATH")
@@ -85,8 +85,8 @@ talent-e / talent-q 是**可选**的：miao 的规则是「哪个命座提升这
 CHAR_IMGS = ["splash.webp", "face.webp", "card.webp", "banner.webp"]
 CHAR_ICONS = [f"cons-{i}.webp" for i in range(1, 7)] + ["talent-e.webp", "talent-q.webp"]
 
-# 元素符号：miao 仓库里没有（星穹铁道那套 meta-sr/icons/elem-*.webp 不是原神的），
-# 所以从仓库自带的种子目录取，见 sync_elem_icons()
+# 元素符号 common/elem/{元素}.png miao 仓库里没有（星穹铁道那套 meta-sr/icons/elem-*.webp 不是原神的），
+# 已经提交在前端子仓库 web/assets/ 里，这个脚本不碰它们。
 
 
 def log(*args):
@@ -200,34 +200,13 @@ def sync_artifacts(res: Path, out: Path, stats):
     log(f"[info] 套装 {n} 个")
 
 
-def sync_elem_icons(out: Path, stats):
-    """
-    7 张元素符号，从仓库自带的种子目录 tools/assets-seed/ 复制。
-
-    为什么种子要进 git：miao 仓库没有这图，以前只能去 paimon-moe 下，
-    于是「同步素材」这件本该纯本地的事就挂上了网络 —— 国内连不上就静默缺图。
-    这 7 张一共才 45KB，直接随仓库走，谁都能离线重建。
-    """
-    missing = []
-    for el in ELEM_BGS:
-        rel = f"common/elem/{el}.png"
-        src = SEED / rel
-        if not src.exists():
-            missing.append(rel)
-            continue
-        copy_one(src, out, rel, stats)
-    if missing:
-        log(f"[warn] 种子里缺 {len(missing)} 张元素图标：{', '.join(missing)}")
-        log(f"[hint] 补到 {SEED}/common/elem/ 下即可（来源 paimon-moe 的 static/images/elements）")
-
-
 def check_against_list(out: Path, stats):
     """
     拿「页面真正会请求的图」的清单反查一遍落盘。
 
     这一层防的是另一类错：view.ts 拼了个源端没有的路径（比如改了 imgs 名、
     或某个角色 miao 侧真的没素材）。全量复制解决不了这种错，只能对账。
-    清单由 tools/list_assets.mjs 生成，不在就跳过这一步。
+    清单由 tools/list_assets.ts 生成，不在就跳过这一步。
     """
     list_path = DEFAULT_LIST
     if not list_path.exists():
@@ -238,7 +217,7 @@ def check_against_list(out: Path, stats):
         log(f"[warn] 页面要的图里有 {len(missing)} 个没落到盘上，页面会出现空框：")
         for r in missing:
             log(f"  [缺] {r}")
-        log("[hint] 先跑 node tools/list_assets.mjs 刷新清单再对一次")
+        log("[hint] 先跑 node tools/list_assets.ts 刷新清单再对一次")
     return missing
 
 
@@ -256,9 +235,6 @@ def main():
 
     log("[info] 同步通用 UI 素材 ...")
     sync_common(res, out, stats)
-
-    log("[info] 同步元素图标（仓库种子）...")
-    sync_elem_icons(out, stats)
 
     log("[info] 同步角色素材（全量）...")
     sync_chars(res, out, stats)

@@ -39,7 +39,8 @@ npm run server                     # 打开 http://127.0.0.1:8787
   （素材源：`MIAO_PLUGIN_PATH`，默认 `../miao-plugin`，跟 `npm run sync` 一个约定）。
   落盘到 `web/assets/`（子仓库里）—— 同步完在子仓库提交，母仓库再更新子模块指针。
   全量约 100 MB、1900+ 个文件，一次跑完以后随便加角色都不用再管。
-  miao 仓库里唯一没有的 7 张元素符号，作为种子放在 `tools/assets-seed/` 里随仓库走。
+  miao 仓库里唯一没有的 7 张元素符号（`common/elem/*.png`）已经作为普通素材提交在
+  `web/assets/` 里，同步脚本不碰它们。
 - 想对账「页面要的图是不是都落盘了」：`npm run list:assets && npm run sync:assets`。
   清单由页面自己的 `buildAccountView` 吐出来，缺哪个会列出来并以失败退出。
 
@@ -207,7 +208,8 @@ HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizz
 | 后端（接口） | 一台有公网地址的机器 | `/api/*`，前端跨域去调 |
 
 导出工具 `export_pages.py` 跟着前端走，在前端子仓库里跑（用法见其 README）。
-完整的三步走、相对路径为什么不需要改写、子路径与安全的注意事项，
+后端那台机器怎么上线（取代码 → systemd + nginx：`git clone` 或一条 `tar` 命令，
+不编译也没打包脚本）、完整的三步走、相对路径为什么不需要改写、子路径与安全的注意事项，
 都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
 ## 多语言
@@ -357,7 +359,8 @@ seiten-suikyou/
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
-├── tools/                    # 同步 / 验收工具（开发期用，不参与运行时）
+├── tools/                    # 开发期工具（不进运行时，也不进发布包）
+│   ├── README.md             #   每个工具一行简介 + 谁调谁 —— 先看这个
 │   ├── sync.py               # ★ 同步上游的唯一入口（编排下面三个，按依赖顺序跑）
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
 │   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
@@ -366,7 +369,8 @@ seiten-suikyou/
 │   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）
 │   ├── shot.ts               # headless chrome 截图
 │   ├── check_docs.py         # 校验文档里的相对链接没写歪（搬过家就查一遍）
-│   └── assets-seed/          # 种子素材：miao 那边没有的图（元素符号 7 张），进 git
+│   ├── gen_artis_table.ts    # 实测 miao 规则生成评分总表（写 docs/ 下 csv + html）
+│   └── link_arch.py          # 给两份架构图互插跳转按钮（排在 archify deliver 之后）
 ├── test/                     # 见「测试」一节（panel-check.ts 也在这儿：面板对拍只服务测试）
 ├── docs/                     # 设计文档 + 参考稿
 │   ├── DESIGN.md             #   总设计（为什么内嵌内核 / 页面与多语言怎么还原 / 工程约束）
@@ -386,7 +390,9 @@ seiten-suikyou/
 |---|---|
 | 怎么装、怎么跑 | 本文件 |
 | 每个接口的请求 / 响应、错误码、限流与跨域约定 | [`docs/API.md`](docs/API.md) |
-| 本地运行或前后端分离怎么部署 | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| 怎么部署（本地运行 / 前后端分离 / 后端上线） | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| 整体架构全貌（前后端两个 origin、miao 内核调用链，可交互） | [`docs/seiten-suikyou-architecture.html`](docs/seiten-suikyou-architecture.html) |
+| 前端怎么组织（core 基座 + feature 注册表 + 唯一的 api 出口，可交互） | [`docs/seiten-suikyou-web-architecture.html`](docs/seiten-suikyou-web-architecture.html) |
 | 为什么内嵌 miao 内核、页面与多语言怎么还原、改动前的硬约束 | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | 数据层设计（存储存 id 不存名字、为什么不设计算中间层） | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
 | 命令行输出长什么样 | [`docs/sample/cli-output.txt`](docs/sample/cli-output.txt) |
