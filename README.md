@@ -30,24 +30,24 @@ npm run server                     # 打开 http://127.0.0.1:8787
 - **运行时要求**：Node ≥ 22.18（`.ts` 直接跑，靠内置类型剥离，零构建）。本地库走 Node 自带的 `node:sqlite`，不引原生模块
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
 - **表结构**在 `src/config/schema.ts`（drizzle 表定义），首次启动按它自动建表 —— **没有 schema.sql、没有迁移目录**。
-  改了表定义、又不想删库重抓时用 `npm run db:push`；`npm run db:sql` 能打出官方口径的建表 SQL 对一下。
+  改了表定义、又不想删库重抓时用 `npx drizzle-kit push`；`npx drizzle-kit export --sql` 能打出官方口径的建表 SQL 对一下。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
 - **前端是 git submodule**：`web/` 是前端子仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)
   的检出。clone 母仓库要带 `--recursive`（或 clone 后 `git submodule update --init`）—— 漏了这步，
   接口照常跑、页面全 404。约 100MB 图片素材已随子仓库提交，开箱即用。
-- `sync:assets` 从 miao-plugin 的 `resources/` 整目录复制，**全程离线**：不联网、不按需、不猜名字
+- 素材同步（`python tools/sync.py assets`）从 miao-plugin 的 `resources/` 整目录复制，**全程离线**：不联网、不按需、不猜名字
   （素材源：`MIAO_PLUGIN_PATH`，默认 `../miao-plugin`，跟 `npm run sync` 一个约定）。
   落盘到 `web/assets/`（子仓库里）—— 同步完在子仓库提交，母仓库再更新子模块指针。
   全量约 100 MB、1900+ 个文件，一次跑完以后随便加角色都不用再管。
   miao 仓库里唯一没有的 7 张元素符号（`common/elem/*.png`）已经作为普通素材提交在
   `web/assets/` 里，同步脚本不碰它们。
-- 想对账「页面要的图是不是都落盘了」：`npm run list:assets && npm run sync:assets`。
+- 想对账「页面要的图是不是都落盘了」：`node tools/list_assets.ts && python tools/sync.py assets`。
   清单由页面自己的 `buildAccountView` 吐出来，缺哪个会列出来并以失败退出。
 
 ## 运行
 
 ```bash
-npm install          # 只需 lodash + limiter
+npm install          # 五个运行时依赖：lodash / limiter / hono / @hono/node-server / drizzle-orm
 
 # 跑起来
 npm run server       # http://127.0.0.1:8787
@@ -55,27 +55,20 @@ npm run score -- --help
 
 # 测试
 npm test             # 全量：类型检查 + 十一套测试（明细见「测试」一节）
-npm run smoke        # 只跑冒烟
-npm run args         # 只跑参数解析
-npm run arch         # 只跑架构契约
-npm run enka         # 只跑上游抓取
-npm run pipeline     # 只跑管线
-npm run i18n         # 只跑多语言
-npm run server:test  # 只跑服务测试
-npm run cli:test     # 只跑命令行测试
-npm run regression   # 只跑回归断言
-npm run damage       # 只跑伤害计算基线
-npm run verify       # 只跑评分验证
+node test/arch.ts    # 只跑某一套：测试就是普通 .ts 脚本，直接点名字
+                     # 碰 node:sqlite 的那三套（pipeline / server / cli）要加
+                     # --disable-warning=ExperimentalWarning，其余不用
 
-# 同步（只在要更新数据时跑）
+# 同步（只在要更新数据时跑，都是 python 脚本）
 npm run sync          # ★ 同步上游的唯一入口：内核+权重表+多语言表+图片素材，一条命令全跑
 npm run sync:check    # 只体检不落盘：先看跟上游差多少，再决定要不要跑
-npm run sync:miao     # 只同步内核 / 权重表 / 角色武器数据（tools/sync_miao.py）
-npm run sync:i18n     # 只重新提取多语言表
-npm run sync:assets   # 只全量复制页面图片素材
+python tools/sync.py miao     # 只同步内核 / 权重表 / 角色武器数据
+python tools/sync.py i18n     # 只重新提取多语言表
+python tools/sync.py assets   # 只全量复制页面图片素材
 
-# 文档
-npm run check:docs   # 校验 README / docs 里的相对链接没写歪（搬过家就跑一遍）
+# 其他一次性工具
+python tools/check_docs.py                  # 校验 README / docs 里的相对链接没写歪
+node tools/gen_artis_table.ts               # 重新生成 docs/ 下的评分场景总表
 ```
 
 ## 命令行评分
@@ -208,9 +201,9 @@ HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizz
 | 后端（接口） | 一台有公网地址的机器 | `/api/*`，前端跨域去调 |
 
 导出工具 `export_pages.py` 跟着前端走，在前端子仓库里跑（用法见其 README）。
-后端那台机器怎么上线（取代码 → systemd + nginx：`git clone` 或一条 `tar` 命令，
-不编译也没打包脚本）、完整的三步走、相对路径为什么不需要改写、子路径与安全的注意事项，
-都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
+后端那台机器怎么上线（`npm pack` 出一个 1.1MB 的包 → `scp` → `npm install --omit=dev` → systemd + nginx，
+包里只有 `src/`、`vendor/` 和 `package.json`）、完整的三步走、相对路径为什么不需要改写、
+子路径与安全的注意事项，都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
 ## 多语言
 
@@ -218,13 +211,13 @@ HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizz
 
 ```bash
 npm run score -- --uid 101242308 --locale ja   # chs / cht / en / ja / ko
-npm run sync:i18n                              # 重新提取官方文案表（默认 chs,cht,en,ja,ko）
-I18N_LOCALES=chs,en npm run sync:i18n          # 只提两种语言（编排器不转发子命令参数，用环境变量）
+python tools/sync.py i18n                      # 重新提取官方文案表（默认 chs,cht,en,ja,ko）
+I18N_LOCALES=chs,en python tools/sync.py i18n  # 只提两种语言
 I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
 ```
 
-> `npm run sync:i18n` 走的是统一入口，**不转发子命令参数**（编排器已经解析过一遍了，
-> 再传一遍会让子脚本的 argparse 报「未知参数」）。要带参数就调子脚本本身，或用 `I18N_LOCALES`。
+> 走 `sync.py` 时**不加参数**：编排器只认步骤名，子脚本的参数会被它清掉。
+> 要带子脚本自己的参数（比如代理），就直接调 `tools/sync_i18n.py`。
 
 文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
 （`src/common/ui.ts`，手写 104 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
@@ -263,7 +256,9 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 npm test
 ```
 
-十二步，分工不重叠（项数是脚本自己打印的，没打印的写 —）：
+十二步，分工不重叠。第一列就是文件名 —— 单跑 `node test/<名字>.ts`（`typecheck` 是脚本，用
+`npm run typecheck`；碰 `node:sqlite` 的那几套要加 `--disable-warning=ExperimentalWarning`）。
+项数是脚本自己打印的，没打印的写 —：
 
 | 步 | 项数 | 管什么 |
 |---|---|---|
@@ -288,7 +283,7 @@ npm test
 - **`verify.ts` 的 stdout 就是基线**，断言只在失败时打印、通过时静默：
 
   ```bash
-  npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt   # 逐字为空才算没跑偏
+  node test/verify.ts > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt   # 逐字为空才算没跑偏
   ```
 
 - `test/data/enka-real.json` 是**一份带数值的真实 enka 响应**（只换过 uid/昵称、只留 3 个不同元素的角色，
@@ -298,7 +293,7 @@ npm test
 - `cli` 那套**只看输出、不看退出码**是不行的，反过来只看退出码也不行：CLI 挂过一次 ——
   汇总段用了未定义的变量，异常被外层 `catch` 吞掉后提前返回，**汇总段及其后的输出整段不执行**，
   而进程退出码当时还是 0。所以它断言的是「汇总段在不在」。
-  单独跑：`npm run cli:test`。
+  单独跑：`node --disable-warning=ExperimentalWarning test/cli.ts`。
 
 改动前端样式后想验收，用 `tools/probe.ts` 直读真实 DOM（尺寸 / 折行 / 计算样式），
 别去数截图像素 —— 截到立绘的深色衣服会以为是背景色，会得出错的结论（实测踩过两次）。
@@ -355,7 +350,7 @@ seiten-suikyou/
 │   ├── history.js            #   feature：UID 历史（localStorage）
 │   ├── style.css             #   外壳样式
 │   ├── miao.css              #   评分卡样式（miao 的 profile-detail.css 移植版）
-│   └── assets/               #   图片素材（sync:assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
+│   └── assets/               #   图片素材（python tools/sync.py assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）

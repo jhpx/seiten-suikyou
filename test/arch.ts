@@ -122,7 +122,7 @@ eq(Object.keys(pkg.dependencies || {}).sort(), ['@hono/node-server', 'drizzle-or
 /* devDependencies 只容许「不进运行时」的东西：
    - typescript：`tsc --noEmit` 类型检查。运行时用不到它 —— Node 原生剥类型就能直接跑 .ts。
    - @types/node：Node 内置模块（node:fs 等）的类型声明。
-   - drizzle-kit：可选的开发期工具（`npm run db:push` 就地改表、`npm run db:sql` 导 DDL）。
+   - drizzle-kit：可选的开发期工具（`npx drizzle-kit push` 就地改表、`npx drizzle-kit export --sql` 导 DDL）。
      **运行时不引它**：它连不上 node:sqlite 的内存库，建表是 config/db.ts 现算的。
    想再往里塞（测试框架 / 打包器 / linter）之前先问一句：不加真的不行吗。 */
 eq(Object.keys(pkg.devDependencies || {}).sort(), ['@types/node', 'drizzle-kit', 'typescript'],

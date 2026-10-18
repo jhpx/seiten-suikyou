@@ -15,7 +15,6 @@
  * 那些依赖具体配装，列进来反而失真，详见 HTML 里的说明。
  *
  * 运行：node --disable-warning=ExperimentalWarning tools/gen_artis_table.ts
- *      （或 npm run gen:artis-table）
  */
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
@@ -1371,7 +1370,7 @@ ${FACTOR_ORDER.map(f => `<span class="chip" data-d="${f}">${f}</span>`).join('')
 场景：分支名（自定义规则命中特判时）或 基础/默认表/通用兜底（未命中任何特判）。角色名前缀（<code>钟离-武神</code> → <code>武神</code>）已剥掉，旁边就是角色列。<br>
 <b>场景名带括号后缀的</b>（如 <code>高命（6命）</code>、<code>高配（充能40）</code>）：artis.js 里的标题是写死的字符串，命座或武器不同时返回的是<b>同一个名字、不同权重</b>，直接列出来会像重复行。后缀是本表加的区分标记——能按命座切开就标命座区间，切不开就标那套权重与众不同的读数。<br>
 触发条件：由 artis.js 的 if 树符号执行还原，「或」表示多条等价路径。<b>兜底行</b>指所有特判都没命中时走的路径，条件是那些特判条件的反面。权重来源：分支内权重=artis.js 显式给出；默认表原值=兜底时直接取 usefulAttr；内置基准=artis.js 手写了一整套兜底权重、不查默认表。<br>
-生成器：tools/gen_artis_table.ts（npm run gen:artis-table）。静态解析 if 树还原条件文字，动态执行规则函数实测权重，两边按（场景名, 权重）配对校验；本页由该脚本生成，请勿手改。
+生成器：tools/gen_artis_table.ts。静态解析 if 树还原条件文字，动态执行规则函数实测权重，两边按（场景名, 权重）配对校验；本页由该脚本生成，请勿手改。
 </div>
 </details>`
   writeFileSync(join(DOCS_DIR, '原神圣遗物评分场景总表.html'), pageHtml(

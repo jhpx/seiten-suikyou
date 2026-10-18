@@ -5,6 +5,7 @@ node_modules/
 __pycache__/
 *.pyc
 *.log
+*.tgz
 .DS_Store
 # 图片素材已随前端子仓库 seiten-suikyou-web 提交（母仓库的 web/ 只是子模块指针）：
 # 重建依赖本地 miao-plugin 目录在、且版本对得上 —— 换了机器素材就全没了，所以前端仓库里留一份，

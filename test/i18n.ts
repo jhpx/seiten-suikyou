@@ -32,7 +32,7 @@ console.log('可用语言:', locales.join(', '))
 ok(locales.length >= 1, '至少有一种语言')
 
 if (!i18n.available()) {
-  console.log('\n[跳过] 表不存在，跑一次 npm run sync:i18n 再来看')
+  console.log('\n[跳过] 表不存在，跑一次 python tools/sync.py i18n 再来看')
   process.exit(0)
 }
 

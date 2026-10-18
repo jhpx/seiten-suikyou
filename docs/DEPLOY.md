@@ -91,16 +91,17 @@ python tools/export_pages.py --out dist/pages --api-base https://<你的后端�
 
 ---
 
-## 三、后端上线（取代码 → systemd）
+## 三、后端上线（打包 → systemd）
 
 这一节是形态二里「后端那台机器」的落地细节，Linux 云服务器 + systemd 版本。
 前端已经在 GitHub Pages 上，所以后端**不需要 `web/`**，只出 `/api/*`。
 
-### 3.0 先说清楚：没有 build，也没有打包这一步
+### 3.0 先说清楚：没有 build
 
 项目零构建，Node 22.18+ 运行时自己剥类型，`src/*.ts` **就是**运行产物。
-所以「发布」= 把代码弄到服务器上 + 装依赖 + 起进程，没有编译、没有产物目录、没有
-「改了源码忘了 build」这种事故。下面五步：建目录 → 装 Node → 取代码 → 装依赖 → systemd。
+所以「打包」不是编译，只是**挑文件**：从仓库里挑出跑起来真正要的那几样，压成一个 tar.gz。
+没有产物目录、没有 sourcemap、没有「改了源码忘了 build」这种事故。
+下面五步：建目录 → 装 Node → 打包 → 装依赖 → systemd。
 
 ### 3.1 目录怎么摆（数据独立于版本）
 
@@ -135,64 +136,73 @@ sudo apt install -y nodejs
 > 用 nvm 装的 Node 也能跑，但 systemd 不读 shell 配置，unit 里的 `ExecStart`
 > 必须写绝对路径（`~/.nvm/versions/node/v24.x.x/bin/node`）。新手直接用 NodeSource 省事。
 
-### 3.3 把代码弄上去
+### 3.3 打包：`npm pack`
 
-两条路，按服务器能不能连 GitHub 选：
-
-| 方式 | 命令 | 什么时候用 |
-|---|---|---|
-| **git** | `git clone`（升级时再 clone 一份新的） | 服务器能访问 GitHub（最省事） |
-| **tar** | 本机一条 `tar -czf` + `scp` | 连不上 GitHub，或者要留一份固定版本的包 |
-
-**方式 A：git**
+在仓库根目录一条命令：
 
 ```bash
-cd /opt/seiten-suikyou/releases
-sudo git clone --depth 1 <母仓库地址> 20261018
+npm pack                          # → seiten-suikyou-0.1.0.tgz（1.1MB / 697 个文件）
+npm pack --pack-destination ..    # 想让它落在别处就加这个
 ```
 
-**不要加 `--recursive`**：那会把 102MB 的前端素材一起拉下来，而后端根本不用它
-（`web/` 也进不了运行路径，静态请求本来就 404）。
+**包里只有两样**（外加 npm 自动捎上的 `README.md`，无害）：
 
-**方式 B：tar**
-
-只有四样东西要传：
-
-```bash
-# 本机
-tar -czf /tmp/seiten-suikyou-20261018.tar.gz \
-  src vendor package.json package-lock.json
-scp /tmp/seiten-suikyou-20261018.tar.gz root@<服务器>:/tmp/
-
-# 服务器
-sudo mkdir -p /opt/seiten-suikyou/releases/20261018
-sudo tar -xzf /tmp/seiten-suikyou-20261018.tar.gz -C /opt/seiten-suikyou/releases/20261018
-```
-
-四样各有理由，少一样就跑不起来：
-
-| 带上 | 为什么 |
+| 进包 | 为什么 |
 |---|---|
 | `src/` | 后端源码，Node 直接跑 |
 | `vendor/` | miao 内核 + 官方文案表（663 个文件），少了评分算不出来 |
-| `package.json` | 版本号、`engines`、`#miao` 那三个 import 别名 |
-| `package-lock.json` | 服务器靠它 `npm ci` 装出一模一样的依赖 |
+| `package.json` | `engines`、`#miao` 那三个 import 别名、依赖清单 |
 
-不带：`web/`（前端在 Pages）、`test/`、`tools/`、`docs/`、`data/`、`node_modules/`。
-四项合计 4.6MB，压完约 1MB。
-`node_modules` 不带的理由：装包交给服务器上的 `npm ci`，别把本机平台的东西空运过去；
-生产依赖只有 5 个、全是纯 JS（`node:sqlite` 是 Node 自带，不编译原生模块），装起来很快。
+`test/`、`tools/`、`docs/`、`web/`、`data/` **一个都不在**——白名单写在 `package.json`
+的 `files` 字段里，只列了 `src` 和 `vendor`。
+所以哪怕仓库里再多一堆开发期目录，也不会被卷进发布物（不加 `files` 时实测打出来 98MB，
+把 `web/` 的 1940 个文件和 `test/`、`tools/`、`docs/` 全带上了）。
 
-### 3.4 装依赖、挂软链
+#### 锁定文件为什么不进包
+
+npm 打包时**硬性排除** `package-lock.json`（写进 `files` 白名单也不进，实测）。
+所以服务器上拿到的是没有锁的 `package.json`，装依赖用 `npm install` 而不是 `npm ci`
+（`npm ci` 没有锁会直接报 EUSAGE）。
+
+**版本靠 `package.json` 里写死的精确版本保证**：5 个生产依赖都不带 `^`，
+比如 `"hono": "4.13.13"` 而不是 `"^4.13.13"`。
+这样即便没有锁，`npm install` 也只能装这一版；带 `^` 的话实测会漂
+（`drizzle-orm` 从 `1.0.0-rc.4` 装成 `1.0.0-rc.5-ab785fc`）。
+
+> 改依赖版本就改 `package.json` 里的数字，别再写回 `^`——发布包能复现靠的就是这一条。
+
+### 3.4 传上去、解开
 
 ```bash
-cd /opt/seiten-suikyou/releases/20261018 && sudo npm ci --omit=dev
+# 本机
+scp seiten-suikyou-0.1.0.tgz root@<服务器>:/tmp/
+
+# 服务器
+sudo mkdir -p /opt/seiten-suikyou/releases/20261018
+sudo tar -xzf /tmp/seiten-suikyou-0.1.0.tgz \
+         --strip-components=1 -C /opt/seiten-suikyou/releases/20261018
+cd /opt/seiten-suikyou/releases/20261018 && ls     # src  vendor  package.json
+```
+
+`--strip-components=1` 不能省：npm 的包是为 `npm install x.tgz` 设计的，
+所有文件套在一层 `package/` 下，剥掉这层才是正常的工程结构。
+
+### 3.5 装依赖、挂软链
+
+```bash
+cd /opt/seiten-suikyou/releases/20261018 && sudo npm install --omit=dev
 sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
 ```
 
-到这儿进程还没起：`npm ci` 只装依赖，`current` 只是给 systemd 一个稳定入口。
+**是 `npm install` 不是 `npm ci`**：包里没有锁定文件（npm 打包时硬排除，见 3.3），
+`npm ci` 会直接报 `EUSAGE`。版本确定性靠 `package.json` 里写死的精确版本。
 
-### 3.5 systemd 常驻
+生产依赖只有 5 个、全是纯 JS（`node:sqlite` 是 Node 自带，不编译原生模块），装起来很快。
+`node_modules` **不进包**的理由就是这个：让服务器按自己的平台装，别把本机的东西空运过去。
+
+到这儿进程还没起：`npm install` 只装依赖，`current` 只是给 systemd 一个稳定入口。
+
+### 3.6 systemd 常驻
 
 `/etc/systemd/system/seiten-suikyou.service`：
 
@@ -237,7 +247,7 @@ journalctl -u seiten-suikyou -f          # 跟日志，Ctrl+C 退出
 curl -s localhost:8787/api/meta | head   # 本机自测
 ```
 
-### 3.6 nginx 反代 + HTTPS
+### 3.7 nginx 反代 + HTTPS
 
 ```nginx
 server {
@@ -262,7 +272,7 @@ server {
 curl -s https://api.example.com/api/meta | head    # 通了就成
 ```
 
-### 3.7 把前端指过来
+### 3.8 把前端指过来
 
 前端仓库里重新导一次，把后端地址写进 `env.js`：
 
@@ -273,48 +283,42 @@ python tools/export_pages.py --out dist/pages --api-base https://api.example.com
 推上去之后，`CORS_ORIGIN` 里配的那个源要和页面实际域名**一字不差**
 （`https://<用户名>.github.io`，项目站也不要带仓库名 —— Origin 头不带路径）。
 
-### 3.8 升级与回滚
+### 3.9 升级与回滚
 
-新版本一律开新目录，装完再切软链。方式 A（git）：
-
-```bash
-cd /opt/seiten-suikyou/releases
-sudo git clone --depth 1 <母仓库地址> 20261101
-cd 20261101 && sudo npm ci --omit=dev
-sudo ln -sfn /opt/seiten-suikyou/releases/20261101 /opt/seiten-suikyou/current
-sudo systemctl restart seiten-suikyou
-```
-
-方式 B（tar）：
+新版本一律开新目录，装完再切软链：
 
 ```bash
 # 本机
-tar -czf /tmp/seiten-suikyou-20261101.tar.gz src vendor package.json package-lock.json
-scp /tmp/seiten-suikyou-20261101.tar.gz root@<服务器>:/tmp/
+npm pack
+scp seiten-suikyou-0.1.0.tgz root@<服务器>:/tmp/
 
 # 服务器
 sudo mkdir -p /opt/seiten-suikyou/releases/20261101
-sudo tar -xzf /tmp/seiten-suikyou-20261101.tar.gz -C /opt/seiten-suikyou/releases/20261101
-cd /opt/seiten-suikyou/releases/20261101 && sudo npm ci --omit=dev
+sudo tar -xzf /tmp/seiten-suikyou-0.1.0.tgz \
+         --strip-components=1 -C /opt/seiten-suikyou/releases/20261101
+cd /opt/seiten-suikyou/releases/20261101 && sudo npm install --omit=dev
 sudo ln -sfn /opt/seiten-suikyou/releases/20261101 /opt/seiten-suikyou/current
 sudo systemctl restart seiten-suikyou
 ```
 
-回滚两种方式通用 —— 软链指回旧目录再重启，数据自始至终没动：
+> 包文件名带的是 `package.json` 里的 `version`。升级时把它一起往上抬一位（`0.1.1`），
+> 本地就不会出现两个同名包互相覆盖；服务器侧靠 `releases/<日期>` 区分版本，文件名其实不重要。
+
+回滚 —— 软链指回旧目录再重启，数据自始至终没动：
 
 ```bash
 sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
 sudo systemctl restart seiten-suikyou
 ```
 
-不做「就地覆盖 `current/`（或就地 `git pull`）」是因为 `src/` 与 `vendor/` 会被拆成两次写，
+不做「就地覆盖 `current/`」是因为 `src/` 与 `vendor/` 会被拆成两次写，
 中间那几秒新旧混着，正好有请求进来就可能读到半套代码。开新目录再切链，切换是原子的。
 旧目录攒多了随手删（`releases/20261018` 整个 `rm -rf` 即可，库不在里面）。
 
 **改了库结构**（`SCHEMA_VERSION` 变了）不能这样热切：老库会直接抛错。要么删库重抓，
 要么先备份再按新结构重建 —— 抓取数据随时能从上游重来，所以通常就是删了重抓。
 
-### 3.9 备份 SQLite
+### 3.10 备份 SQLite
 
 库是 WAL 模式，`gs.db` 旁边有 `-wal` / `-shm`，**只拷 `gs.db` 会丢最近的写入**。
 在线安全备份用 `VACUUM INTO`（服务不用停，一条命令出单个自洽文件）：
@@ -331,19 +335,20 @@ db.close()
 挂 crontab 每天一份就够（这库全是能重抓的缓存数据，丢了不致命）：
 `0 4 * * * sudo -u sss node --input-type=module -e "..."`
 
-### 3.10 服务器不能联外网怎么办
+### 3.11 服务器不能联外网怎么办
 
-`npm ci` 要访问 npm registry（首次实测约 5 分钟，看网络）。真没外网就在本机装好一起搬：
+`npm install` 要访问 npm registry（首次实测几十秒到几分钟，看网络）。真没外网就在本机装好一起搬：
 
 ```bash
-npm ci --omit=dev                        # 本机，装生产依赖
-tar -czf /tmp/seiten-suikyou-deps.tar.gz \
-  src vendor package.json package-lock.json node_modules
+npm install --omit=dev                   # 本机，装生产依赖（版本由 package.json 写死）
+npm pack                                 # 还是先出包，解开后是 src/ vendor/ package.json
+tar -czf /tmp/deps.tar.gz -C . node_modules   # 再单独把 node_modules 压一份
 ```
 
+传上去解到同一个 `releases/<日期>/` 目录里即可。
 生产依赖全是纯 JS、没有 `.node` 原生模块，Windows 上装的直接能在 Linux 跑。
-代价是包体从约 1MB 变成约 8MB，而且 `node_modules` 会越过 `npm ci` 的版本校验，
-以后升级记得连它一起换。
+代价是体积从约 1MB 变成约 8MB。
+以后升级依赖记得连这份 `node_modules` 一起换（它不会再经过任何校验）。
 
 ---
 
@@ -353,5 +358,5 @@ tar -czf /tmp/seiten-suikyou-deps.tar.gz \
 |---|---|
 | 改页面 / 样式 / 素材 | 前端仓库 `web/`（改完在子仓库里 commit + push） |
 | 更新子模块指针 | 母仓库：`git add web && git commit`（指针随母仓库走） |
-| 同步上游素材 | 母仓库 `npm run sync:assets`（落盘进 `web/assets/`，再去子仓库提交） |
+| 同步上游素材 | 母仓库 `python tools/sync.py assets`（落盘进 `web/assets/`，再去子仓库提交） |
 | 两边一起更新到最新 | 母仓库：`git submodule update --remote`（按需） |

@@ -12,39 +12,24 @@
     "#miao.models": "./vendor/miao/models/index.js",
     "#miao.path": "./vendor/miao/tools/path.js"
   },
+  "files": [
+    "src",
+    "vendor"
+  ],
   "dependencies": {
-    "@hono/node-server": "^2.1.5",
-    "drizzle-orm": "^1.0.0-rc.4",
-    "hono": "^4.13.13",
-    "limiter": "^4.1.0",
-    "lodash": "^4.18.1"
+    "@hono/node-server": "2.1.5",
+    "drizzle-orm": "1.0.0-rc.4",
+    "hono": "4.13.13",
+    "limiter": "4.1.0",
+    "lodash": "4.18.1"
   },
   "scripts": {
-    "sync": "python tools/sync.py",
-    "sync:check": "python tools/sync.py --check",
-    "sync:miao": "python tools/sync.py miao",
-    "sync:i18n": "python tools/sync.py i18n",
-    "sync:assets": "python tools/sync.py assets",
-    "list:assets": "node --disable-warning=ExperimentalWarning tools/list_assets.ts",
-    "gen:artis-table": "node --disable-warning=ExperimentalWarning tools/gen_artis_table.ts",
-    "check:docs": "python tools/check_docs.py",
-    "db:push": "drizzle-kit push",
-    "db:sql": "drizzle-kit export --sql",
-    "typecheck": "tsc --noEmit",
-    "score": "node --disable-warning=ExperimentalWarning src/cli/score.ts",
     "server": "node --disable-warning=ExperimentalWarning src/server/index.ts",
+    "score": "node --disable-warning=ExperimentalWarning src/cli/score.ts",
+    "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && node test/smoke.ts && node test/args.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/damage.ts && node test/verify.ts",
-    "smoke": "node test/smoke.ts",
-    "args": "node test/args.ts",
-    "arch": "node test/arch.ts",
-    "enka": "node test/enka.ts",
-    "pipeline": "node --disable-warning=ExperimentalWarning test/pipeline.ts",
-    "server:test": "node --disable-warning=ExperimentalWarning test/server.ts",
-    "cli:test": "node --disable-warning=ExperimentalWarning test/cli.ts",
-    "regression": "node test/regression.ts",
-    "damage": "node test/damage.ts",
-    "verify": "node test/verify.ts",
-    "i18n": "node test/i18n.ts"
+    "sync": "python tools/sync.py",
+    "sync:check": "python tools/sync.py --check"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

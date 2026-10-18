@@ -3,7 +3,7 @@
  *
  * 【为什么断言只在失败时打印】
  * 本脚本的 stdout 是「基线」。改完内核后跑
- *     npm run verify > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt
+ *     node test/verify.ts > .tmp/after.txt && diff .tmp/baseline.txt .tmp/after.txt
  * 逐字为空才算没跑偏。所以通过时保持静默，免得自己的断言输出把基线搅浑；
  * 一旦有断言不通过，会插一段 [FAIL] 并让退出码变 1。
  */

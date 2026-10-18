@@ -199,11 +199,11 @@ enka 原始响应 (JSON)
 
 为什么不用 drizzle-kit 生成：kit 的 `push` 确实认 node:sqlite，但它只能对着**文件**库跑——
 测试和 `openDb` 用的是同进程的 `DatabaseSync`（含 `:memory:`），交给 CLI 就够不着了。
-所以运行时自己算 DDL；kit 只当可选的开发工具（`npm run db:push` 就地改表、`npm run db:sql` 导一份
+所以运行时自己算 DDL；kit 只当可选的开发工具（`npx drizzle-kit push` 就地改表、`npx drizzle-kit export --sql` 导一份
 官方口径的建表 SQL 对照看），运行时不引。
 
 不做「增量迁移表」：数据全部可从 enka 重新抓取，老库没必要逐版本 `ALTER` 升级。因此改了 `schema.ts`
-后，老库不会自动长出新列——删掉 db 文件、重启后重新抓取即可（或者开发期 `npm run db:push` 就地
+后，老库不会自动长出新列——删掉 db 文件、重启后重新抓取即可（或者开发期 `npx drizzle-kit push` 就地
 `ALTER` 上去，再把 `SCHEMA_VERSION` +1）。打开到一个比当前代次旧的库时，直接抛错提示删库重抓，
 而不是静默带着缺列的库跑（插入/读取新列时才崩，更难查）。
 

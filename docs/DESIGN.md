@@ -265,7 +265,7 @@ enka 原始响应
 `vendor/miao/` 只同步代码与元数据，**不同步二进制图片**（太大）。页面要还原 miao 的评分卡，
 需要三类素材：角色立绘、圣遗物/武器图标、UI 小图。它们落在前端子仓库的 `web/assets/`，
 **随子仓库提交**（约 100 MB / 1886 个文件）—— 重建依赖本地 miao-plugin 目录在、且版本对得上，
-换了机器素材不能凭空长出来。更新用 `npm run sync:assets`（全量复制，命令见 README）。
+换了机器素材不能凭空长出来。更新用 `python tools/sync.py assets`（全量复制，命令见 README）。
 
 三个设计点：
 
@@ -343,13 +343,13 @@ enka 原始响应
    若想版本化，建议单独 `git clone` 一份作为上游源。
 8. **改库结构不用加迁移**：`config/schema.ts` 的 drizzle 表定义是单一事实来源，`openDb` 打开时按它
    现算 DDL 跑一遍（空库建表、老库表在就不碰）。数据可从 enka 重抓，所以不记迁移历史——改了表定义
-   后老库请删文件重抓（或开发期 `npm run db:push` 就地 ALTER）；打开到比 `SCHEMA_VERSION` 旧的库会
+   后老库请删文件重抓（或开发期 `npx drizzle-kit push` 就地 ALTER）；打开到比 `SCHEMA_VERSION` 旧的库会
    直接抛错提示删库。表定义与实际建表必须一致（`test/pipeline.ts` 断言「空库的列 == 表定义的列」）。
 9. **不改 `.gitignore` 里的 `data/` 前缀**：它是 `/data/`（锚定仓库根）。
    写成不带斜杠的 `data/` 会连带忽略 `test/data/`（Git 的目录模式不限层级）。
    ⚠️ `web/assets/` 是**相反**的一例：它**故意提交**（约 100 MB / 1886 个文件）——
    前端已拆成独立子仓库 seiten-suikyou-web，素材随那个仓库提交，母仓库这边只存子模块指针。
-   理由是重新 `sync:assets` 依赖本地那个 miao-plugin 目录在、且版本对得上，换了机器素材就全没了。
+   理由是重新跑素材同步（`python tools/sync.py assets`）依赖本地那个 miao-plugin 目录在、且版本对得上，换了机器素材就全没了。
 10. **面板对拍只能在测试里、对着原始响应做**，不能对着库做 —— 因为我们**故意不存面板属性**
     （理由见 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md) §3）。所以它是 `test/panel-check.ts`，
     由 `test/pipeline.ts` 硬断言，命令行不提供 `--check` 开关。

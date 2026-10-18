@@ -5,7 +5,7 @@
  * buildAccountView 问应用本人要 URL，再反查落盘，防的是 view.ts 拼出源端没有的路径。
  * 详情 → TOOLING-NOTES.md「图片素材」节。
  *
- * 用法：npm run list:assets，然后 npm run sync:assets（输出 .tmp/asset-list.json）
+ * 用法：node tools/list_assets.ts，然后 python tools/sync.py assets（输出 .tmp/asset-list.json）
  */
 import fs from 'node:fs'
 import path from 'node:path'

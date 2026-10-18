@@ -1,6 +1,6 @@
 # tools —— 开发期工具
 
-运行时一个都不用它们：发布时只传 `src/` `vendor/` 和两个清单（见 `docs/DEPLOY.md` 第三节），
+运行时一个都不用它们：发布时 `npm pack` 只带 `src/` `vendor/` 和 `package.json`（见 `docs/DEPLOY.md` 第三节），
 `tools/` 不在其中。日常只用记住一个入口：`npm run sync`。
 
 ## 为什么 .py 和 .ts 混着放
@@ -16,7 +16,7 @@
 
 | 文件 | 一行简介 | 怎么跑 |
 |---|---|---|
-| `sync.py` | ★ 唯一入口，按 miao → i18n → assets 的顺序跑完三步 | `npm run sync`；单步 `npm run sync:miao` 等；只检查 `npm run sync:check` |
+| `sync.py` | ★ 唯一入口，按 miao → i18n → assets 的顺序跑完三步 | `npm run sync`；单步 `python tools/sync.py miao`；只检查 `npm run sync:check` |
 | `sync_miao.py` | 把 miao-plugin 的评分源码搬进 `vendor/miao/` 并打定点补丁 | `python tools/sync_miao.py`（用 `MIAO_PLUGIN_PATH` 换源目录） |
 | `sync_i18n.py` | 从官方 TextMap 提名字，产出 `vendor/i18n/names.json` | `python tools/sync_i18n.py`（`I18N_LOCALES=chs,en` 限定语种） |
 | `sync_assets.py` | 全量复制 miao 素材到 `web/assets/`，并用页面清单对账 | `python tools/sync_assets.py` |
@@ -27,8 +27,8 @@
 |---|---|---|
 | `probe.ts` | 在真实页面里跑一段 JS 量 DOM（尺寸、折行、计算样式），可顺带截一张 | `node tools/probe.ts <url> <表达式文件> [截图png]` |
 | `shot.ts` | headless chrome 截一张图，肉眼看版式对不对 | `node tools/shot.ts <url> <png> [宽,高]` |
-| `list_assets.ts` | 问应用本人「页面会请求哪些图」，落 `.tmp/asset-list.json` 给 `sync_assets` 对账 | `npm run list:assets` |
-| `check_docs.py` | 校验文档里的相对链接有没有写歪（搬过家就查一遍） | `npm run check:docs` |
+| `list_assets.ts` | 问应用本人「页面会请求哪些图」，落 `.tmp/asset-list.json` 给 `sync_assets` 对账 | `node tools/list_assets.ts` |
+| `check_docs.py` | 校验文档里的相对链接有没有写歪（搬过家就查一遍） | `python tools/check_docs.py` |
 
 `probe.ts` 只量不改：它拉一个开 `--remote-debugging-port` 的 chrome 走 CDP，不碰产品代码；
 chrome 本体（`chrome-headless-shell`，约 120MB）落在 `.tmp/`，准备方法写在 `shot.ts` 头部。
@@ -37,7 +37,7 @@ chrome 本体（`chrome-headless-shell`，约 120MB）落在 `.tmp/`，准备方
 
 | 文件 | 一行简介 | 怎么跑 |
 |---|---|---|
-| `gen_artis_table.ts` | 从 `vendor/miao` 的规则实测出评分总表，写进 `docs/`（场景总表 + 权重总表，各 csv/html 一份） | `npm run gen:artis-table` |
+| `gen_artis_table.ts` | 从 `vendor/miao` 的规则实测出评分总表，写进 `docs/`（场景总表 csv + html） | `node tools/gen_artis_table.ts` |
 | `link_arch.py` | 给两份架构图互插一个跳转按钮 | `python tools/link_arch.py` |
 
 `link_arch.py` 的时序是固定的：**先 archify deliver，再跑它**。deliver 会整份重写 HTML
