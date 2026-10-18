@@ -21,7 +21,7 @@
  * 三者对得上：schema 默认 3 = 调用点默认 3 = 参考结果图里那个 `+4,778.6`。
  * 之前这里返回 undefined → 那条正则变成 `\\d{(\\d{undefined})+$}`，一个都不匹配 →
  * **全站数字都没有千分位**（面板 17395、词条 +4778.6），跟 miao 的结果图不一致，
- * 而 test/smoke.mjs 当时把错的行为当期望值写进了断言，所以没人发现。
+ * 而 test/smoke.ts 当时把错的行为当期望值写进了断言，所以没人发现。
  *
  * 对另外两个调用点的影响：传 truthy 时行为完全一样，因为不给 def 时 def 默认是空串，
  * 空串与 undefined 一样是 falsy（`if (Cfg.get('notReleasedData'))`、`Cfg.get('qFace') ? ...`）。

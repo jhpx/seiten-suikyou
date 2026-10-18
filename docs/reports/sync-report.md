@@ -1,11 +1,11 @@
 # miao 内核同步报告
 
-- 同步时间：2026-10-13 21:45:27
+- 同步时间：2026-10-18 22:46:35
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
-- 搬运文件：658 个 / 4099.2 KB
+- 搬运文件：658 个 / 4100.7 KB
 - 处置方式：**原样搬运 649 个**　|　定点改写 9 个　|　本地生成 2 个
 - 增量基准：最后一个动过 `vendor/miao` 的 git 提交
-- 相对上一版（提交 `025c852`）：新增 144 个　|　移除 0 个　|　内容变化 0 个　|　未动 516 个
+- 相对上一版（提交 `64ac5d6`）：新增 0 个　|　移除 0 个　|　内容变化 3 个　|　未动 657 个
 
 搬运范围：components（6）、models（26）、resources（625）、tools（1）
 
@@ -58,43 +58,34 @@
 
 ## 二、相对上一版差在哪
 
-基准是提交 `025c852`（2026-10-12 20:22:31 +0800）—— 也就是上一版同步的产物。
+基准是提交 `64ac5d6`（2026-10-13 22:25:56 +0800）—— 也就是上一版同步的产物。
 
 差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件
 （同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。
 
-- 新增 **144** 个　- 移除 **0** 个　- 内容变化 **0** 个　- 未动 **516** 个
+- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **3** 个　- 未动 **657** 个
 
-### 新增（144 个）
+### 新增（0 个）
 
-- **伤害计算引擎**（6 个）—— `DmgCalc`（各区乘算的伤害公式）＋ `DmgAttr`（属性计算与 buff 施加）＋ `DmgBuffs`（武器/圣遗物/角色 buff 汇总）＋ `DmgMastery`（元素反应系数）＋ `DmgCalcMeta`（等级与反应基础表）＋ `AttrItem`
-- **伤害计算编排**（1 个）—— `ProfileDmg` —— 加载角色 `calc.js`、组装属性与 buff、逐条算伤害的入口（只取它的 `calcData`，云崽那套模板渲染不要）
-- **角色数据**（137 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）＋ `calc.js`（该角色的伤害计算脚本，旅行者按元素分开放 `旅行者/<元素>/`）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
-
-<details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
-
-- `models/dmg/AttrItem.js`
-- `models/dmg/DmgAttr.js`
-- `models/dmg/DmgBuffs.js`
-- `models/dmg/DmgCalc.js`
-- `models/dmg/DmgCalcMeta.js`
-- `models/dmg/DmgMastery.js`
-- `models/ProfileDmg.js`
-- `resources/meta-gs/character/七七/calc.js`
-- `resources/meta-gs/character/丝柯克/calc.js`
-- `resources/meta-gs/character/丽莎/calc.js`
-- `resources/meta-gs/character/久岐忍/calc.js`
-- …（本类共 137 个，余下省略）
-
-</details>
+（无）
 
 ### 移除（0 个）
 
 （无）
 
-### 内容变化（0 个）
+### 内容变化（3 个）
 
-（无）
+- **miao 入口与组件**（1 个）—— `#miao` 入口、`Data`（路径与 JSON 读取）、`Meta`（元数据注册）、`Format`（数值格式化）、`MiaoError`、`common/Elem`（元素表）
+- **评分算法**（1 个）—— `Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体
+- **武器数据**（1 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
+
+<details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
+
+- `components/_local/Cfg.js`
+- `models/artis/ArtisMark.js`
+- `resources/meta-gs/weapon/sword/calc.js`
+
+</details>
 
 ---
 

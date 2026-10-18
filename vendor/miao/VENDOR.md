@@ -3,11 +3,11 @@
 本目录由 `python tools/sync_miao.py` 从 miao-plugin 自动生成，**请勿手工编辑**（改动会被下次同步覆盖）。要改行为，改 sync 脚本里的清单或补丁。
 
 - 上游: `E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
-- 同步时间: 2026-10-13T21:45:27
+- 同步时间: 2026-10-18T22:46:35
 - 文件数: 658 个（另生成 2 个）
-- 体积: 4099.2 KB
+- 体积: 4100.7 KB
 - 处置方式: 原样搬运 649 个 / 定点改写 9 个 / 本地生成 2 个
-- 相对上一版: 相对提交 025c852：新增 144 / 移除 0 / 内容变化 0
+- 相对上一版: 相对提交 64ac5d6：新增 0 / 移除 0 / 内容变化 3
 
 ## 别名映射（package.json `imports` 字段，import 语句本身不改写）
 

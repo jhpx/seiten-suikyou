@@ -199,10 +199,104 @@ sudo ln -sfn /opt/seiten-suikyou/releases/20261018 /opt/seiten-suikyou/current
 **是 `npm install` 不是 `npm ci`**：包里没有锁定文件（npm 打包时硬排除，见 3.3），
 `npm ci` 会直接报 `EUSAGE`。版本确定性靠 `package.json` 里写死的精确版本。
 
+> 国内机器在这条命令后面加 `--registry=https://registry.npmmirror.com` 能少等很多，
+> 原因见下面「卡住了」那一节。
+
 生产依赖只有 5 个、全是纯 JS（`node:sqlite` 是 Node 自带，不编译原生模块），装起来很快。
 `node_modules` **不进包**的理由就是这个：让服务器按自己的平台装，别把本机的东西空运过去。
 
 到这儿进程还没起：`npm install` 只装依赖，`current` 只是给 systemd 一个稳定入口。
+
+#### 卡住了？先看是不是这两件事
+
+**一、别对 tgz 本身跑 `npm install`。**
+
+```bash
+npm install seiten-suikyou-0.1.0.tgz    # ✗ 这不是安装这个程序
+```
+
+它是把 tgz 当成一个**依赖**装进当前工程 —— 得到的是 `node_modules/seiten-suikyou/`，
+顶层没有 `src/`，跑不起来。
+
+更坑的是 npm 会**向上找 `package.json`**：当前目录没有，就一层层往上找，找到哪个工程就装进哪个。
+所以在 `~`、`/opt` 这类目录里跑，包可能被塞进一个你根本没想到的工程里，
+`package.json` 里还多出一行 `"seiten-suikyou": "file:xxx.tgz"`。
+看起来的"卡死"，很多时候就是它在爬目录树、等 registry、再改别人家的清单。
+
+正确顺序永远是 **先 `tar` 解开，再在解开的目录里装依赖**（3.4 → 3.5）。
+
+**二、`--omit=dev` 不能省。**
+
+包里 `package.json` 带着 `devDependencies`（`typescript`、`drizzle-kit`、`@types/node`）。
+不 omit 的话 npm 会连它们一起装，而 `drizzle-kit` 拖着 **25 个跨平台的 esbuild 二进制**
+（`@esbuild/android-arm64`、`@esbuild/darwin-x64`、`@esbuild/freebsd-arm64`…… 每个几 MB），
+在生产依赖 5 个的基础上膨胀到 **42 个包**。国内拉这些就是「卡死」的观感来源。
+
+> 老教程里的 `npm install --production` 效果一模一样（都是只装生产依赖），但它是 npm 6 时代的
+> 写法，npm 7 之后转成了 `--omit=dev` 的别名。npm 10 跑前者会多打一行
+> `npm warn config production Use --omit=dev instead.`，所以文档统一写 `--omit=dev`。
+
+| 现象 | 原因 | 怎么办 |
+|---|---|---|
+| 光标一直转，几分钟没输出 | 国内直连 `registry.npmjs.org`（实测同一台机器：npmjs 15 秒还不出结果，npmmirror 2.6 秒） | 换镜像，见下 |
+| 十几分钟一个字都不出，像死机 | npm 默认 `fetch-timeout` 5 分钟、失败还重试 2 次，一个请求最坏要等 **15 分钟**才吐错 | 换镜像；想快点看到错就加 `--fetch-timeout=15000 --fetch-retries=1` |
+| 一长串 `@esbuild/...` 往下刷 | 漏了 `--omit=dev` | 补上；生产只要 5 个包 |
+| 断开 SSH 后进程没了 | 前台进程跟着 shell 死 | `nohup` 或 `tmux` |
+
+先花 5 秒分清是**网络**问题还是 **npm** 问题 —— 两条 `curl` 打同一个包，谁慢一眼就看出来：
+
+```bash
+curl -sS -o /dev/null -w 'npmjs   %{http_code}  %{time_total}s\n' --max-time 10 https://registry.npmjs.org/hono
+curl -sS -o /dev/null -w 'mirror  %{http_code}  %{time_total}s\n' --max-time 10 https://registry.npmmirror.com/hono
+```
+
+国内机器一条能直接用的（实测 59 秒装完 5 个包，版本与 `package.json` 完全一致）：
+
+```bash
+cd /opt/seiten-suikyou/releases/20261018
+sudo npm install --omit=dev --no-audit --no-fund \
+     --registry=https://registry.npmmirror.com
+```
+
+想长期生效就写进 `/root/.npmrc`（或跑服务的那个用户的 `~/.npmrc`）：
+
+```ini
+registry=https://registry.npmmirror.com
+```
+
+**为什么中途一个字都不打？** npm 默认只输出 `notice` 级别，而且**过程中什么都不打**，只在结束时
+给一行 `added N packages`；那个转圈的进度条只在真正的终端（TTY）里才画，被 `nohup`、`| tee`、
+`sudo` 之类接管输出时彻底静默。实测装完一次 4 秒，全程 0 行输出 —— 所以「没输出」不等于「卡死」，
+要看它在等什么必须自己开日志。
+
+看它到底在等哪个地址，加 `--loglevel=http`，会一条条打出请求 URL 和耗时 —— 卡住时最后一行
+就是嫌疑人：
+
+```
+npm http fetch GET 200 https://registry.npmjs.org/hono 3001ms
+npm http fetch GET 200 https://registry.npmjs.org/lodash 3002ms
+                                            ↑ 停在这行不动 = 下一个包在等
+```
+
+`--timing` 只在结束时给各阶段总耗时（`command:install Completed in 1894ms`），看不了实时进度。
+
+#### 服务器根本连不上 npm 的兜底
+
+把生产依赖在本机装好，连 `node_modules` 一起传上去，服务器一个网络请求都不用发：
+
+```bash
+# 本机（在仓库根）
+npm install --omit=dev
+tar -czf srv-deps.tar.gz src vendor package.json node_modules
+scp srv-deps.tar.gz root@<服务器>:/tmp/
+
+# 服务器（注意：这里**不加** --strip-components，包内没有 package/ 前缀）
+sudo tar -xzf /tmp/srv-deps.tar.gz -C /opt/seiten-suikyou/releases/20261018
+```
+
+生产依赖全是纯 JS（`find node_modules -name '*.node'` 为空），本机装的能直接在 Linux 跑。
+体积：31MB 的 `node_modules` 压完 **2.6MB**，连代码一起 **3.7MB**。
+代价是 `node_modules` 绕过了 npm 的版本校验，以后升级记得连它一起换。
 
 #### 先手动跑一次，确认能起来
 
@@ -362,21 +456,6 @@ db.close()
 
 挂 crontab 每天一份就够（这库全是能重抓的缓存数据，丢了不致命）：
 `0 4 * * * sudo -u sss node --input-type=module -e "..."`
-
-### 3.11 服务器不能联外网怎么办
-
-`npm install` 要访问 npm registry（首次实测几十秒到几分钟，看网络）。真没外网就在本机装好一起搬：
-
-```bash
-npm install --omit=dev                   # 本机，装生产依赖（版本由 package.json 写死）
-npm pack                                 # 还是先出包，解开后是 src/ vendor/ package.json
-tar -czf /tmp/deps.tar.gz -C . node_modules   # 再单独把 node_modules 压一份
-```
-
-传上去解到同一个 `releases/<日期>/` 目录里即可。
-生产依赖全是纯 JS、没有 `.node` 原生模块，Windows 上装的直接能在 Linux 跑。
-代价是体积从约 1MB 变成约 8MB。
-以后升级依赖记得连这份 `node_modules` 一起换（它不会再经过任何校验）。
 
 ---
 

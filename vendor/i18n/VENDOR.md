@@ -4,7 +4,7 @@
 
 - 上游：`gitlab.com/Dimbreath/AnimeGameData`（`master（最近提交 2026-06-29，游戏 6.6.0）`）
 - 词条上游：`cdn.jsdelivr.net/gh/EnkaNetwork/API-docs@master/store/loc.json`
-- 同步时间：2026-10-12T20:02:42
+- 同步时间：2026-10-18T22:46:41
 - 语言：简体中文, 繁體中文, English, 日本語, 한국어
 - 内容：767 个名字组 / 11931 个 hash 索引 / 63 个套装
 
