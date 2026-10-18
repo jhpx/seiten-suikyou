@@ -8,8 +8,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, i18n } from '../index.ts'
-import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../service/view.service.ts'
-import type { MarkDetail } from '../service/view.service.ts'
+import { attrValueText, enkaNumsOf, panelText, rawNumsOf, shapeCharacter, slotLabel, statLabel } from '../service/character.service.ts'
+import type { MarkDetail } from '../service/character.service.ts'
+import { fmtTime } from '../common/util.ts'
 import { openDb } from '../config/db.ts'
 import * as repo from '../config/store.ts'
 import { ingestPayload } from '../upstream/enka-account.ts'
@@ -228,7 +229,7 @@ async function main () {
   console.log(line())
 
   /* ---- 5. --json ---- */
-  /* --json 走的是和网页端同一个成型出口（service/view.service.ts），命令行看到的和接口拿到的是同一份形状。
+  /* --json 走的是和网页端同一个成型出口（service/character.service.ts），命令行看到的和接口拿到的是同一份形状。
      额外保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
     console.log(JSON.stringify(wanted.map(({ character, profile, result }) => ({

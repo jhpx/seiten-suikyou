@@ -63,7 +63,7 @@ export const enkaPropKey = (prop: string): string | null => ENKA_PROP_TO_KEY[pro
 const FIXED_PROPS = new Set([StatType.HP, StatType.ATTACK, StatType.DEFENSE])
 
 /* 一个 miao key 在游戏里是不是「整数口径」—— 固定值三项 + 元素精通。
-   显示层用它决定收整到 0 位还是按百分比舍 1 位（见 service/view.service.ts 的 attrValueText）：
+   显示层用它决定收整到 0 位还是按百分比舍 1 位（见 service/character.service.ts 的 attrValueText）：
    这四类一律显整数，不存在「209.1」这种值。 */
 export const isIntegerStatKey = (key: string): boolean => {
   const prop = KEY_TO_PROP[key]

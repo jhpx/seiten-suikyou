@@ -2,7 +2,7 @@
  * util —— 跨层通用小工具（纯 TS、零依赖，谁都能引、它谁也不引）
  *
  * 只收「不属于任何一层」的东西：把外部进来的原始形状解析成程序能用的值 ——
- * 上游 JSON 的字符串数字、命令行的 argv，都是「外部形状」。
+ * 上游 JSON 的字符串数字、命令行的 argv，都是「外部形状」；外加不依赖任何业务概念的格式化（时间）。
  */
 
 /*
@@ -50,3 +50,15 @@ export const argValue = (v: string | true | undefined): string | null =>
 /* catch 到的一律是 unknown（TS 4.4 起）—— 取人话消息统一走这里。
    service（记失败流水）与 rest（回 500 / 502 响应）都要用，放共用件免得一层去引另一层。 */
 export const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+/** 抓取时间「ISO UTC → 本地时区的可读文本」。库里存 toISOString()（存储要的无歧义格式），
+ *  只在出口格式化、存储层一个字不动；换算靠 getHours() 这类**本地**取值器，换台机器看也对、不写死 +8。
+ *  空值 / 脏值一律回 null（不返回 '—'）：调用方本来就拿 `|| '—'` 兜底。 */
+export function fmtTime (iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}

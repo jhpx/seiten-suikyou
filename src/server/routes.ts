@@ -18,7 +18,7 @@ import type { Hono } from 'hono'
 import type { ApiContext, Guard } from '../service/context.ts'
 import * as account from '../rest/account.rest.ts'
 import * as character from '../rest/character.rest.ts'
-import * as meta from '../rest/meta.rest.ts'
+import * as meta from '../rest/meta.ts'
 
 export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   /* —— 系统：语言表 / 界面文案 / 探活（不碰业务数据，故意不限流） —— */

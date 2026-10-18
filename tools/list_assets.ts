@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { openDb } from '../src/config/db.ts'
 import { listUids, loadAccountWithCharacters } from '../src/config/store.ts'
-import { buildAccountView } from '../src/service/view.service.ts'
+import { buildAccountView } from '../src/service/account.service.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const dbPath = process.argv[2] || path.join(ROOT, 'data', 'gs.db')

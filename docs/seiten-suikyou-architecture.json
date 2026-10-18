@@ -169,8 +169,8 @@
       "tag": "跨多次抓取累积",
       "sources": [
         {
-          "path": "src/repository/db.ts",
-          "line": 26,
+          "path": "src/config/db.ts",
+          "line": 25,
           "label": "openDb 按表定义建表"
         }
       ]
@@ -305,8 +305,8 @@
       ],
       "sources": [
         {
-          "path": "src/service/view.ts",
-          "line": 673,
+          "path": "src/service/account.service.ts",
+          "line": 57,
           "label": "buildAccountView"
         }
       ]

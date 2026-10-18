@@ -12,8 +12,6 @@
 import type { Conn, Db } from './db.ts'
 import * as accountBo from '../repository/account.repo.ts'
 import * as characterBo from '../repository/character.repo.ts'
-import * as fetchLogBo from '../repository/fetch-log.repo.ts'
-import * as textKeysBo from '../repository/text-keys.repo.ts'
 import type { AccountRow } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
 import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from './schema.ts'
@@ -128,7 +126,7 @@ export function saveFetch (db: Db, {
     if (account) saveAccount(tx, account, stamp)
     const characters = account?.characters || []
     for (const c of characters) saveCharacter(tx, c, stamp)
-    fetchLogBo.appendFetchLog(tx, {
+    accountBo.appendFetchLog(tx, {
       uid: account.uid!,
       source,
       fetchedAt: stamp,
@@ -150,7 +148,7 @@ export interface LogFailureArgs {
 
 /** 抓取失败也记一行（ok=0）—— 上游抖过多少次，只留痕在这里 */
 export function logFailure (db: Conn, { uid, source = 'enka', note = '', stamp = new Date().toISOString() }: LogFailureArgs): void {
-  fetchLogBo.appendFetchLog(db, { uid: uid!, source, fetchedAt: stamp, avatarIds: null, ttl: null, ok: 0, note: note || null })
+  accountBo.appendFetchLog(db, { uid: uid!, source, fetchedAt: stamp, avatarIds: null, ttl: null, ok: 0, note: note || null })
 }
 
 /* ---------------- 读 ---------------- */
@@ -210,14 +208,14 @@ export function loadAccountWithCharacters (db: Conn, uid: number, avatarIds: num
 }
 
 /** fetch_log 表的一行（`lastFetch` 的返回形状） */
-export type FetchLogRow = fetchLogBo.FetchLogRow
+export type FetchLogRow = accountBo.FetchLogRow
 
 /** 最后一次成功抓取（列表页页脚 / 明细页 / CLI 的「最后抓取」都读它） */
 export function lastFetch (db: Conn, uid: number): FetchLogRow | null {
-  return fetchLogBo.lastOkFetch(db, uid)
+  return accountBo.lastOkFetch(db, uid)
 }
 
-/** 库里用到的官方文案 key 清单（跨三张表去重，见 repository/text-keys.repo.ts） */
-export function listTextKeys (db: Conn): textKeysBo.TextKeys {
-  return textKeysBo.collectTextKeys(db)
+/** 库里用到的官方文案 key 清单（跨三张表去重，见 repository/character.repo.ts） */
+export function listTextKeys (db: Conn): characterBo.TextKeys {
+  return characterBo.collectTextKeys(db)
 }

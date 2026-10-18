@@ -353,6 +353,24 @@ ok(fs.existsSync(path.join(SRC, 'cli')), 'src/cli/ 与 src/server/ 并列（命�
 for (const side of ['upstream', 'kernel', 'common']) {
   ok(fs.existsSync(path.join(SRC, side)), `src/${side}/ 是横向件目录之一`)
 }
+/* 三层按**领域**对照 —— 同一个领域在 rest / service / repository 各有一个文件，后缀写明层。
+   非领域件用固定名字、不加层后缀：rest 的系统资源 meta.ts 与响应原语 reply.ts、
+   service 的能力契约 context.ts；repository 一个都不许有（一行一表也得归到某个领域名下）。
+   加新领域时三处一起加 —— 这条断言会逼你这么做，而不是只往一层丢个新文件。 */
+const DOMAINS = ['account', 'character']
+const LAYERS: Array<{ dir: string, suffix: string, plain: string[] }> = [
+  { dir: 'rest', suffix: '.rest.ts', plain: ['meta.ts', 'reply.ts'] },
+  { dir: 'service', suffix: '.service.ts', plain: ['context.ts'] },
+  { dir: 'repository', suffix: '.repo.ts', plain: [] }
+]
+for (const { dir, suffix, plain } of LAYERS) {
+  const actual = fs.readdirSync(path.join(SRC, dir), { withFileTypes: true })
+    .filter(e => e.isFile() && e.name.endsWith('.ts')).map(e => e.name).sort()
+  const expected = [...DOMAINS.map(d => d + suffix), ...plain].sort()
+  ok(actual.join(' ') === expected.join(' '),
+    `${dir}/ = 领域文件（${DOMAINS.map(d => d + suffix).join(' / ')}）+ 固定非领域件（现存的：${actual.join(' / ')}）`)
+}
+
 /* 老位置别再复活：adapter / i18n / shared / view 已经各有归宿。
    ⚠️ 这里查的是 **src/i18n 目录**；门面文件 `src/common/i18n.ts` 是另一回事，它在、而且是故意的。 */
 const legacy = ['adapter', 'i18n', 'shared', 'view'].filter(d => fs.existsSync(path.join(SRC, d)))
@@ -367,7 +385,7 @@ const upstreamFiles = tsFiles(path.join(SRC, 'upstream'))
 const kernelFiles = tsFiles(path.join(SRC, 'kernel'))
 const REST = path.join(SRC, 'rest')
 const restFiles = tsFiles(REST)
-/* 控制器 = rest 顶层那几个文件（一个资源一个）；params / reply 是共用件，按名字排除 */
+/* 控制器 = rest 顶层那几个文件（一个资源一个）；reply 是共用件，按名字排除 */
 const SHARED_IN_REST = new Set(['reply.ts'])
 const ctlFiles = fs.readdirSync(REST, { withFileTypes: true })
   .filter(e => e.isFile() && e.name.endsWith('.ts') && !SHARED_IN_REST.has(e.name))

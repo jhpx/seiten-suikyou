@@ -92,7 +92,7 @@ miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / ima
 所以 GLOBS 里 `data.json` 有深度 1 和深度 2 两条。
 
 **页面接线**（2026-10-13）：`GET /api/accounts/:uid/characters/:avatarId/damage` 出视图对象
-（`view.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
+（`character.service.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
 明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `miao.css` 的 `.dmg-cont`）。
 两个 deliberate 的偏差：表格用 **grid 而非上游的 display:table**（上游让不吃暴击的行把
 期望值单元格设 `width:200%` 冒充跨列，自动布局下会把暴击列撑到 311px、期望列压到 56px，
@@ -235,7 +235,7 @@ enka 原始响应
   生命 / 攻 / 防 / 精通 + 双暴 + 充能 + 三种加成（元素伤 / 物伤 / 治疗）—— 顺序照面板从上往下读，
   加成按用得多寡排（元素伤 >> 物伤 > 治疗），治疗垫底。
   ⚠️ `dmg` 那条显示**官方全称「元素伤害加成」**，不是 miao 表里那句简称「伤害增加」——
-  三行加成连着读，简称看不出是哪个加成。改在 `view.ts` 的 `STAT_TITLE_FIX`（改上游表会被同步覆盖）。
+  三行加成连着读，简称看不出是哪个加成。改在 `character.service.ts` 的 `STAT_TITLE_FIX`（改上游表会被同步覆盖）。
   只收权重表里**真会出现**的键；大/小词条（atk / atkPlus…）永远成对出现、权重相等，所以一条只挂一个键。
   选中数在漏斗图标上挂角标
 
@@ -341,7 +341,7 @@ enka 原始响应
    所以基线数字没受影响，但它不是一份「规范数据」。要扩测试建议先改规范并重生成基线。
 7. 当前 miao-plugin 是 zip 下载（无 `.git`），同步靠目录复制，无法锁定 commit。
    若想版本化，建议单独 `git clone` 一份作为上游源。
-8. **改库结构不用加迁移**：`repository/schema.ts` 的 drizzle 表定义是单一事实来源，`openDb` 打开时按它
+8. **改库结构不用加迁移**：`config/schema.ts` 的 drizzle 表定义是单一事实来源，`openDb` 打开时按它
    现算 DDL 跑一遍（空库建表、老库表在就不碰）。数据可从 enka 重抓，所以不记迁移历史——改了表定义
    后老库请删文件重抓（或开发期 `npm run db:push` 就地 ALTER）；打开到比 `SCHEMA_VERSION` 旧的库会
    直接抛错提示删库。表定义与实际建表必须一致（`test/pipeline.ts` 断言「空库的列 == 表定义的列」）。
@@ -363,7 +363,7 @@ enka 原始响应
 13. **评分权重表不是每个角色都有的**。上游 `artis-mark.js` 的 `usefulAttr` 收录不全时，
     内核拿通用表兜底（`ArtisMarkCfg.js:99`：`atk75/cpct100/cdmg100/dmg100/phy100`），
     但标题照旧拼 `${char.abbr}-通用` —— 看着像上游给这个角色定过一套权重。
-    所以内核在 `getCfg` 里透出 `isDefaultWeight`，view 层（`service/view.ts` 的 `classTitleOf`）
+    所以内核在 `getCfg` 里透出 `isDefaultWeight`，视图成型（`service/character.service.ts` 的 `classTitleOf`）
     据此把前缀换成「默认」：**默认-通用**。只换前缀、保留场景词（通用/护摩/绝缘4），
     「用的哪套权重」和「命中哪个场景」仍然分得开。
     同步上游会自然消掉这件事（沃雅妮莎、薇斯纳就是 2026-10-06 同步时补进来的），

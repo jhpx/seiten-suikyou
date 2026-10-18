@@ -1,12 +1,12 @@
 /*
- * 角色行的读写 —— character / weapon / artifact 三张表。
+ * 角色域的行读写 —— character / weapon / artifact 三张表，外加跨这三表收文案 key。
  *
  * 为什么三张表放一个文件：它们同键 (uid, avatar_id)、同寿命、总是一起读写
  * （一个角色 = 一行 character + 一行 weapon + 五行 artifact），拆成三个文件只会让人来回跳。
  * 但它们**各拼各的查询条件** —— 三张表列名一样，复用同一份条件会拼出 `character.avatar_id`
  * 去查 weapon 表（SQLite 会直接报 no such column）。
  */
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import type { Conn } from '../config/db.ts'
 import { artifact, character, weapon } from '../config/schema.ts'
@@ -72,4 +72,31 @@ export function findArtifacts (db: Conn, uid: number, avatarIds: number[]): Arti
   return db.select().from(artifact)
     .where(and(eq(artifact.uid, uid), inArray(artifact.avatarId, avatarIds)))
     .orderBy(asc(artifact.pos)).all()
+}
+
+/* ---------------- 文案 key 清单 ---------------- */
+
+export interface TextKeys {
+  hash: number[]
+  avatars: number[]
+}
+
+/**
+ * 「库里实际用到过哪些官方文案 key」—— 跨这三张表去重。
+ *
+ * 接多语言翻译表时不用把几十万条全导进来，拿这张清单去找那几百条就够了
+ * （角色没有 hash —— enka 不给角色名 hash，只能按 avatarId 列）。
+ */
+export function collectTextKeys (db: Conn): TextKeys {
+  const hash = new Set<number>()
+  const add = (rows: Array<{ h: number | null }>): void => { for (const r of rows) if (r.h !== null) hash.add(r.h) }
+
+  add(db.selectDistinct({ h: artifact.nameHash }).from(artifact).where(isNotNull(artifact.nameHash)).all())
+  add(db.selectDistinct({ h: artifact.setHash }).from(artifact).where(isNotNull(artifact.setHash)).all())
+  add(db.selectDistinct({ h: weapon.nameHash }).from(weapon).where(isNotNull(weapon.nameHash)).all())
+
+  const avatars = db.selectDistinct({ avatarId: character.avatarId }).from(character)
+    .orderBy(asc(character.avatarId)).all().map(r => r.avatarId)
+
+  return { hash: [...hash], avatars }
 }

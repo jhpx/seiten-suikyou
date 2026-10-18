@@ -29,7 +29,7 @@ npm run server                     # 打开 http://127.0.0.1:8787
 
 - **运行时要求**：Node ≥ 22.18（`.ts` 直接跑，靠内置类型剥离，零构建）。本地库走 Node 自带的 `node:sqlite`，不引原生模块
   （装 better-sqlite3 在 Windows 上要 MSVC，为一个个人工具不值得）。
-- **表结构**在 `src/repository/schema.ts`（drizzle 表定义），首次启动按它自动建表 —— **没有 schema.sql、没有迁移目录**。
+- **表结构**在 `src/config/schema.ts`（drizzle 表定义），首次启动按它自动建表 —— **没有 schema.sql、没有迁移目录**。
   改了表定义、又不想删库重抓时用 `npm run db:push`；`npm run db:sql` 能打出官方口径的建表 SQL 对一下。
 - **Python 3 只在跑同步脚本时需要**（`tools/*.py`），不参与运行时。
 - **前端是 git submodule**：`web/` 是前端子仓库 [seiten-suikyou-web](https://github.com/jhpx/seiten-suikyou-web)
@@ -268,7 +268,7 @@ npm test
 | `typecheck` | — | `tsc --noEmit`，零构建项目唯一的类型闸门 |
 | `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
 | `args` | 11 | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
-| `arch` | 70 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层、`common/config.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（server / rest → service → repository → domain 不许反向，`rest` 也不许反向吃 `server`，`upstream` / `kernel` 是叶子，旧的 adapter / i18n / shared / view 不许复活） |
+| `arch` | 74 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层、`config/constants.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（server / rest → service → repository → domain 不许反向，`rest` 也不许反向吃 `server`，`upstream` / `kernel` 是叶子）、**三层领域文件对照**（`account` / `character` 在 rest / service / repository 各有一个，后缀 `.rest.ts` / `.service.ts` / `.repo.ts`） |
 | `enka` | — | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
 | `pipeline` | 153 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
@@ -308,39 +308,39 @@ seiten-suikyou/
 ├── src/
 │   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分/伤害模块 + 以 i18n 名义导出多语言门面
 │   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
-│   ├── repository/           # 数据层：一张表怎么存、一个聚合怎么拼
+│   ├── config/               # 存储基建：数据库全局读写（不含任何领域知识）
+│   │   ├── constants.ts      #   全局默认值：默认语言 / 库文件 / 端口 / 监听地址 / 上游源 / 超时 / 限流额度
 │   │   ├── schema.ts         #   表结构权威定义（drizzle sqliteTable，没有 schema.sql / 迁移目录）
 │   │   ├── db.ts             #   连接（node:sqlite + drizzle）+ 现算 DDL 建表 / 结构代次校验
-│   │   ├── dbo/              #   一张表一行：account / character（含武器圣遗物）/ fetch-log / text-keys
 │   │   └── store.ts          #   仓储门面：行 ↔ 领域模型、聚合组装、一次抓取的事务边界
+│   ├── repository/           # 一张表一行：只认行类型，不认领域对象
+│   │   ├── account.repo.ts   #   account 表 + fetch_log 抓取流水（键都是 uid）
+│   │   └── character.repo.ts #   character / weapon / artifact 三张表 + 跨表文案 key 清单
 │   ├── service/              # 用例编排 + 视图组装 —— 不懂 HTTP
-│   │   ├── ingest.ts         #   抓取用例：并发去重 / 落库 / 失败留痕
-│   │   ├── account.ts        #   账号列表摘要 / 整包视图 / 伤害判别
-│   │   ├── view.ts           #   视图成型：库行 + 评分结果 → 接口/CLI 共用的对象（不是前端渲染）
+│   │   ├── account.service.ts   # 账号：列表摘要 / 整包视图 / 抓取用例（并发去重 / 落库 / 失败留痕）/ 探活计数
+│   │   ├── character.service.ts # 角色：伤害用例 + 面板/圣遗物/词条汇总的视图成型与显示口径
 │   │   └── context.ts        #   对控制器的能力契约（service 说自己能提供什么）
+│   ├── rest/                 # 控制器：一个资源一个文件，只做 HTTP 关切（取参 / 判 404 / 拼响应）
+│   │   ├── account.rest.ts   #   账号：列表 / 详情 / 刷新
+│   │   ├── character.rest.ts #   角色：伤害
+│   │   ├── meta.ts           #   系统：语言表 / 界面文案 / 探活（非领域资源，不加层后缀）
+│   │   └── reply.ts          #   响应原语：ok() / fail() / noData()
 │   ├── upstream/             # 对外部数据源（enka / microgg）
 │   │   ├── enka.ts           #   按 uid 取原始响应（多源并行、谁先成功用谁，HTTP 码翻译成人话）
 │   │   └── enka-account.ts   #   enka 原始响应 → 账号 + 名下角色（挑字段、算指纹、带文案 key，不解析属性）
 │   ├── kernel/               # 对 miao 评分内核
 │   │   ├── materialize.ts    #   领域模型 → miao profile（id → 中文名/对象 + 算面板）
 │   │   └── damage.ts         #   miao profile → 伤害计算的出口 calcDamage()
-│   ├── common/               # 字典、默认值、纯函数（谁都引，不引业务）
-│   │   ├── config.ts         #   全局默认值：默认语言 / 库文件 / 端口 / 监听地址 / 上游源 / 超时 / 限流额度
+│   ├── common/               # 字典与纯函数（谁都引，不引业务）
 │   │   ├── i18n.ts           #   多语言门面：认语言 + 把下面两张表统一出口（名字 / 界面文字）
 │   │   ├── names.ts          #   官方文案：hash/id → 游戏文案（读 vendor/i18n/names.json）
 │   │   ├── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
-│   │   └── util.ts           #   num / str / parseArgs / argValue / errMessage（零依赖）
+│   │   └── util.ts           #   num / str / parseArgs / argValue / errMessage / fmtTime（零依赖）
 │   ├── cli/score.ts          # 命令行评分入口（与 server/ 并列的两个进程入口之一）
-│   ├── server/               # HTTP 进程入口：装配 + URL 表 + 限流（业务别写回这里）
-│   │   ├── index.ts          #   装配：hono 应用 / 跨域 / 静态托管 / 起监听 / CLI 入口
-│   │   ├── routes.ts         #   URL 表：方法 + 路径 + 限流档 + 控制器，一条一行
-│   │   └── rate-limit.ts     #   限流三档（只认档位，不认路径）
-│   └── rest/                 # 控制器：一个资源一个文件，只做 HTTP 关切（取参 / 判 404 / 拼响应）
-│       ├── accounts.ts       #   账号：列表 / 详情 / 刷新
-│       ├── characters.ts     #   角色：伤害
-│       ├── meta.ts           #   系统：语言表 / 界面文案 / 探活
-│       ├── params.ts         #   路径 / query 取参
-│       └── reply.ts          #   响应原语：ok() / fail() / noData()
+│   └── server/               # HTTP 进程入口：装配 + URL 表 + 限流（业务别写回这里）
+│       ├── index.ts          #   装配：hono 应用 / 跨域 / 静态托管 / 起监听 / CLI 入口
+│       ├── routes.ts         #   URL 表：方法 + 路径 + 限流档 + 控制器，一条一行
+│       └── rate-limit.ts     #   限流三档（只认档位，不认路径）
 ├── web/                      # 前端子仓库 seiten-suikyou-web 的检出（submodule，见「快速开始」）
 │   ├── index.html            #   外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
 │   ├── bootstrap.js          #   入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动

@@ -9,10 +9,11 @@
  */
 import type { MiddlewareHandler } from 'hono'
 
-import type { DamageResult } from './character.service.ts'
 import type { AccountSummary } from './account.service.ts'
+import type { DamageResult } from './character.service.ts'
 import type { IngestResult } from '../upstream/enka-account.ts'
-import { buildAccountView, weightFilterOptions } from './view.service.ts'
+import { buildAccountView } from './account.service.ts'
+import { weightFilterOptions } from './character.service.ts'
 
 /** 一整包账号视图（类型从视图层推，控制器不另抄一份形状） */
 export type AccountView = ReturnType<typeof buildAccountView>

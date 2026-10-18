@@ -3,7 +3,7 @@
 本文只描述「前端 ↔ 后端 HTTP 接口」的契约：有哪些接口、请求怎么发、响应长什么样。
 页面如何展示、服务如何部署，不归这里管（部署见 [`docs/DEPLOY.md`](DEPLOY.md)）。
 
-后端源码：`src/server/routes.ts`（**唯一**列出 URL 的地方，一条路由一行）+ `src/rest/<资源>.ts`（控制器，一个资源一个文件）+ `src/service/view.ts` 视图整形；
+后端源码：`src/server/routes.ts`（**唯一**列出 URL 的地方，一条路由一行）+ `src/rest/<领域>.rest.ts`（控制器，一个领域一个文件）+ `src/service/<领域>.service.ts` 视图整形；
 前端调用集中封装在前端子仓库 seiten-suikyou-web 的 `core.js` 的 `api()` / `uidApiUrl()`。
 
 ---

@@ -1,16 +1,20 @@
 /*
- * account 表的行读写 —— 这一层只认「行」，不认识 Account 类。
+ * 账号域的行读写 —— account 表 + 它名下的抓取流水 fetch_log。
+ * 这一层只认「行」，不认识 Account 类。
  *
  * repository 与 config 存储门面（../config/store.ts）的分工：
  * repository 是「一张表 ↔ 一行」，store 是「一个聚合 ↔ 几张表」。
- * 所以这里出去的永远是 `AccountRow`（列名 + 类型都跟 ../config/schema.ts 对齐），
+ * 所以这里出去的永远是行类型（列名 + 类型都跟 ../config/schema.ts 对齐），
  * 想拿领域对象得再过仓储那道映射。上层因此不会为了查个昵称就把 Account 整包拼出来。
+ *
+ * fetch_log 以 uid 为键、只增不改，是账号的抓取账本：成功一行（ok=1）、失败也一行（ok=0）。
+ * 它不对应任何领域模型，出入参就是行本身。
  */
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 import type { Conn } from '../config/db.ts'
-import { account } from '../config/schema.ts'
+import { account, fetchLog } from '../config/schema.ts'
 
 export type AccountRow = typeof account.$inferSelect
 export type NewAccountRow = typeof account.$inferInsert
@@ -48,4 +52,24 @@ export function findAccount (db: Conn, uid: number): AccountRow | null {
 /** 库里有哪些 uid，升序（列表页的目录） */
 export function listAccountUids (db: Conn): number[] {
   return db.select({ uid: account.uid }).from(account).orderBy(asc(account.uid)).all().map(r => r.uid)
+}
+
+/* ---------------- 抓取流水 ---------------- */
+
+export type FetchLogRow = typeof fetchLog.$inferSelect
+export type NewFetchLogRow = typeof fetchLog.$inferInsert
+
+/** 记一行流水（成功、失败都走它） */
+export function appendFetchLog (db: Conn, row: NewFetchLogRow): void {
+  db.insert(fetchLog).values(row).run()
+}
+
+/**
+ * 最后一次**成功**抓取。只认 ok=1：失败流水记的是「尝试过」，数据并没变新 ——
+ * 把失败时刻当数据更新时间，页面会显示一个骗人的新鲜度。
+ */
+export function lastOkFetch (db: Conn, uid: number): FetchLogRow | null {
+  return db.select().from(fetchLog)
+    .where(and(eq(fetchLog.uid, uid), eq(fetchLog.ok, 1)))
+    .orderBy(desc(fetchLog.id)).limit(1).get() ?? null
 }
