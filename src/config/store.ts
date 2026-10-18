@@ -1,7 +1,7 @@
 /*
  * 仓储 —— 按「聚合」读写，进出都是领域对象（Account / Character / Weapon / Artifact）。
  *
- * 这一层只做三件事，SQL 全在 dao/ 里：
+ * 这一层只做三件事，SQL 全在 repository/ 里：
  *   ① 行 ↔ 对象映射（下面那几对小函数）
  *   ② 聚合组装（一个 Account = 账号行 + 角色行 + 各自的武器与五件圣遗物）
  *   ③ 事务边界（一次抓取落库 = 账号 + 角色们 + 流水，要么全成要么全不成）
@@ -10,12 +10,12 @@
  * 没抓到的原样留着（它们的 fetched_at 自然落后，用来判断陈旧）。
  */
 import type { Conn, Db } from './db.ts'
-import * as accountDao from './dao/account.ts'
-import * as characterDao from './dao/character.ts'
-import * as fetchLogDao from './dao/fetch-log.ts'
-import * as textKeysDao from './dao/text-keys.ts'
-import type { AccountRow } from './dao/account.ts'
-import type { ArtifactRow, CharacterRow, WeaponRow } from './dao/character.ts'
+import * as accountBo from '../repository/account.repo.ts'
+import * as characterBo from '../repository/character.repo.ts'
+import * as fetchLogBo from '../repository/fetch-log.repo.ts'
+import * as textKeysBo from '../repository/text-keys.repo.ts'
+import type { AccountRow } from '../repository/account.repo.ts'
+import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
 import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from './schema.ts'
 import { Account } from '../domain/account.ts'
 import { Character } from '../domain/character.ts'
@@ -95,20 +95,21 @@ const artifactOf = (row: ArtifactRow): Artifact =>
 
 /* ---------------- 写 ---------------- */
 
-/** 账号那一行。合并式：本次没值的列保留库里旧值（语义在 dao/account.ts 的 keepOld） */
+/** 账号那一行。合并式：本次没值的列保留库里旧值（语义在 repository/account.repo.ts 的 mergeAccount） */
 export function saveAccount (db: Conn, a: Account, stamp?: string): void {
-  accountDao.upsert(db, accountRow(a, stamp))
+  accountBo.mergeAccount(db, accountRow(a, stamp))
 }
 
-/** 一个角色 = 三张表的两行 + 五件圣遗物。先清掉它名下的子行，再整块写回（数据是整包来的）。 */
+/** 一个角色 = 三张表的行整块重写（数据是整包来的，见 repository/character.repo.ts 的 replaceCharacter） */
 export function saveCharacter (db: Conn, c: Character, stamp?: string): void {
   const uid = c.uid!
   const avatarId = c.avatarId!
 
-  characterDao.deleteOne(db, uid, avatarId)
-  characterDao.insertCharacter(db, characterRow(c, stamp))
-  characterDao.insertWeapon(db, weaponRow(c))
-  for (const a of c.artifacts || []) characterDao.insertArtifact(db, artifactRow(a, uid, avatarId))
+  characterBo.replaceCharacter(db, {
+    character: characterRow(c, stamp),
+    weapon: weaponRow(c),
+    artifacts: (c.artifacts || []).map(a => artifactRow(a, uid, avatarId))
+  })
 }
 
 export interface SaveFetchArgs {
@@ -127,7 +128,7 @@ export function saveFetch (db: Db, {
     if (account) saveAccount(tx, account, stamp)
     const characters = account?.characters || []
     for (const c of characters) saveCharacter(tx, c, stamp)
-    fetchLogDao.insert(tx, {
+    fetchLogBo.appendFetchLog(tx, {
       uid: account.uid!,
       source,
       fetchedAt: stamp,
@@ -149,34 +150,34 @@ export interface LogFailureArgs {
 
 /** 抓取失败也记一行（ok=0）—— 上游抖过多少次，只留痕在这里 */
 export function logFailure (db: Conn, { uid, source = 'enka', note = '', stamp = new Date().toISOString() }: LogFailureArgs): void {
-  fetchLogDao.insert(db, { uid: uid!, source, fetchedAt: stamp, avatarIds: null, ttl: null, ok: 0, note: note || null })
+  fetchLogBo.appendFetchLog(db, { uid: uid!, source, fetchedAt: stamp, avatarIds: null, ttl: null, ok: 0, note: note || null })
 }
 
 /* ---------------- 读 ---------------- */
 
 /** 只读账号那一行（不带角色）。列表页 / 页脚只要昵称等级时用它 */
 export function loadAccount (db: Conn, uid: number): Account | null {
-  const row = accountDao.select(db, uid)
+  const row = accountBo.findAccount(db, uid)
   return row ? accountOf(row) : null
 }
 
 export function listUids (db: Conn): number[] {
-  return accountDao.selectUids(db)
+  return accountBo.listAccountUids(db)
 }
 
 export function listCharacterIds (db: Conn, uid: number): number[] {
-  return characterDao.selectIds(db, uid)
+  return characterBo.listCharacterIds(db, uid)
 }
 
 /* 一批角色连武器带圣遗物 —— 固定三条查询（不按角色数 N+1），子行在内存里按 avatarId 分组 */
 function loadCharacters (db: Conn, uid: number, avatarIds: number[]): Character[] {
   if (!avatarIds.length) return []
 
-  const rows = new Map(characterDao.selectRows(db, uid, avatarIds).map(r => [r.avatarId, r]))
-  const weapons = new Map(characterDao.selectWeapons(db, uid, avatarIds).map(r => [r.avatarId, r]))
+  const rows = new Map(characterBo.findCharacters(db, uid, avatarIds).map(r => [r.avatarId, r]))
+  const weapons = new Map(characterBo.findWeapons(db, uid, avatarIds).map(r => [r.avatarId, r]))
 
   const artifacts = new Map<number, Artifact[]>()
-  for (const row of characterDao.selectArtifacts(db, uid, avatarIds)) {
+  for (const row of characterBo.findArtifacts(db, uid, avatarIds)) {
     const list = artifacts.get(row.avatarId) || []
     list.push(artifactOf(row))
     artifacts.set(row.avatarId, list)
@@ -209,14 +210,14 @@ export function loadAccountWithCharacters (db: Conn, uid: number, avatarIds: num
 }
 
 /** fetch_log 表的一行（`lastFetch` 的返回形状） */
-export type FetchLogRow = fetchLogDao.FetchLogRow
+export type FetchLogRow = fetchLogBo.FetchLogRow
 
 /** 最后一次成功抓取（列表页页脚 / 明细页 / CLI 的「最后抓取」都读它） */
 export function lastFetch (db: Conn, uid: number): FetchLogRow | null {
-  return fetchLogDao.lastOk(db, uid)
+  return fetchLogBo.lastOkFetch(db, uid)
 }
 
-/** 库里用到的官方文案 key 清单（跨三张表去重，见 dao/text-keys.ts） */
-export function listTextKeys (db: Conn): textKeysDao.TextKeys {
-  return textKeysDao.select(db)
+/** 库里用到的官方文案 key 清单（跨三张表去重，见 repository/text-keys.repo.ts） */
+export function listTextKeys (db: Conn): textKeysBo.TextKeys {
+  return textKeysBo.collectTextKeys(db)
 }

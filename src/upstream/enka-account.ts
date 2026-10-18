@@ -2,7 +2,7 @@
  * enka-account —— 把 enka 的原始响应翻译成「账号 + 名下角色」
  *
  * 纯翻译：不进库、不联网、不知道 HTTP。只做三件事：挑字段、算一次抓取的指纹、组装成一个 Account。
- * 「用例」部分（并发去重、落库、失败留痕）在 service/ingest.ts。
+ * 「用例」部分（并发去重、落库、失败留痕）在 service/ingest.service.ts。
  *
  * 它**不解析属性**：mainPropId / appendPropIdList 原样存库，id → 属性 交给 miao 内核 ——
  * 内核靠「同一个 id 出现几次」算词条数，提前解析会把这信息丢掉。

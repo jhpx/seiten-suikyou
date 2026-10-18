@@ -9,7 +9,7 @@
 > | 展示层（i18n） | ✅ 必须有 | miao 零多语言能力（§1.2） |
 >
 > 实现落在 `src/upstream/`（enka 抓取 + 原始响应 → 实体）、`src/kernel/`（materialize / damage，对 miao 内核）、
-> `src/repository/`（schema / ddl / db / dao / 仓储门面）、`src/service/`（用例编排 + 视图组装 + 能力契约）、
+> `src/repository/`（schema / db / store 三个文件 + dbo 子目录）、`src/service/`（用例编排 + 视图组装 + 能力契约）、
 > `src/rest/`（控制器：一个资源一个文件，取参 / 判空 / 拼响应）、`src/server/`（装配 + URL 表 + 限流，与 `src/cli/` 并列的两个进程入口）、
 > `src/common/`（字典与纯函数）、`src/cli/score.ts`（端到端命令行）。
 > 本文记录的是**为什么这么设计**，代码结构看 README。
@@ -114,16 +114,16 @@ enka 原始响应 (JSON)
 
 模型**不再自己管列名**（旧版的 `FIELDS` / `COLS` / `toValues` / `fromRow` 已删）：
 列与类型的唯一来源是 `src/repository/schema.ts` 的 drizzle 表定义，而「行 ↔ 对象」的搬运
-（列名对应、JSON 编解码、子表拼装）集中在 `src/repository/index.ts` 的几对私有映射函数里
+（列名对应、JSON 编解码、子表拼装）集中在 `src/repository/store.ts` 的几对私有映射函数里
 （`accountRow`/`accountOf`、`characterRow`/`characterOf` …）。
-于是加一列只动**两处**：`schema.ts` 的表定义 + `repository/index.ts` 的映射（各一行），
+于是加一列只动**两处**：`schema.ts` 的表定义 + `repository/store.ts` 的映射（各一行），
 领域模型本身只在「这条数据对领域有意义」时才动。
 `upstream/enka-account.ts` 只做纯翻译（不联网、不落库），「enka 长什么样 → 模型」的映射交给各模型的 `ofEnka`；
 `service/ingest.ts` 只做用例编排（inflight 去重、写库、失败留痕）。
 
-数据层内部的再分工（2026-10-18）：`repository/dao/` 是一张表一行的 SQL，只认行类型；
-`repository/index.ts` 是仓储门面，认聚合（`Account` + 角色 + 武器 + 圣遗物）与事务边界。
-所以「查个昵称」这种活走 dao 就够了，不必把聚合拼出来。
+数据层内部的再分工：`repository/dbo/` 是一张表一行的 SQL，只认行类型；
+`repository/store.ts` 是仓储门面，认聚合（`Account` + 角色 + 武器 + 圣遗物）与事务边界。
+所以「查个昵称」这种活走 dbo 就够了，不必把聚合拼出来。
 
 ⚠️ 模型**不许引外层**（`test/arch.ts` 第 7 节）—— 只许两种 import：同目录的 `./xxx.ts`，
 以及更底一层的共用件 `../common/util.ts`。不许 import repository / upstream / kernel / service / rest / miao / 三方包。
@@ -189,7 +189,7 @@ enka 原始响应 (JSON)
 ### 4.1 结构保证（不做增量迁移）
 
 没有 `schema.sql`，也**不记迁移历史**：表定义就是源。`db.ts` 的 `openDb` 打开库时按表定义**现算**
-`CREATE TABLE IF NOT EXISTS` 执行（工具在 `repository/ddl.ts`，取 drizzle 的列元数据拼 DDL）——空库建表就位，
+`CREATE TABLE IF NOT EXISTS` 执行（工具在 `repository/db.ts`，取 drizzle 的列元数据拼 DDL）——空库建表就位，
 已存在的库表在就不碰，不破坏旧数据；测试的 `:memory:` 库走同一条路。
 `SCHEMA_VERSION` 只作当前结构代次的戳记（每次打开写进 `PRAGMA user_version`），用来比对「库是不是比代码旧」。
 

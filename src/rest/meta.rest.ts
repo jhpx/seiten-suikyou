@@ -2,12 +2,14 @@
  * 系统信息控制器：/api/meta（语言表 + 界面文案 + 权重筛选项）、/api/health（探活）。
  * 这两条不碰业务数据，故意不挂限流 —— 探活被限会误报故障。
  */
-import type { Handler } from 'hono'
+import type { Context, Handler } from 'hono'
 
 import * as i18n from '../common/i18n.ts'
 import type { ApiContext } from '../service/context.ts'
 import { ok } from './reply.ts'
-import { localeOf } from './params.ts'
+
+/* query 里的语言（认不出会退回默认语言） */
+const localeOf = (c: Context): string => i18n.resolveLocale(c.req.query('locale'))
 
 export const meta = (ctx: ApiContext): Handler => (c) => {
   const loc = localeOf(c)

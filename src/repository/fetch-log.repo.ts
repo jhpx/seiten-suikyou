@@ -7,13 +7,14 @@
  */
 import { and, desc, eq } from 'drizzle-orm'
 
-import type { Conn } from '../db.ts'
-import { fetchLog } from '../schema.ts'
+import type { Conn } from '../config/db.ts'
+import { fetchLog } from '../config/schema.ts'
 
 export type FetchLogRow = typeof fetchLog.$inferSelect
 export type NewFetchLogRow = typeof fetchLog.$inferInsert
 
-export function insert (db: Conn, row: NewFetchLogRow): void {
+/** 记一行流水（成功、失败都走它） */
+export function appendFetchLog (db: Conn, row: NewFetchLogRow): void {
   db.insert(fetchLog).values(row).run()
 }
 
@@ -21,7 +22,7 @@ export function insert (db: Conn, row: NewFetchLogRow): void {
  * 最后一次**成功**抓取。只认 ok=1：失败流水记的是「尝试过」，数据并没变新 ——
  * 把失败时刻当数据更新时间，页面会显示一个骗人的新鲜度。
  */
-export function lastOk (db: Conn, uid: number): FetchLogRow | null {
+export function lastOkFetch (db: Conn, uid: number): FetchLogRow | null {
   return db.select().from(fetchLog)
     .where(and(eq(fetchLog.uid, uid), eq(fetchLog.ok, 1)))
     .orderBy(desc(fetchLog.id)).limit(1).get() ?? null

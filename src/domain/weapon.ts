@@ -11,7 +11,7 @@
  *   · affix    是精炼等级（1~5）。enka 给的是「额外精炼次数」（精1 存 0 或干脆没这个键），所以读时 +1。
  *
  * ⚠️ 「装备了但元数据不认识这把」和「压根没装备」是两回事。本值对象只回答前者之外的那半边：
- *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（service/view.ts）。
+ *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（service/view.service.ts）。
  */
 import { num } from '../common/util.ts'
 import type { EnkaEquip } from './enka.ts'

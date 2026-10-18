@@ -5,7 +5,7 @@
  * Account 是「一个 UID 下的全部」，Character 是「其中一个角色」。
  *
  * ⚠️ 账号信息是**分批变**的：有时只抓到角色列表、没抓到账号详情。所以写库时「本次没给值」的列
- *    用 COALESCE 保留库里旧值（清单在 repository/dao/account.ts 的 keepOld）。
+ *    用 COALESCE 保留库里旧值（语义在 repository/account.repo.ts 的 mergeAccount）。
  * ⚠️ payloadHash（原始响应指纹）不是玩家属性，是「这一次抓取」的元信息，所以只在这儿**存着**，
  *    怎么算交给上游层（domain 不碰 node:crypto）。
  */

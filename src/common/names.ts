@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { DEFAULT_LOCALE } from './config.ts'
+import { DEFAULT_LOCALE } from '../config/constants.ts'
 import { KEY_TO_PROP } from '../domain/stat.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))

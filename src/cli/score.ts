@@ -8,10 +8,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { ArtisMark, i18n } from '../index.ts'
-import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../service/view.ts'
-import type { MarkDetail } from '../service/view.ts'
-import { openDb } from '../repository/db.ts'
-import * as repo from '../repository/index.ts'
+import { attrValueText, enkaNumsOf, fmtTime, panelText, rawNumsOf, slotLabel, statLabel, shapeCharacter } from '../service/view.service.ts'
+import type { MarkDetail } from '../service/view.service.ts'
+import { openDb } from '../config/db.ts'
+import * as repo from '../config/store.ts'
 import { ingestPayload } from '../upstream/enka-account.ts'
 import type { IngestResult } from '../upstream/enka-account.ts'
 import { fetchEnka } from '../upstream/enka.ts'
@@ -20,7 +20,7 @@ import type { MiaoProfile } from '../kernel/materialize.ts'
 import type { Character } from '../domain/character.ts'
 import type { EnkaPayload } from '../domain/enka.ts'
 import { argValue, parseArgs } from '../common/util.ts'
-import { DEFAULT_DB_FILE } from '../common/config.ts'
+import { DEFAULT_DB_FILE } from '../config/constants.ts'
 
 /* 界面文字 / 部位名 / 词条名复用网页端那两张表，免得两处各写一套、加语言时漏改 */
 const uiText = i18n.uiText
@@ -228,7 +228,7 @@ async function main () {
   console.log(line())
 
   /* ---- 5. --json ---- */
-  /* --json 走的是和网页端同一个成型出口（service/view.ts），命令行看到的和接口拿到的是同一份形状。
+  /* --json 走的是和网页端同一个成型出口（service/view.service.ts），命令行看到的和接口拿到的是同一份形状。
      额外保留 charWeight（权重表）—— 那是调试规则时唯一想看的东西，视图里没有。 */
   if (args.json) {
     console.log(JSON.stringify(wanted.map(({ character, profile, result }) => ({

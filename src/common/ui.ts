@@ -9,7 +9,7 @@
  *
  * 这张表只放数据；对外出口（认语言 + 与名字表合并）在 i18n.ts。
  */
-import { DEFAULT_LOCALE } from './config.ts'
+import { DEFAULT_LOCALE } from '../config/constants.ts'
 
 /* 每种语言一张表，chs 是全量、其它语言缺的键由 fallback 补。类型标成「语言 → 键 → 文字」：
    键不做字面量约束（chs 全量、别的语言是子集，逐键建联合得不偿失），只保证「查出来一定是 string」。 */

@@ -310,10 +310,9 @@ seiten-suikyou/
 │   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
 │   ├── repository/           # 数据层：一张表怎么存、一个聚合怎么拼
 │   │   ├── schema.ts         #   表结构权威定义（drizzle sqliteTable，没有 schema.sql / 迁移目录）
-│   │   ├── ddl.ts            #   表定义 → CREATE TABLE（openDb 时现算，空库自动建表）
-│   │   ├── db.ts             #   连接（node:sqlite + drizzle）/ 结构代次校验
-│   │   ├── dao/              #   一张表一行：account / character（含武器圣遗物）/ fetch-log
-│   │   └── index.ts          #   仓储门面：行 ↔ 领域模型、聚合组装、一次抓取的事务边界
+│   │   ├── db.ts             #   连接（node:sqlite + drizzle）+ 现算 DDL 建表 / 结构代次校验
+│   │   ├── dbo/              #   一张表一行：account / character（含武器圣遗物）/ fetch-log / text-keys
+│   │   └── store.ts          #   仓储门面：行 ↔ 领域模型、聚合组装、一次抓取的事务边界
 │   ├── service/              # 用例编排 + 视图组装 —— 不懂 HTTP
 │   │   ├── ingest.ts         #   抓取用例：并发去重 / 落库 / 失败留痕
 │   │   ├── account.ts        #   账号列表摘要 / 整包视图 / 伤害判别

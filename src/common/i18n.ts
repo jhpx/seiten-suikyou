@@ -7,7 +7,7 @@
  *
  * 依赖方向单向：i18n → {names, ui}、ui → names（只取默认语言），names 谁也不引。
  */
-import { DEFAULT_LOCALE } from './config.ts'
+import { DEFAULT_LOCALE } from '../config/constants.ts'
 import { resolveLocale } from './names.ts'
 import { t as uiT, all as uiAll } from './ui.ts'
 

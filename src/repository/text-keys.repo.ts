@@ -6,15 +6,16 @@
  */
 import { asc, isNotNull } from 'drizzle-orm'
 
-import type { Conn } from '../db.ts'
-import { artifact, character, weapon } from '../schema.ts'
+import type { Conn } from '../config/db.ts'
+import { artifact, character, weapon } from '../config/schema.ts'
 
 export interface TextKeys {
   hash: number[]
   avatars: number[]
 }
 
-export function select (db: Conn): TextKeys {
+/** 三张表扫一遍，把用到的文案 hash 与角色 id 去重收拢 */
+export function collectTextKeys (db: Conn): TextKeys {
   const hash = new Set<number>()
   const add = (rows: Array<{ h: number | null }>): void => { for (const r of rows) if (r.h !== null) hash.add(r.h) }
 

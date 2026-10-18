@@ -6,8 +6,8 @@
  *
  * ⚠️ 失败也记 fetch_log（ok=0）：上游抖过多少次、为什么抖，只留痕在这里。
  */
-import type { Db } from '../repository/db.ts'
-import * as repo from '../repository/index.ts'
+import type { Db } from '../config/db.ts'
+import * as repo from '../config/store.ts'
 import { fetchEnka } from '../upstream/enka.ts'
 import type { FetchEnkaOpts } from '../upstream/enka.ts'
 import { ingestPayload } from '../upstream/enka-account.ts'

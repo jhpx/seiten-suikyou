@@ -15,8 +15,8 @@ import { fileURLToPath } from 'node:url'
 import { eq as sqlEq } from 'drizzle-orm'
 
 import { startServer } from '../src/server/index.ts'
-import * as repo from '../src/repository/index.ts'
-import { character as characterT, fetchLog as fetchLogT } from '../src/repository/schema.ts'
+import * as repo from '../src/config/store.ts'
+import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/upstream/enka-account.ts'
 import type { EnkaPayload } from '../src/domain/enka.ts'
 

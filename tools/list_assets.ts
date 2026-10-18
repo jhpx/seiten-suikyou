@@ -9,9 +9,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { openDb } from '../src/repository/db.ts'
-import { listUids, loadAccountWithCharacters } from '../src/repository/index.ts'
-import { buildAccountView } from '../src/service/view.ts'
+import { openDb } from '../src/config/db.ts'
+import { listUids, loadAccountWithCharacters } from '../src/config/store.ts'
+import { buildAccountView } from '../src/service/view.service.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const dbPath = process.argv[2] || path.join(ROOT, 'data', 'gs.db')

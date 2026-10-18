@@ -2,7 +2,7 @@
  * URL 表 —— 这个文件只有一件事：哪个方法 + 哪条路径 + 哪个限流档，交给哪个控制器。
  *
  * 处理逻辑一律在 rest/ 顶层（拿参数、判 404、拼响应都在那边，一个资源一个文件）。
- * 想改接口路由，只动这里；想改某个接口的行为，去 rest/<资源>.ts。
+ * 想改接口路由，只动这里；想改某个接口的行为，去 rest/<资源>.rest.ts。
  *
  * 路径规矩：资源复数，层级只到资源 —— /api/accounts、/api/accounts/:uid、
  * 其下的 /characters/:avatarId/damage；抓取挂成动作子资源 /refresh。
@@ -16,9 +16,9 @@
 import type { Hono } from 'hono'
 
 import type { ApiContext, Guard } from '../service/context.ts'
-import * as accounts from '../rest/accounts.ts'
-import * as characters from '../rest/characters.ts'
-import * as meta from '../rest/meta.ts'
+import * as account from '../rest/account.rest.ts'
+import * as character from '../rest/character.rest.ts'
+import * as meta from '../rest/meta.rest.ts'
 
 export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   /* —— 系统：语言表 / 界面文案 / 探活（不碰业务数据，故意不限流） —— */
@@ -26,12 +26,12 @@ export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   app.get('/api/health', meta.health(ctx))
 
   /* —— 账号：列表 → 单账号 → 刷新 → 其下的角色 —— */
-  app.get('/api/accounts', guard('read'), accounts.list(ctx))
-  app.get('/api/accounts/:uid{[0-9]+}', guard('read'), accounts.detail(ctx))
+  app.get('/api/accounts', guard('read'), account.list(ctx))
+  app.get('/api/accounts/:uid{[0-9]+}', guard('read'), account.detail(ctx))
 
   /* 唯一会联网写库的接口，走抓取档 */
-  app.post('/api/accounts/:uid{[0-9]+}/refresh', guard('fetch'), accounts.refresh(ctx))
+  app.post('/api/accounts/:uid{[0-9]+}/refresh', guard('fetch'), account.refresh(ctx))
 
   app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/damage',
-    guard('read'), characters.damage(ctx))
+    guard('read'), character.damage(ctx))
 }

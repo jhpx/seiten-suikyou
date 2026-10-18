@@ -1,15 +1,16 @@
 /*
  * account 表的行读写 —— 这一层只认「行」，不认识 Account 类。
  *
- * DAO 与仓储（../index.ts）的分工：DAO 是「一张表 ↔ 一行」，仓储是「一个聚合 ↔ 几张表」。
- * 所以这里出去的永远是 `AccountRow`（列名 + 类型都跟 schema.ts 对齐），
+ * repository 与 config 存储门面（../config/store.ts）的分工：
+ * repository 是「一张表 ↔ 一行」，store 是「一个聚合 ↔ 几张表」。
+ * 所以这里出去的永远是 `AccountRow`（列名 + 类型都跟 ../config/schema.ts 对齐），
  * 想拿领域对象得再过仓储那道映射。上层因此不会为了查个昵称就把 Account 整包拼出来。
  */
 import { asc, eq, sql } from 'drizzle-orm'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 
-import type { Conn } from '../db.ts'
-import { account } from '../schema.ts'
+import type { Conn } from '../config/db.ts'
+import { account } from '../config/schema.ts'
 
 export type AccountRow = typeof account.$inferSelect
 export type NewAccountRow = typeof account.$inferInsert
@@ -20,7 +21,7 @@ const excl = (col: SQLiteColumn): ReturnType<typeof sql> => sql`excluded.${sql.i
 const keepOld = (col: SQLiteColumn): ReturnType<typeof sql> => sql`coalesce(${excl(col)}, ${col})`
 
 /** 合并式写入：只覆盖本次给得出值的列，其余保留库里旧值 */
-export function upsert (db: Conn, row: NewAccountRow): void {
+export function mergeAccount (db: Conn, row: NewAccountRow): void {
   db.insert(account)
     .values(row)
     .onConflictDoUpdate({
@@ -39,10 +40,12 @@ export function upsert (db: Conn, row: NewAccountRow): void {
     .run()
 }
 
-export function select (db: Conn, uid: number): AccountRow | null {
+/** 按 uid 找账号那一行，没有返回 null */
+export function findAccount (db: Conn, uid: number): AccountRow | null {
   return db.select().from(account).where(eq(account.uid, uid)).get() ?? null
 }
 
-export function selectUids (db: Conn): number[] {
+/** 库里有哪些 uid，升序（列表页的目录） */
+export function listAccountUids (db: Conn): number[] {
   return db.select({ uid: account.uid }).from(account).orderBy(asc(account.uid)).all().map(r => r.uid)
 }

@@ -24,7 +24,7 @@ import { TokenBucket } from 'limiter'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import type { Context } from 'hono'
 
-import { RATE_DEFAULTS } from '../common/config.ts'
+import { RATE_DEFAULTS } from '../config/constants.ts'
 
 /* ---------------- 档位 ---------------- */
 
@@ -46,7 +46,7 @@ export type RateTier = 'read' | 'fetch'
  * 静态文件和标了 none 的接口（/api/meta、/api/health）故意不限：health 是探活用的，
  * 被限住会误报故障。
  *
- * 三档的**默认额度**在 common/config.ts（部署参数），这里只管怎么算；
+ * 三档的**默认额度**在 config/constants.ts（部署参数），这里只管怎么算；
  * 环境变量（RATE_FETCH / RATE_FETCH_ALL / RATE_READ，填每分钟几次）覆盖它，
  * 本地调试想彻底关掉就加 --no-rate-limit。
  */

@@ -1,15 +1,61 @@
 /*
- * 表定义 → DDL。
+ * 本地库连接 —— node:sqlite（Node 自带）外面套一层 drizzle。
  *
- * 建表语句从 drizzle 自己的表元数据（getTableConfig）现算：结构仍然只写一份（schema.ts），
- * 只是不落成 .sql 文件、也不记迁移历史。drizzle-kit 的 CLI 连不上 node:sqlite 的进程内库
- * （含 :memory:），所以不走它。
+ * 不用 better-sqlite3：那是原生模块，装的时候要编译，而本项目一直保持「依赖全是纯 JS」。
+ * node:sqlite 的代价只是那条 experimental 警告，package.json 的脚本里用 --disable-warning 关掉。
  *
- * 覆盖范围 = 本项目用到的：单列/复合主键、NOT NULL、自增、外键、普通索引。
+ * 它的 API 是**同步**的：查询直接返回结果、不用 await，事务回调也不能写成 async
+ * （drizzle 在类型上就挡）。所以 repo 一路同步。
+ *
+ * 不做增量迁移：数据全都能从 enka 重新抓。改完结构后老库不会自己长出新列 ——
+ * user_version 比当前旧时直接抛错提示删库，而不是带着缺列的库静默跑。
  */
+import fs from 'node:fs'
+import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { drizzle } from 'drizzle-orm/node-sqlite'
 import { is, getTableName } from 'drizzle-orm'
 import { SQLiteTable, getTableConfig } from 'drizzle-orm/sqlite-core'
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
+import * as schema from './schema.ts'
+
+/** 当前结构代次。改了 schema.ts 就 +1，老库会被挡在 openDb 门口（没有迁移可补）。 */
+export const SCHEMA_VERSION = 5
+
+export function openDb (file = ':memory:') {
+  if (file !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true })
+  const client = new DatabaseSync(file)
+  client.exec('PRAGMA journal_mode = WAL')
+  client.exec('PRAGMA foreign_keys = ON')   // 外键级联（删角色带走武器/圣遗物）靠它
+  ensureSchema(client)
+  return drizzle({ client })
+}
+
+/** 库对象（drizzle 查询入口）；`db.$client` 是底下的 DatabaseSync */
+export type Db = ReturnType<typeof openDb>
+
+/** 事务里的连接 —— repo 的函数两种都收（顶层 db 与 tx 的查询接口同形） */
+export type Conn = Db | Parameters<Parameters<Db['transaction']>[0]>[0]
+
+function ensureSchema (client: DatabaseSync): void {
+  const row = client.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
+  const cur = Number(row?.user_version ?? 0)
+  if (cur > 0 && cur < SCHEMA_VERSION) {
+    throw new Error(`本地库结构过旧（v${cur} < v${SCHEMA_VERSION}），请删除 db 文件后重启（数据会从 enka 重新抓取）`)
+  }
+  for (const sql of schemaSql(schema)) client.exec(sql)
+  client.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+}
+
+/* ---------------- 表定义 → DDL ---------------- */
+
+/*
+ * 建表语句从 drizzle 自己的表元数据（getTableConfig）现算：结构仍然只写一份（schema.ts），
+ * 只是不落成 .sql 文件、也不记迁移历史。drizzle-kit 的 CLI 连不上 node:sqlite 的进程内库
+ * （含 :memory:），所以不走它。ensureSchema 打开库时按这里现算 CREATE TABLE 跑一遍。
+ *
+ * 覆盖范围 = 本项目用到的：单列/复合主键、NOT NULL、自增、外键、普通索引。
+ */
 
 type TableConfig = ReturnType<typeof getTableConfig>
 
@@ -21,7 +67,7 @@ const qList = (cols: SQLiteColumn[]): string => cols.map(c => q(c.name)).join(',
 function literal (value: unknown): string {
   if (typeof value === 'number' || typeof value === 'boolean') return String(Number(value))
   if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`
-  throw new Error(`ddl: 不认识的默认值 ${String(value)}，请在 ddl.ts 的 literal() 里补上`)
+  throw new Error(`ddl: 不认识的默认值 ${String(value)}，请在 db.ts 的 literal() 里补上`)
 }
 
 /* 按外键依赖排序：被引用的表先建（ESM 的模块命名空间按字母序给值，靠不住）。 */

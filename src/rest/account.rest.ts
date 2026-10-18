@@ -3,12 +3,18 @@
  *
  * 只做 HTTP 关切 —— 取参、把 service 的结果翻成状态码与响应形状。
  */
-import type { Handler } from 'hono'
+import type { Context, Handler } from 'hono'
 
+import * as i18n from '../common/i18n.ts'
 import { errMessage } from '../common/util.ts'
 import type { ApiContext } from '../service/context.ts'
 import { fail, noData, ok } from './reply.ts'
-import { localeOf, num } from './params.ts'
+
+/* 路径里的数字段（:uid 已被路由正则限死数字，直接转） */
+const num = (c: Context, name: string): number => Number(c.req.param(name))
+
+/* query 里的语言（认不出会退回默认语言） */
+const localeOf = (c: Context): string => i18n.resolveLocale(c.req.query('locale'))
 
 export const list = (ctx: ApiContext): Handler => (c) => ok(c, ctx.accounts.list())
 

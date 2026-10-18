@@ -10,13 +10,13 @@
  * ⚠️ 错误信息**不挂源名当硬前缀** —— 那是把个别源的故障说成全局结论。
  *
  * 可调项：ENKA_SOURCE=microgg 只打某个源（排查用）、ENKA_TIMEOUT_MS=8000 改超时
- * （源表、超时、UA 的默认值都在 `common/config.ts`）。
+ * （源表、超时、UA 的默认值都在 `config/constants.ts`）。
  * 响应里的 ttl 是上游给的缓存秒数，调用方应该尊重，别硬刷。
  */
 
 /* 本文件的返回值就是「enka 原始响应」= 领域层那份形状契约（纯类型，剥类型后不留运行时依赖） */
 import type { EnkaPayload } from '../domain/enka.ts'
-import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../common/config.ts'
+import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../config/constants.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。
    424 的文案取中性说法，不替用户下结论（分不清是没开展柜还是上游回源失败）。 */

@@ -6,13 +6,14 @@
  *
  * 目录速查：
  *   server/      装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
- *   rest/        控制器：一个资源一个文件（accounts / characters / meta），加两个共用件 params / reply
- *   service/     用例编排（抓取落库、账号视图成型）+ 对控制器的能力契约（context）
+ *   rest/        控制器：一个资源一个文件（account / character / meta，.rest.ts 后缀）+ reply.ts 共用件
+ *   service/     用例编排（抓取落库、账号视图成型）+ 对控制器的能力契约（context.ts）
  *   domain/      领域模型：Account / Character / Weapon / Artifact
- *   repository/  仓储与 DAO：聚合读写 + 一行一表的 SQL
+ *   config/      存储基建：constants（全局默认值）+ schema / db / store（表定义、连接、聚合读写）
+ *   repository/  一张表一行：.repo.ts 后缀的四个文件（account / character / fetchLog / text-keys）
  *   upstream/    对外部数据源：抓取（enka）+ 原始响应翻译成实体（enka-account）
  *   kernel/      对 miao 评分内核：materialize（实体 → profile）、damage（伤害出口）
- *   common/      config（全局默认值）、i18n（多语言门面）、names（官方文案表）、ui（界面文案）、util
+ *   common/      i18n（多语言门面）、names（官方文案表）、ui（界面文案）、util
  *
  * 装配顺序：cors 必须在限流前（预检不占配额），静态托管必须在路由后
  * （能命中接口的路径先被路由回掉，剩下的才当文件找）。
@@ -29,13 +30,14 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import type { MiddlewareHandler } from 'hono'
 
 import { i18n } from '../index.ts'
-import { openDb } from '../repository/db.ts'
-import { accountView, characterDamage, countAccounts, listAccounts } from '../service/account.ts'
-import { createIngestService } from '../service/ingest.ts'
-import type { FetchImpl } from '../service/ingest.ts'
-import { weightFilterOptions } from '../service/view.ts'
+import { openDb } from '../config/db.ts'
+import { characterDamage } from '../service/character.service.ts'
+import { accountView, countAccounts, listAccounts } from '../service/account.service.ts'
+import { createIngestService } from '../service/ingest.service.ts'
+import type { FetchImpl } from '../service/ingest.service.ts'
+import { weightFilterOptions } from '../service/view.service.ts'
 import { argValue, errMessage, parseArgs } from '../common/util.ts'
-import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../common/config.ts'
+import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../config/constants.ts'
 import { clientIp, createRateGate } from './rate-limit.ts'
 import type { RateRules } from './rate-limit.ts'
 import { mountRoutes } from './routes.ts'
