@@ -1,3 +1,4 @@
 [submodule "web"]
 	path = web
 	url = git@github.com:jhpx/seiten-suikyou-web.git
+	branch = main
