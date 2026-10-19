@@ -200,7 +200,6 @@ HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizz
 | 前端（静态） | GitHub Pages | 前端子仓库 seiten-suikyou-web 整仓，含约 101MB 图片素材 |
 | 后端（接口） | 一台有公网地址的机器 | `/api/*`，前端跨域去调 |
 
-导出工具 `export_pages.py` 跟着前端走，在前端子仓库里跑（用法见其 README）。
 后端那台机器怎么上线（`npm pack` 出一个 1.1MB 的包 → `scp` → `npm install --omit=dev` → systemd + nginx，
 包里只有 `src/`、`vendor/` 和 `package.json`）、完整的三步走、相对路径为什么不需要改写、
 子路径与安全的注意事项，都写在部署文档里：[`docs/DEPLOY.md`](docs/DEPLOY.md)。

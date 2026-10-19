@@ -13,8 +13,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/seiten-suikyou/current
-ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/server/index.ts \
-          --host 127.0.0.1 --port 8787 \
+ExecStart=node src/server/index.ts \
           --db /var/lib/seiten-suikyou/gs.db \
           --cors-origin *
 # 挂在 nginx / Cloudflare Tunnel 后面时必须开，否则所有访客共用一个限流桶
