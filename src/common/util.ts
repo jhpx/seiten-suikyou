@@ -62,3 +62,22 @@ export function fmtTime (iso: string | null | undefined): string | null {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
          `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
+
+/*
+ * 原神 UID 校验 —— 全项目「这串是不是合法 UID」的唯一点（前端 web/core.js 里有一份同款副本）。
+ * 规则：
+ *   - 纯数字，无符号 / 小数点 / 前导零；
+ *   - 9 位：首位 1–9（覆盖国服 / B服 / 美服 / 欧服 / 亚服 / 港澳台等所有对外区服；0 开头是米哈游内部服、不对玩家开放，挡掉）；
+ *   - 10 位：仅 "18" 开头（亚服 4.4 起新注册账号）；其它 10 位前缀在真实账号里不存在。
+ * 已对 Enka 线上 API 实测核对（2026-10-20）：8 位返回 400、9 位放行、10 位非 18 前缀（10/19/90）返回 400、10 位 18 前缀放行。
+ *   ⚠️ 不采信第三方 Go 封装 kirinyoku/enkanetwork-go 的 IsValidUID —— 它写死 len != 9 即 false，是旧实现、未覆盖 4.4 后的 18 账号。
+ * 收 unknown：路径参数一定是字符串，但留个 number 入口，免得谁手滑传数字时漏判。
+ */
+export const UID_RE = /^(?:[1-9]\d{8}|18\d{8})$/
+
+export const isValidUid = (v: unknown): boolean => {
+  const s = typeof v === 'string' ? v
+    : typeof v === 'number' && Number.isInteger(v) ? String(v)
+    : ''
+  return UID_RE.test(s)
+}

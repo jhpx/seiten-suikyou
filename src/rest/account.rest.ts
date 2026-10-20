@@ -8,10 +8,7 @@ import type { Context, Handler } from 'hono'
 import * as i18n from '../common/i18n.ts'
 import { errMessage } from '../common/util.ts'
 import type { ApiContext } from '../service/context.ts'
-import { fail, noData, ok } from './reply.ts'
-
-/* 路径里的数字段（:uid 已被路由正则限死数字，直接转） */
-const num = (c: Context, name: string): number => Number(c.req.param(name))
+import { fail, noData, ok, uidParam } from './reply.ts'
 
 /* query 里的语言（认不出会退回默认语言） */
 const localeOf = (c: Context): string => i18n.resolveLocale(c.req.query('locale'))
@@ -19,7 +16,8 @@ const localeOf = (c: Context): string => i18n.resolveLocale(c.req.query('locale'
 export const list = (ctx: ApiContext): Handler => (c) => ok(c, ctx.accounts.list())
 
 export const detail = (ctx: ApiContext): Handler => (c) => {
-  const uid = num(c, 'uid')
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   const view = ctx.accounts.view(uid, localeOf(c))
   return view ? ok(c, view) : fail(c, 404, 'no_data', noData(uid))
 }
@@ -27,7 +25,8 @@ export const detail = (ctx: ApiContext): Handler => (c) => {
 /* 唯一会联网写库的接口，单独走抓取档（每 IP + 全局两道，保护 enka 上游）。
    请求体用不上 —— uid 在路径里、locale 在 query 里。 */
 export const refresh = (ctx: ApiContext): Handler => async (c) => {
-  const uid = num(c, 'uid')
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   try {
     const summary = await ctx.ingest(uid)
     return ok(c, ctx.accounts.view(uid, localeOf(c)), {

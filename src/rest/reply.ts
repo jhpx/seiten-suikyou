@@ -5,11 +5,20 @@
  */
 import type { Context } from 'hono'
 
+import { isValidUid } from '../common/util.ts'
+
 export const ok = (c: Context, data: unknown, meta?: unknown) =>
   c.json(meta === undefined ? { ok: true, data } : { ok: true, data, meta })
 
 export const fail = (c: Context, status: 400 | 403 | 404 | 405 | 429 | 500 | 502, code: string, message: string, headers?: Record<string, string>) =>
   c.json({ ok: false, error: { code, message } }, status, headers)
+
+/* 取路径里的 uid 并校验格式（9/10 位纯数字）。路由正则只保证「是数字」，位数与首位规则在这儿补。
+   合法回 number，非法回 null —— 调用方据此回 400 bad_uid。 */
+export function uidParam (c: Context): number | null {
+  const raw = c.req.param('uid')
+  return isValidUid(raw) ? Number(raw) : null
+}
 
 /* 「库里没这个账号」的 404 文案 —— 顺带告诉调用方怎么把数据弄进来。
    接口路径只写这一处，改路径不用满仓库找提示语。 */

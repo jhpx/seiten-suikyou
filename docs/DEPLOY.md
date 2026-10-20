@@ -57,14 +57,14 @@ npm run server -- --port 8787 --trust-proxy \
 
 前端是独立仓库，零构建、没有打包编译，发布物就是它整仓：
 
-- 把 `env.js` 里的 `API_BASE` 改成接口根地址（**含 /api 这一段**，如 `'https://api.example.com/api'`，末尾别带 `/`）；
+- `env.js` 里的 `API_BASE` 写接口根地址（**含 /api 这一段**，如 `'https://api.example.com/api'`，末尾别带 `/`）；本地/服务器跑 `npm run server` 时后端会把它覆盖成空，自动走同源，不影响本地；
 - 约 101MB 图片素材 `assets/` 必须跟着一起发布；
 - 整仓推到 GitHub Pages（`gh-pages` 分支或仓库里的 `docs/`），在 Pages 设置里选它；
 - 后端要加 `--cors-origin=<前端地址>` 放行跨域，否则浏览器拦掉请求。
 
 素材 1900+ 文件，首次 push 慢一点，之后增量。
 
-前端通过 `env.js` 的 `API_BASE` 指到后端；**留空（或 '/api'）= 同源**（仅本地形态会用）。
+前端动态 import `env.js`：里面有远端地址就走远端，没有/为空就同源 `/api`。`npm run server` 会把 `/env.js` 覆盖成空配置，所以本地永远同源；静态托管才拿得到仓库里那份。
 `PAGE_BASE`（页面所在目录，在 `core.js` 里算）只用于改写地址栏，保证子路径下刷新不出 404，不参与资源加载。
 
 ### 2.3 为什么不需要任何图片改写
@@ -408,7 +408,7 @@ curl -s https://api.example.com/api/meta | head    # 通了就成
 
 ### 3.8 把前端指过来
 
-前端仓库里把 `env.js` 的 `API_BASE` 改成后端地址（含 /api，如 `https://api.example.com/api`），重新推上去：
+前端仓库里把 `env.js` 的 `API_BASE` 写成后端地址（含 /api，如 `https://api.example.com/api`），重新推上去（本地服务会把 `/env.js` 覆盖成空，不受影响）：
 
 推上去之后，`CORS_ORIGIN` 里配的那个源要和页面实际域名**一字不差**
 （`https://<用户名>.github.io`，项目站也不要带仓库名 —— Origin 头不带路径）。
