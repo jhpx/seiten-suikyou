@@ -7,13 +7,14 @@
 import type { Context, Handler } from 'hono'
 
 import type { ApiContext } from '../service/context.ts'
-import { fail, noData, ok } from './reply.ts'
+import { fail, noData, ok, uidParam } from './reply.ts'
 
-/* 路径里的数字段（:uid / :avatarId 已被路由正则限死数字，直接转） */
+/* 路径里的数字段（:uid / :avatarId 已被路由正则限死数字，uid 的格式校验交给 uidParam） */
 const num = (c: Context, name: string): number => Number(c.req.param(name))
 
 export const damage = (ctx: ApiContext): Handler => async (c) => {
-  const uid = num(c, 'uid')
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   const avatarId = num(c, 'avatarId')
   const result = await ctx.characters.damage(uid, avatarId)
 

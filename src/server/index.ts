@@ -118,6 +118,14 @@ export function createApp ({
 
   mountRoutes(app, ctx, guard)
 
+  /* 同一个 web/ 目录既给本地服务、也给静态托管。这里把「部署用」的 env.js 覆盖成空配置：
+     前端读到空值就回退同源 /api。静态托管（Pages）才是原样发仓库里那份带远端地址的。
+     必须排在 serveStatic 前面，否则会被同名静态文件先抢走。 */
+  app.get('/env.js', c => c.body("export const API_BASE = ''\n", 200, {
+    'Content-Type': 'text/javascript; charset=utf-8',
+    'Cache-Control': 'no-cache'
+  }))
+
   /* 静态托管放在路由**之后**：能命中接口的路径已经被上面的路由回掉了，剩下的才当文件找。
      （顺序反过来会让 /api/xxx 有被同名文件抢走的风险。） */
   app.use('*', serveStatic({

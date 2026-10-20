@@ -1209,14 +1209,15 @@ td.ws.base{color:#993C1D}
 td.sn{border-right:1px solid rgba(0,0,0,.07)}
 td.cd{text-align:left;white-space:normal;min-width:230px;max-width:330px;color:#3C3489;font-size:12px}
 td.tt{text-align:left;min-width:96px}
-tbody tr:hover td{background-color:#F7F9FC}
-tbody tr.alt td{background-color:#FCFCFA}
+/* 隔行底色和 hover 只刷非数值单元格——数值格自己带底色，被刷掉就成白字白底，100 直接看不见 */
+tbody tr:hover td:not(.n){background-color:#F7F9FC}
+tbody tr.alt td:not(.n){background-color:#FCFCFA}
 td.n{font-variant-numeric:tabular-nums}
-.w0{background:#FAFAF8;color:#C4C2BA}
-.w1{background:#E6F1FB;color:#185FA5}
-.w2{background:#B5D4F4;color:#0C447C}
-.w3{background:#85B7EB;color:#042C53}
-.w4{background:#378ADD;color:#fff}
+.w0{color:#C4C2BA}
+.w1{background:#F2F7FD;color:#3E6E9E}
+.w2{background:#E1EDFA;color:#185FA5}
+.w3{background:#C6DDF7;color:#0C447C}
+.w4{background:#185FA5;color:#fff;font-weight:600}
 .el{display:inline-block;padding:1px 7px;border-radius:6px;font-size:11.5px}
 .e-火{background:#FCEBEB;color:#A32D2D}.e-水{background:#E6F1FB;color:#185FA5}.e-风{background:#E1F5EE;color:#0F6E56}
 .e-雷{background:#EEEDFE;color:#534AB7}.e-冰{background:#EAF3DE;color:#3B6D11}.e-岩{background:#FAEEDA;color:#854F0B}
