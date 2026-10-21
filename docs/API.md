@@ -144,7 +144,8 @@
   "account": { "uid": 101242308, "nickname": "苍雷", "level": 60, "worldLevel": 8, "signature": "…" },
   "count": 57,
   "skipped": [],        // 内核不认识的角色 avatarId（新角色先于 miao 更新时会出现）
-  "avatars": [ /* AvatarView，见第三节 */ ]
+  "avatars": [ /* AvatarView，见第三节 */ ],
+  "advice": { /* AdviceView，见 3.3 —— 「该刷什么套装」，由 avatars 再聚合一次算出来 */ }
 }
 ```
 
@@ -218,6 +219,64 @@
 
 ### 3.2 `DamageView`
 见 2.5。
+
+### 3.3 `AdviceView`（2.4 `advice`）
+
+「这段时间该刷什么套装」。不是新算一遍评分，而是把 `avatars[]` 已经算好的件级分数按套装再聚合一次，
+所以它跟页面上的分数永远同一口径。
+
+```jsonc
+{
+  "minLevel": 71,              // 低于这个等级的角色不进统计（练度不够 ≠ 圣遗物差）
+  "sets": [
+    {
+      "nameZh": "昔日宗室之仪",
+      "name": "昔日宗室之仪",    // 跟 locale 走
+      "icon": "assets/meta-gs/artifact/imgs/昔日宗室之仪/1.webp",
+      "bad":  [ /* AdvicePiece */ ],   // D / C / B 档
+      "mid":  [ /* AdvicePiece */ ],   // A / S 档
+      "good": [ /* AdvicePiece */ ],   // 只有 SS 档
+      "count": { "bad": 3, "mid": 6, "good": 6, "total": 15, "owners": 5 },
+      "gap": 197.5,             // ① 稀烂程度：Σ(42 − 单件分)
+      "drop": 15.1,             // ③ 均值落差：覆盖角色的（五件均值 − 最差件）平均
+      "score": 0.7894,          // 三项各自除以账号内最大值后，按权重相加（0~1）
+      "star": 5,                // 账号里实穿的最高星级
+      "farmable": true          // false = 只有 4★ 版本，副本刷不出来（排在最后）
+    }
+  ]
+}
+```
+
+**口径：**
+
+| 规则 | 说明 |
+|---|---|
+| 角色 | `level >= minLevel` |
+| 件 | 只算凑到 **2 件以上**的套装（`setCount >= 2`）；孤件是散件，不进统计 |
+| 三档 | **跟着内核的档位字母走**：`bad` = D/C/B、`mid` = A/S、`good` = SS |
+| 不统计 | **SSS 及以上**（≥49）不入任何一档 —— 那已经不用刷了，算进 SS 只会让「达标」虚高 |
+| 不列 | 一件都不在统计范围内（这套全是 SSS 以上）→ 整条不出现 |
+| `total` / `owners` | 都只算统计范围内的：`total = bad + mid + good`，`owners` = 其中至少有一件的人数 |
+| `gap` | ① 稀烂程度 = **Σ(42 − 单件分)**，只算 SSS 以下的件。越烂差值越大 |
+| `drop` | ③ 均值落差 = 覆盖角色各自的（五件均值 − 最差件）再取平均。不是「套装内所有件的均值 − 最差件」—— 那个数会被件数带偏（15 件套的极差天然大于 3 件套） |
+| `score` | **加权汇总（SAW）**：`0.5 × gap/maxGap + 0.2 × owners/maxOwners + 0.3 × drop/maxDrop`，结果 0~1。三项各自除以**本账号内**的最大值 |
+| 归一化 | 必须线性，别换 √ / log：压缩会削平大套在缺口项上的优势，件数会重新主导名次 |
+| 排序 | `farmable` 优先 → `score` 降序 → 废件多者优先 → 总件数多者优先 |
+| 截断 | 最多 8 套 |
+
+> `score` 只用于**同一账号内**排序，不能跨账号比较 —— 归一化的分母是账号自己的最大值。
+
+> 档位线由内核 `ArtisMark` 的 `scoreMap` 给：D<7 C<14 B<21 A<28 S<35 SS<42 SSS<49 ACE<56 MAX<70。
+> 服务端不自己重划分数线，只按字母分组 —— 两边各算一遍必然差一档。
+
+**`AdvicePiece`：**
+
+| 字段 | 含义 |
+|---|---|
+| `avatarId` / `name` | 穿这件的人（`avatarId` 可直接跳明细页） |
+| `pos` / `posName` | 部位 1~5 / 部位名（跟 locale 走） |
+| `mark` / `markText` / `markClass` | 原始分（0~70）/ 内核格式化串（1 位小数）/ 档位字母 |
+| `setCount` | 这个人在该套装上有几件（2 = 只吃 2 件套效果，4/5 = 凑 4 件套） |
 
 ---
 

@@ -18,6 +18,7 @@ import { startServer } from '../src/server/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/upstream/enka-account.ts'
+import { buildAdvice, ADVICE_RULES } from '../src/service/account.service.ts'
 import type { EnkaPayload } from '../src/domain/enka.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -147,6 +148,99 @@ let chsView = null
     ok(!!diluc.weapon.name, `武器名 ${diluc.weapon.name}`)
   }
 
+  /* 全局刷圣遗物建议：铺在整包视图里（不让前端多打一次请求）。
+     夹具里三个人都是 Lv79，所以这份建议不该是空的。 */
+  const adv = r.data.advice
+  ok(!!adv, '整包视图带 advice')
+  eq(adv.minLevel, 71, '建议口径：Lv≥71')
+  ok(Array.isArray(adv.sets) && adv.sets.length > 0, `建议里有权重靠前的套装（${adv.sets?.length} 套）`)
+
+  for (const s of adv.sets) {
+    const c = s.count
+    eq(c.total, c.bad + c.mid + c.good, `${s.nameZh} 件数守恒`)
+    eq(s.bad.length, c.bad, `${s.nameZh} bad 明细条数对得上`)
+    ok(c.owners >= 1, `${s.nameZh} 至少有 1 个人在穿`)
+    /* 三档跟着内核的档位字母走：D/C/B | A/S | SS。
+       别拿分数线重写一遍 —— 内核的线是 7/14/21/28/35/42/49/56，写成 21/42 就会
+       把 SS（35~42）算进 A-S、把 SSS+ 算进 SS，正是这里要钉死的东西。 */
+    const TIER_CLS: Record<string, string[]> = { bad: ['D', 'C', 'B'], mid: ['A', 'S'], good: ['SS'] }
+    for (const tier of ['bad', 'mid', 'good']) {
+      ok(s[tier].every((p: any) => TIER_CLS[tier].includes(p.markClass)),
+        `${s.nameZh} ${tier} 档只收 ${TIER_CLS[tier].join('/')}`,
+        JSON.stringify(s[tier].map((p: any) => p.markClass)))
+    }
+    /* SSS 及以上不统计：不算「还要刷」的需求，也不该让 SS 的件数虚高 */
+    ok([...s.bad, ...s.mid, ...s.good].every((p: any) => !['SSS', 'ACE', 'MAX'].includes(p.markClass)),
+      `${s.nameZh} 明细里没有 SSS 及以上的件`)
+    /* 2 件以上才进统计（1 件不激活套装效果，是散件） */
+    ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.setCount >= 2),
+      `${s.nameZh} 明细都是凑到 2 件以上的`)
+    ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.posName && p.name),
+      `${s.nameZh} 明细都带角色名与部位名`)
+  }
+  /* 刷不出来的（4★ 套）沉底，且不影响 5★ 之间的分数排序 */
+  const farmable = adv.sets.filter((s: any) => s.farmable)
+  ok(farmable.every((s: any, i: number) => i === 0 || farmable[i - 1].score >= s.score),
+    '可刷套装按 score 降序')
+
+  /* 口径单测：直接喂假数据，绕开夹具 —— 夹具里的套装件数各不相同，
+     混在一起根本分不开是哪一项在起作用。
+     注意 mkPiece 只认 markClass，分数标得对不对不影响档位：三档只看字母。 */
+  const mkPiece = (setNameZh: string, markValue: number, markClass: string, pos: number) => ({
+    empty: false, setNameZh, pos, posName: '生之花', markValue,
+    mark: markValue.toFixed(1), markClass, star: 5
+  })
+  const mkAvatar = (id: number, pieces: any[]) => ({
+    avatarId: id, name: `角色${id}`, nameZh: `角色${id}`, level: 90,
+    artifacts: pieces,
+    sets: [...new Set(pieces.map(p => p.setNameZh))]
+      .map(n => ({ nameZh: n, name: n, icon: null }))
+  })
+  const one = (avatars: any[], set = '靶套') =>
+    buildAdvice(avatars, 'chs').sets.find((s: any) => s.nameZh === set)!
+
+  /* ① 稀烂程度就是 Σ(42 − 单件分)：6.9 分贡献 35.1、30 分贡献 12 */
+  const gapSet = one([mkAvatar(1, [mkPiece('靶套', 6.9, 'D', 1), mkPiece('靶套', 30, 'A', 2)])])
+  ok(Math.abs(gapSet.gap - 47.1) < 1e-9, 'gap = Σ(42 − 单件分)', String(gapSet.gap))
+  /* ② 档位只管展示分档，不进得分：同样的分数标 D 还是标 A，gap 必须一模一样。
+     「越烂越优先」由差值本身表达，再叠一张档位权重表就是同一件事算两遍。 */
+  ok(Math.abs(
+    one([mkAvatar(1, [mkPiece('靶套', 20, 'D', 1), mkPiece('靶套', 20, 'D', 2)])]).gap -
+    one([mkAvatar(1, [mkPiece('靶套', 20, 'A', 1), mkPiece('靶套', 20, 'A', 2)])]).gap) < 1e-9,
+    '档位不影响得分（只是展示分档）')
+  /* ③ 均值落差 = 这人的五件均值 − 最差件：(6.9+30+45×3)/5 − 6.9 = 27.5 */
+  const dropSet = one([mkAvatar(1, [
+    mkPiece('靶套', 6.9, 'D', 1), mkPiece('靶套', 30, 'A', 2),
+    mkPiece('陪套', 45, 'SS', 3), mkPiece('陪套', 45, 'SS', 4), mkPiece('陪套', 45, 'SS', 5)
+  ])])
+  ok(Math.abs(dropSet.drop - 27.48) < 0.01, 'drop = 覆盖角色的（五件均值 − 最差件）平均',
+    String(dropSet.drop.toFixed(2)))
+
+  /* ④ 核心：score 必须是**三项加权和**，不是连乘。
+     这里用测试侧独立实现一遍归一化与求和，逐个比对 —— 一旦有人改回
+     「缺口 × 弹性 × 人数」那种连乘，这些断言立刻红。 */
+  const three = buildAdvice([
+    mkAvatar(1, [mkPiece('甲套', 6.9, 'D', 1), mkPiece('甲套', 30, 'A', 2),
+      mkPiece('x', 45, 'SS', 3), mkPiece('x', 45, 'SS', 4), mkPiece('x', 45, 'SS', 5)]),
+    mkAvatar(2, [mkPiece('乙套', 20, 'D', 1), mkPiece('乙套', 26, 'A', 2),
+      mkPiece('y', 30, 'A', 3), mkPiece('y', 30, 'A', 4), mkPiece('y', 30, 'A', 5)]),
+    mkAvatar(3, [mkPiece('乙套', 18, 'D', 1), mkPiece('乙套', 26, 'A', 2),
+      mkPiece('z', 35, 'S', 3), mkPiece('z', 35, 'S', 4), mkPiece('z', 35, 'S', 5)])
+  ] as any, 'chs')
+  const W = ADVICE_RULES.weight
+  const maxOf = (f: (s: any) => number) => Math.max(...three.sets.map(f)) || 1
+  const mGap = maxOf(s => s.gap)
+  const mOwn = maxOf(s => s.count.owners)
+  const mDrop = maxOf(s => s.drop)
+  for (const s of three.sets) {
+    const want = W.gap * (s.gap / mGap) + W.owners * (s.count.owners / mOwn) + W.drop * (s.drop / mDrop)
+    ok(Math.abs(s.score - want) < 1e-9,
+      `score 是三项加权和（${s.nameZh}）`, `${s.score.toFixed(4)} vs ${want.toFixed(4)}`)
+  }
+  /* ⑤ 权重加起来必须是 1，否则 score 不再是「三项各占几成」 */
+  ok(Math.abs(W.gap + W.owners + W.drop - 1) < 1e-9, '三项权重之和为 1',
+    String(W.gap + W.owners + W.drop))
+
   /* 角色级数据时间：明细页靠它说「这个角色什么时候同步的」，不能拿 UID 级时间冒充 ——
      展柜是分批攒的，角色之间能差好几天。这里把迪卢克的时间改成一个明显不同的时刻，
      再请求一次：角色级要跟着变，UID 级（来自 fetch_log）必须纹丝不动。
@@ -206,16 +300,26 @@ console.log('\n=== 5. 语言归一 ===')
 
 console.log('\n=== 6. 错误形状 ===')
 {
-  const r404 = await get(`/api/accounts/999999`)
+  /* 格式合法但库里没有 → 404。注意别用 999999 这种短号：位数不对会先被 bad_uid 拦在 400，
+     测的就不是「查不到」了。UID 合法 = 9 位且首位非 0。 */
+  const r404 = await get(`/api/accounts/999999999`)
   eq(r404.status, 404, '库里没有的 uid → 404')
   const b404 = await readJson(r404)
   eq(b404.ok, false, '失败响应带 ok:false')
+  eq(b404.error.code, 'no_data', '错误码 no_data')
   ok(!!b404.error?.code && !!b404.error?.message, `错误体有 code/message（${b404.error?.code}）`)
 
-  /* uid 在路径里，模板只收数字 —— 非数字根本匹配不上路由，所以是 404 而不是 400。
-     （参数都在 URL 里的好处：没有请求体要解析，也就没有 bad_body / bad_uid 这两类 400。） */
+  /* 两层拦截各管一段：
+     - 非数字 → 路由正则 `[0-9]+` 匹配不上 → 404
+     - 全是数字但位数/首位不对 → 匹配上了路由，控制器回 400 bad_uid */
   const rBad = await fetch(`${app.url}/api/accounts/not-a-number/refresh`, { method: 'POST' })
   eq(rBad.status, 404, 'uid 不是数字 → 404（路径匹配不上）')
+
+  for (const bad of ['999999', '0123456789', '12345678901']) {
+    const r = await get(`/api/accounts/${bad}`)
+    eq(r.status, 400, `uid 位数不对（${bad}）→ 400`)
+    eq((await readJson(r)).error.code, 'bad_uid', `uid 位数不对（${bad}）→ bad_uid`)
+  }
 
   /* 方法对不上也没有路由：账号详情是只读的，POST 它不属于任何接口 */
   const rMethod = await fetch(`${app.url}/api/accounts/${UID}`, { method: 'POST' })

@@ -63,7 +63,16 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchingLong: '正在从 enka 刷新（可能需要十几秒）…',
     uidChipTip: '{n} 个角色 · 最后抓取 {t}',
     i18nMissing: '多语言表还没同步，只有中文可用。跑一次 tools/sync_i18n.py 就好。',
-    metaFail: '拿不到服务信息：{msg}'
+    metaFail: '拿不到服务信息：{msg}',
+    /* 全局刷圣遗物建议。分组名 D-B / A-S / SS 就是档位字母，不翻译 —— 页面和明细页的评级是同一套字母，
+       翻成「废/中/优」反而和卡片上的 A、SS 对不上号。 */
+    adviceTitle: '刷圣遗物建议',
+    adviceScope: 'Lv≥{lv} 的角色 · 只算凑齐 2 件套或 2 件以上的套装',
+    adviceEmpty: '没有需要刷的套装，现有的都还够用。',
+    adviceOwn: '{pieces} 件 · {owners} 人',
+    adviceUnfarmable: '刷不到',
+    adviceUnfarmableTip: '这套只有 4 星版本，副本里刷不出来，只能换成别的套装',
+    adviceGroupTip: '颜色就是件分档位：D 灰 → C 白 → B 浅蓝 → A 蓝 → S 绿 → SS 紫；SSS 及以上不统计'
   },
   cht: {
     title: '星天水鏡', subtitle: '聖遺物評分',
@@ -107,7 +116,14 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchingLong: '正在從 enka 刷新（可能需要十幾秒）…',
     uidChipTip: '{n} 個角色 · 最後抓取 {t}',
     i18nMissing: '多語言表還沒同步，只有中文可用。跑一次 tools/sync_i18n.py 就好。',
-    metaFail: '拿不到服務資訊：{msg}'
+    metaFail: '拿不到服務資訊：{msg}',
+    adviceTitle: '刷聖遺物建議',
+    adviceScope: 'Lv≥{lv} 的角色 · 只算湊齊 2 件套或 2 件以上的套裝',
+    adviceEmpty: '沒有需要刷的套裝，現有的都還夠用。',
+    adviceOwn: '{pieces} 件 · {owners} 人',
+    adviceUnfarmable: '刷不到',
+    adviceUnfarmableTip: '這套只有 4 星版本，副本裡刷不出來，只能換成別的套裝',
+    adviceGroupTip: '顏色就是件分檔位：D 灰 → C 白 → B 淺藍 → A 藍 → S 綠 → SS 紫；SSS 以上不統計'
   },
   en: {
     title: 'Seiten Suikyou', subtitle: 'Artifact Scoring',
@@ -154,7 +170,14 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchingLong: 'Fetching from Enka Network (may take a dozen seconds)…',
     uidChipTip: '{n} characters · last fetch {t}',
     i18nMissing: 'Localization table not synced yet, only Chinese available. Run tools/sync_i18n.py once.',
-    metaFail: 'Cannot reach service info: {msg}'
+    metaFail: 'Cannot reach service info: {msg}',
+    adviceTitle: 'Farming advice',
+    adviceScope: 'Characters at Lv.{lv}+ · sets worn on 2 or more pieces only',
+    adviceEmpty: 'Nothing worth farming — what you have is good enough.',
+    adviceOwn: '{pieces} pcs · {owners} chars',
+    adviceUnfarmable: 'Not farmable',
+    adviceUnfarmableTip: 'Only 4★ versions exist and no domain drops them — swap to another set instead',
+    adviceGroupTip: 'Colour is the piece grade: D grey → C white → B light blue → A blue → S green → SS purple; SSS and above are not counted'
   },
   ja: {
     title: '星天水鏡', subtitle: '聖遺物スコア',
@@ -199,7 +222,14 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchingLong: 'Enka Network から取得中（十数秒かかる場合があります）…',
     uidChipTip: '{n} キャラ · 最終取得 {t}',
     i18nMissing: '多言語テーブルが未同期のため中国語のみ表示します。tools/sync_i18n.py を一度実行してください。',
-    metaFail: 'サービス情報の取得に失敗：{msg}'
+    metaFail: 'サービス情報の取得に失敗：{msg}',
+    adviceTitle: '聖遺物厳選の提案',
+    adviceScope: 'Lv.{lv} 以上のキャラ · 2 個以上そろえたセットのみ',
+    adviceEmpty: '厳選が必要なセットはありません。',
+    adviceOwn: '{pieces} 個 · {owners} 人',
+    adviceUnfarmable: '入手不可',
+    adviceUnfarmableTip: '★4 のみのセットで秘境では入手できません。別のセットに替えてください',
+    adviceGroupTip: '色が聖遺物の評価：D 灰 → C 白 → B 水色 → A 青 → S 緑 → SS 紫。SSS 以上は集計しない'
   },
   ko: {
     title: '성천수경', subtitle: '성유물 점수',
@@ -244,7 +274,14 @@ const TABLE: Record<string, Record<string, string>> = {
     fetchingLong: 'Enka Network에서 새로고침 중(십여 초 걸릴 수 있음)…',
     uidChipTip: '캐릭터 {n}명 · 마지막 수집 {t}',
     i18nMissing: '다국어 표가 아직 동기화되지 않아 중국어만 표시됩니다. tools/sync_i18n.py를 한 번 실행하세요.',
-    metaFail: '서비스 정보를 가져올 수 없음: {msg}'
+    metaFail: '서비스 정보를 가져올 수 없음: {msg}',
+    adviceTitle: '성유물 파밍 추천',
+    adviceScope: 'Lv.{lv} 이상 캐릭터 · 2개 이상 착용한 세트만',
+    adviceEmpty: '파밍할 성유물이 없습니다.',
+    adviceOwn: '{pieces}개 · {owners}명',
+    adviceUnfarmable: '획득 불가',
+    adviceUnfarmableTip: '★4 전용 세트라 비경에서 획득할 수 없습니다. 다른 세트로 교체하세요',
+    adviceGroupTip: '색이 곧 성유물 등급: D 회색 → C 흰색 → B 연파랑 → A 파랑 → S 초록 → SS 보라. SSS 이상은 집계하지 않음'
   }
 }
 
