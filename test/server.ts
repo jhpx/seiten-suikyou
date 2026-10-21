@@ -153,6 +153,13 @@ let chsView = null
   const adv = r.data.advice
   ok(!!adv, '整包视图带 advice')
   eq(adv.minLevel, 71, '建议口径：Lv≥71')
+  /* 两种口径一次下发：`sets`（不含 SS，页面默认）与 `withSS`（含）。页面那个开关就切这两份，
+     切换不走网络 —— 所以这里两块的形状都得在。 */
+  eq(adv.includeSS, false, '主份是默认口径：「不含 SS 件」')
+  ok(!!adv.withSS, '同一次下发里带着「含 SS」那份')
+  eq(adv.withSS?.includeSS, true, '另一份口径是「含 SS 件」')
+  ok(adv.sets.every((s: any) => [...s.bad, ...s.mid, ...s.good]
+    .every((p: any) => p.markClass !== 'SS')), '默认那份的明细里没有 SS 件')
   ok(Array.isArray(adv.sets) && adv.sets.length > 0, `建议里有权重靠前的套装（${adv.sets?.length} 套）`)
 
   for (const s of adv.sets) {
@@ -177,6 +184,10 @@ let chsView = null
       `${s.nameZh} 明细都是凑到 2 件以上的`)
     ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.posName && p.name),
       `${s.nameZh} 明细都带角色名与部位名`)
+    /* 初始词条条数：夹具是真 enka 响应，roll 与等级自洽，每件都该认得出 3 或 4 */
+    ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.initSubs === 3 || p.initSubs === 4),
+      `${s.nameZh} 每件都认得出初始 3/4 词条`,
+      JSON.stringify([...s.bad, ...s.mid, ...s.good].map((p: any) => p.initSubs)))
   }
   /* 刷不出来的（4★ 套）沉底，且不影响 5★ 之间的分数排序 */
   const farmable = adv.sets.filter((s: any) => s.farmable)
@@ -186,9 +197,10 @@ let chsView = null
   /* 口径单测：直接喂假数据，绕开夹具 —— 夹具里的套装件数各不相同，
      混在一起根本分不开是哪一项在起作用。
      注意 mkPiece 只认 markClass，分数标得对不对不影响档位：三档只看字母。 */
-  const mkPiece = (setNameZh: string, markValue: number, markClass: string, pos: number) => ({
+  const mkPiece = (setNameZh: string, markValue: number, markClass: string, pos: number,
+    initSubs: number | null = null) => ({
     empty: false, setNameZh, pos, posName: '生之花', markValue,
-    mark: markValue.toFixed(1), markClass, star: 5
+    mark: markValue.toFixed(1), markClass, star: 5, initSubs
   })
   const mkAvatar = (id: number, pieces: any[]) => ({
     avatarId: id, name: `角色${id}`, nameZh: `角色${id}`, level: 90,
@@ -216,15 +228,16 @@ let chsView = null
   ok(Math.abs(dropSet.drop - 27.48) < 0.01, 'drop = 覆盖角色的（五件均值 − 最差件）平均',
     String(dropSet.drop.toFixed(2)))
 
-  /* ④ 核心：score 必须是**三项加权和**，不是连乘。
+  /* ④ 核心：score 必须是**四项加权和**，不是连乘。
      这里用测试侧独立实现一遍归一化与求和，逐个比对 —— 一旦有人改回
-     「缺口 × 弹性 × 人数」那种连乘，这些断言立刻红。 */
+     「缺口 × 弹性 × 人数」那种连乘，这些断言立刻红。
+     夹具里特意给两套不同的初始词条配比（甲 1/3 三词条、乙 2/4），否则 rough 项恒 0，等于没测。 */
   const three = buildAdvice([
-    mkAvatar(1, [mkPiece('甲套', 6.9, 'D', 1), mkPiece('甲套', 30, 'A', 2),
+    mkAvatar(1, [mkPiece('甲套', 6.9, 'D', 1, 3), mkPiece('甲套', 30, 'A', 2, 4),
       mkPiece('x', 45, 'SS', 3), mkPiece('x', 45, 'SS', 4), mkPiece('x', 45, 'SS', 5)]),
-    mkAvatar(2, [mkPiece('乙套', 20, 'D', 1), mkPiece('乙套', 26, 'A', 2),
+    mkAvatar(2, [mkPiece('乙套', 20, 'D', 1, 3), mkPiece('乙套', 26, 'A', 2, 3),
       mkPiece('y', 30, 'A', 3), mkPiece('y', 30, 'A', 4), mkPiece('y', 30, 'A', 5)]),
-    mkAvatar(3, [mkPiece('乙套', 18, 'D', 1), mkPiece('乙套', 26, 'A', 2),
+    mkAvatar(3, [mkPiece('乙套', 18, 'D', 1, 4), mkPiece('乙套', 26, 'A', 2, 4),
       mkPiece('z', 35, 'S', 3), mkPiece('z', 35, 'S', 4), mkPiece('z', 35, 'S', 5)])
   ] as any, 'chs')
   const W = ADVICE_RULES.weight
@@ -232,14 +245,48 @@ let chsView = null
   const mGap = maxOf(s => s.gap)
   const mOwn = maxOf(s => s.count.owners)
   const mDrop = maxOf(s => s.drop)
+  const mRough = maxOf(s => s.rough)
   for (const s of three.sets) {
-    const want = W.gap * (s.gap / mGap) + W.owners * (s.count.owners / mOwn) + W.drop * (s.drop / mDrop)
+    const want = W.gap * (s.gap / mGap) + W.owners * (s.count.owners / mOwn) +
+      W.drop * (s.drop / mDrop) + W.rough * (s.rough / mRough)
     ok(Math.abs(s.score - want) < 1e-9,
-      `score 是三项加权和（${s.nameZh}）`, `${s.score.toFixed(4)} vs ${want.toFixed(4)}`)
+      `score 是四项加权和（${s.nameZh}）`, `${s.score.toFixed(4)} vs ${want.toFixed(4)}`)
   }
-  /* ⑤ 权重加起来必须是 1，否则 score 不再是「三项各占几成」 */
-  ok(Math.abs(W.gap + W.owners + W.drop - 1) < 1e-9, '三项权重之和为 1',
-    String(W.gap + W.owners + W.drop))
+  /* ⑤ 权重加起来必须是 1，否则 score 不再是「四项各占几成」 */
+  ok(Math.abs(W.gap + W.owners + W.drop + W.rough - 1) < 1e-9, '四项权重之和为 1',
+    String(W.gap + W.owners + W.drop + W.rough))
+
+  /* ⑥ 初始三词条占比 = 三词条件的件数 ÷ 认得出的件数。
+     认不出的件（initSubs 不是 3/4）两边都不算 —— 否则「不知道」会被当成「四词条」稀释掉。 */
+  const roughSet = one([mkAvatar(1, [
+    mkPiece('靶套', 20, 'D', 1, 3),
+    mkPiece('靶套', 20, 'D', 2, 4),
+    mkPiece('靶套', 20, 'D', 3, null),
+    mkPiece('靶套', 20, 'D', 4, 3)
+  ])])
+  ok(Math.abs(roughSet.rough - 2 / 3) < 1e-9, 'rough = 三词条件 ÷ 认得出的件（未知不进分母）',
+    `${roughSet.rough} vs ${(2 / 3).toFixed(4)}`)
+
+  /* ⑦ 不含 SS 的口径：SS 件整件摘掉 —— 不进明细、不产生缺口、不算人头、不进初始词条。
+     40 分那件 SS 含进去时贡献 42−40=2 的缺口，摘掉后 gap 只剩 A 那件的 12。 */
+  const ssMix = [mkAvatar(1, [mkPiece('靶套', 40, 'SS', 1, 3), mkPiece('靶套', 30, 'A', 2, 4),
+    mkPiece('陪套', 45, 'SS', 3), mkPiece('陪套', 45, 'SS', 4), mkPiece('陪套', 45, 'SS', 5)])]
+  const ssIn = buildAdvice(ssMix as any, 'chs').sets.find((s: any) => s.nameZh === '靶套')!
+  const ssOut = buildAdvice(ssMix as any, 'chs', { includeSS: false })
+    .sets.find((s: any) => s.nameZh === '靶套')!
+  ok(Math.abs(ssIn.gap - 14) < 1e-9, '含 SS 时 gap 把 SS 件也算进去', String(ssIn.gap))
+  ok(Math.abs(ssOut.gap - 12) < 1e-9, '不含 SS 时 gap 只剩非 SS 件的缺口', String(ssOut.gap))
+  ok(ssOut.bad.concat(ssOut.mid, ssOut.good).every((p: any) => p.markClass !== 'SS'),
+    '不含 SS 时明细里没有 SS 件')
+  /* 「凑齐 2 件」那道门仍按**身上实穿**的件数判：一件 SS + 一件 A 也算凑齐了，
+     只是 SS 那件在后面各项统计里不算数（所以这里 total 是 1 而不是整条消失）。 */
+  eq(ssOut.count.total, 1, '身上穿 2 件（1 SS + 1 A）→ 套装仍在，明细只剩 1 件')
+  /* 两件都是 SS 的套装：不含 SS 的这份里一件都不剩，整条不列 */
+  const allSS = [mkAvatar(1, [mkPiece('全SS套', 38, 'SS', 1), mkPiece('全SS套', 39, 'SS', 2)])]
+  ok(buildAdvice(allSS as any, 'chs').sets.some((s: any) => s.nameZh === '全SS套'),
+    '含 SS 时有「全SS套」')
+  ok(!buildAdvice(allSS as any, 'chs', { includeSS: false })
+    .sets.some((s: any) => s.nameZh === '全SS套'), '不含 SS 时「全SS套」一条都不剩')
 
   /* 角色级数据时间：明细页靠它说「这个角色什么时候同步的」，不能拿 UID 级时间冒充 ——
      展柜是分批攒的，角色之间能差好几天。这里把迪卢克的时间改成一个明显不同的时刻，

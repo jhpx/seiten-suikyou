@@ -377,9 +377,14 @@ function artifactIcon (setNameZh: string | null | undefined, pos: number): strin
  *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
 function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: Artifact | undefined, locale: string, raw: unknown) {
   const posName = slotLabel(pos, locale)
-  if (!marked || !marked.name) return { pos, posName, empty: true }
+  if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
 
   const setNameZh = marked.set || ''
+  /* 初始副词条条数：3 = 初始三词条、4 = 初始四词条（见 Artifact.quality）。
+     只认这两个值 —— 别的一律当「不知道」：夹具里 roll 条数与等级不自洽会算出负数/2，
+     老数据缺 appendPropIds 会算出 0。页面就不画角标，建议层也不算它。 */
+  const initRaw = artifact?.quality()
+  const initSubs = initRaw === 3 || initRaw === 4 ? initRaw : null
   const enka = enkaNumsOf(artifact)                 // 显示数值：优先 enka 原始 statValue，内核重算的只兜底
   const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
   const subs = (marked.attrs || [])
@@ -404,6 +409,8 @@ function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: 
     setNameZh,
     level: marked.level,
     star: artifact?.star ?? 5,
+    /* 初始 3 / 4 词条，不知道该件时 null（页面不画角标） */
+    initSubs,
     mark: marked.mark,                               // 给眼睛看的串（1 位小数）
     markValue: marked._mark || 0,                    // 给进度环用（0..70 的原始分）
     markClass: marked.markClass,

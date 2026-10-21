@@ -83,8 +83,13 @@ export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetch
     skipped,
     avatars,
     /* 全局刷圣遗物建议：由 avatars 再聚合一次，不额外跑评分内核。
-       放在整包视图里而不是单开一个接口 —— 数据就在手边，前端也不该为此多打一次请求。 */
-    advice: buildAdvice(avatars, loc)
+       放在整包视图里而不是单开一个接口 —— 数据就在手边，前端也不该为此多打一次请求。
+       两种口径（含 SS / 不含 SS）一起给：页面上是个开关，切换不该走网络。
+       主份是**不含 SS**（页面默认口径，见 buildAdvice 的 includeSS），含 SS 的挂在 `withSS`。 */
+    advice: {
+      ...buildAdvice(avatars, loc, { includeSS: false }),
+      withSS: buildAdvice(avatars, loc, { includeSS: true })
+    } as AdviceBundle
   }
 }
 
@@ -162,17 +167,17 @@ export const ADVICE_RULES = {
   /** 一件「达标件」的分数线，也就是 SSS 的下界（内核线 SSS<49、SS<42）。低于这条线的件才产生缺口 */
   needBase: 42,
   /**
-   * 三项权重，加起来 = 1：稀烂程度 / 覆盖人数 / 均值落差。
+   * 四项权重，加起来 = 1：稀烂程度 / 覆盖人数 / 均值落差 / 初始三词条占比。
    *
    * 口径是**加权汇总**（SAW），不是连乘：每项先除以账号内的最大值折到 0~1，再乘权重相加。
-   * 好处是「这件套装为什么排前面」能直接答出来 —— 三项各占几分看得见，改权重也只动一个数。
+   * 好处是「这件套装为什么排前面」能直接答出来 —— 四项各占几分看得见，改权重也只动一个数。
    * 连乘的老写法（缺口 × 弹性 × 人数）看着简洁，但系数含义是叠出来的，
    * 调一个参数名次会跳着变，也没法解释。
    *
    * ⚠️ 归一化必须**线性**，别换成 √ 或 log：压缩会把大套在缺口项上的优势削平，
    * 结果是「件多」重新主导（实测压缩后长夜之誓从第 4 掉到第 6）。
    */
-  weight: { gap: 0.5, owners: 0.2, drop: 0.3 },
+  weight: { gap: 0.45, owners: 0.15, drop: 0.2, rough: 0.2 },
   /** 最多给几个套装 */
   topN: 8
 } as const
@@ -191,6 +196,8 @@ export interface AdvicePiece {
   markClass: string
   /** 这个角色身上属于该套装的件数：2 = 只吃 2 件套效果，4/5 = 想凑 4 件套 */
   setCount: number
+  /** 初始 3 / 4 词条（null = 这件认不出来，页面不画角标） */
+  initSubs: number | null
 }
 
 export interface AdviceSet {
@@ -212,7 +219,15 @@ export interface AdviceSet {
    * 15 件的套天然比 3 件的套极差大（样本量效应），等于偷偷奖励大套。
    */
   drop: number
-  /** 加权汇总得分（0~1）：三项各除以账号内最大值，再按 `weight` 相加 */
+  /**
+   * ④ 初始三词条占比：统计范围内的件里，初始只有 3 条副词条的白几成。
+   * 初始三词条比四词条少一次 roll（第 4 级那档被用来解锁第 4 条），本身天花板就低，
+   * 所以「这套全是三词条」= 池子废得更彻底 = 更该刷。
+   *
+   * ⚠️ 用占比不用件数：件数会跟 gap 重复计一次「池子大」，占比才只回答「有多烂」。
+   */
+  rough: number
+  /** 加权汇总得分（0~1）：四项各除以账号内最大值，再按 `weight` 相加 */
   score: number
   /** 这套在账号里出现过的最高星级 */
   star: number
@@ -222,8 +237,18 @@ export interface AdviceSet {
 
 export interface AdviceView {
   minLevel: number
+  /** 这份口径算不算 SS 件。页面上的「含 SS 件」开关就是切这个 */
+  includeSS: boolean
   sets: AdviceSet[]
 }
+
+/**
+ * 一份视图里带两种口径：`sets` 是**不含 SS** 的（页面默认口径），`withSS` 是含的。
+ *
+ * 两个都算一遍、一起下发，是因为口径只差「SS 件算不算」一个布尔，
+ * 而算它需要的 avatars 就在手边 —— 让前端为一个开关再打一次整包请求不值当。
+ */
+export type AdviceBundle = AdviceView & { withSS: AdviceView }
 
 /** 档位字母 → 三档。SSS 及以上不进任何一档：那已经不用刷了，算进「SS」只会虚高。 */
 const TIER_BY_CLASS: Record<string, 'bad' | 'mid' | 'good'> = {
@@ -242,14 +267,25 @@ function tierOf (markClass: string): 'bad' | 'mid' | 'good' | null {
  *
  * 入参就是 `buildAccountView` 里那份 avatars —— 每件的套装名、分数、档位、星级都在上面，
  * 所以这里零额外计算，也不重新跑评分内核。
+ *
+ * `includeSS = false` 时 SS 件整件不参与统计（不进明细、不进缺口、不算人头、不进初始词条占比）。
+ * 注意「凑齐 2 件」这道门仍旧按**身上实穿**的件数判 —— 那是「这套激活了没」，
+ * 两件都是 SS 也照样是凑齐了，只是这些件本身在后面的口径里不算数。
+ *
+ * ⚠️ 函数这个默认值（true）只是「不传就算含」，**不代表页面的默认口径**：
+ * 页面默认是**不含 SS**，调用点（`buildAccountView`）把两份都显式传齐了。
  */
-export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAULT_LOCALE): AdviceView {
+export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAULT_LOCALE,
+  { includeSS = true }: { includeSS?: boolean } = {}): AdviceView {
   const loc = i18n.resolveLocale(locale)
   const acc = new Map<string, AdviceSet>()
   /* 角色 → 落差。套装那一项要按「覆盖角色的平均」算，所以先记下来 */
   const dropOf = new Map<number, number>()
   /* 套装 → 覆盖角色的 id 集合（只记统计范围内的人） */
   const ownersOf = new Map<string, Set<number>>()
+  /* 套装 → 初始词条统计 { n3: 初始三词条的件数, n: 认得出词条数的件数 }。
+     认不出的件（老数据缺 appendPropIds、夹具不自洽）既不进分子也不进分母 */
+  const roughOf = new Map<string, { n3: number; n: number }>()
 
   for (const av of avatars) {
     if ((av.level ?? 0) < ADVICE_RULES.minLevel) continue
@@ -275,6 +311,7 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
         mark: a.markValue ?? 0,
         markText: a.mark || '',
         markClass: a.markClass || 'D',
+        initSubs: a.initSubs ?? null,
         setCount: 0           // 下面统一回填，这时还不知道这一套有几件
       })
       bySet.set(a.setNameZh, list)
@@ -294,6 +331,7 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
           count: { bad: 0, mid: 0, good: 0, total: 0, owners: 0 },
           gap: 0,
           drop: 0,
+          rough: 0,
           score: 0,
           star: 0,
           farmable: true
@@ -304,6 +342,9 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
       if (pieceStar > slot.star) slot.star = pieceStar
       for (const p of pieces) {
         p.setCount = pieces.length
+        /* 不含 SS 的口径：SS 件从统计里整件摘掉。摘在这一步而不是建 piece 时，
+           是为了「凑齐 2 件」那道门还能看见身上实穿的件数（见函数头注释）。 */
+        if (!includeSS && p.markClass === 'SS') continue
         const tier = tierOf(p.markClass)
         /* SSS 及以上不统计：它证明「这套已经有好的了」，但不构成「还要刷」的需求 */
         if (!tier) continue
@@ -313,6 +354,13 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
         let owners = ownersOf.get(setName)
         if (!owners) { owners = new Set(); ownersOf.set(setName, owners) }
         owners.add(av.avatarId)
+        /* ④ 初始词条：只数认得出的件 */
+        if (p.initSubs === 3 || p.initSubs === 4) {
+          let r = roughOf.get(setName)
+          if (!r) { r = { n3: 0, n: 0 }; roughOf.set(setName, r) }
+          r.n += 1
+          if (p.initSubs === 3) r.n3 += 1
+        }
       }
     }
   }
@@ -331,21 +379,25 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
     s.drop = owners.size
       ? [...owners].reduce((x, id) => x + (dropOf.get(id) ?? 0), 0) / owners.size
       : 0
+    const r = roughOf.get(s.nameZh)
+    s.rough = r && r.n ? r.n3 / r.n : 0
     sets.push(s)
   }
 
-  /* 三项口径不同（分、人、分），先各自除以账号内的最大值折到 0~1，再按权重相加。
-     这样 score 就是「三项各贡献了几成」，可以直接回答「它凭什么排第一」。
+  /* 四项口径不同（分、人、分、比例），先各自除以账号内的最大值折到 0~1，再按权重相加。
+     这样 score 就是「四项各贡献了几成」，可以直接回答「它凭什么排第一」。
      ⚠️ 别换成 √ / log 压缩：压缩会削平大套在缺口项上的优势，件数会重新主导名次。 */
   if (sets.length) {
     const maxGap = Math.max(...sets.map(s => s.gap)) || 1
     const maxOwners = Math.max(...sets.map(s => s.count.owners)) || 1
     const maxDrop = Math.max(...sets.map(s => s.drop)) || 1
+    const maxRough = Math.max(...sets.map(s => s.rough)) || 1
     const w = ADVICE_RULES.weight
     for (const s of sets) {
       s.score = w.gap * (s.gap / maxGap) +
         w.owners * (s.count.owners / maxOwners) +
-        w.drop * (s.drop / maxDrop)
+        w.drop * (s.drop / maxDrop) +
+        w.rough * (s.rough / maxRough)
     }
   }
 
@@ -369,7 +421,7 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
     }
   }
 
-  return { minLevel: ADVICE_RULES.minLevel, sets: sets.slice(0, ADVICE_RULES.topN) }
+  return { minLevel: ADVICE_RULES.minLevel, includeSS, sets: sets.slice(0, ADVICE_RULES.topN) }
 }
 
 /** 一行摘要，给日志和「一段话」用：「套装 · 3废7能用12达标（22件/6人）」 */
