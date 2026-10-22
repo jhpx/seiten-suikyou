@@ -178,9 +178,21 @@ export const ADVICE_RULES = {
    * 结果是「件多」重新主导（实测压缩后长夜之誓从第 4 掉到第 6）。
    */
   weight: { gap: 0.45, owners: 0.15, drop: 0.2, rough: 0.2 },
-  /** 最多给几个套装 */
+  /** 每个排序最多给几个套装 */
   topN: 8
 } as const
+
+/**
+ * 四种排序口径 —— **同一批数据、四种问法**。
+ *
+ * 都回答「该先刷哪套」，只是各人心里的「该」不一样：想少开几个本就看综合，
+ * 想清仓库就看次品多，想让最多人受益就看覆盖人数，想最快见效就看提升弹性。
+ *
+ * 名次全部在后端算好（见 `AdviceView.orders`），前端只按名字重画 ——
+ * 比较逻辑留在这一层，页面上连一个 `<` 都不用写。加第五种就在这里加一个词。
+ */
+export const ADVICE_SORTS = ['balance', 'junk', 'owners', 'boost'] as const
+export type AdviceSort = typeof ADVICE_SORTS[number]
 
 /** 一件圣遗物在建议里的样子 */
 export interface AdvicePiece {
@@ -239,6 +251,14 @@ export interface AdviceView {
   minLevel: number
   /** 这份口径算不算 SS 件。页面上的「含 SS 件」开关就是切这个 */
   includeSS: boolean
+  /**
+   * 四种排序各一份名次（套装 `nameZh`，**都已截到 `topN`**）。
+   *
+   * 页面顶上的排序切换就是换一条序列，`sets` 本身不动 —— 四份名次共用同一批对象，
+   * 所以多给三种排序几乎不涨字节（多出来的只有名字字符串）。
+   */
+  orders: Record<AdviceSort, string[]>
+  /** 全量套装（按「综合权衡」排好）。页面按 `orders` 里的名字来这里取 */
   sets: AdviceSet[]
 }
 
@@ -263,7 +283,7 @@ function tierOf (markClass: string): 'bad' | 'mid' | 'good' | null {
 }
 
 /**
- * 账号里所有角色 → 套装建议列表（已排序、已截断）。
+ * 账号里所有角色 → 套装建议列表（`sets` 是全量，四种名次在 `orders` 里各截 `topN`）。
  *
  * 入参就是 `buildAccountView` 里那份 avatars —— 每件的套装名、分数、档位、星级都在上面，
  * 所以这里零额外计算，也不重新跑评分内核。
@@ -407,12 +427,36 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
      这个方向的误判是保守的（不多推荐），可以接受；要精确得去查套装元数据，先不做。 */
   for (const s of sets) s.farmable = s.star >= 5
 
-  /* 刷不出来的沉底 → 缺口大的在前 → 平手看谁的废件多 → 再平手看池子多大 */
-  sets.sort((a, b) =>
-    Number(b.farmable) - Number(a.farmable) ||
-    b.score - a.score ||
-    b.count.bad - a.count.bad ||
-    b.count.total - a.count.total)
+  /* 刷不出来的沉底，而且**四种排序都先比这一项**：
+     4★ 套是「换掉」不是「刷」，让它骑在能刷的套装头上是误导。 */
+  const farmFirst = (a: AdviceSet, b: AdviceSet) => Number(b.farmable) - Number(a.farmable)
+
+  /* 四个比较器。共同套路：先 farmable，再主字段，最后拿 score 兜底 ——
+     只比一项的话平手太多（同人数、同次品数在真实账号里很常见），
+     名次就会随遍历顺序飘，刷新两次排得不一样。 */
+  const ORDER_BY: Record<AdviceSort, (a: AdviceSet, b: AdviceSet) => number> = {
+    /* 综合权衡：四项加权分。平手看次品多、再看池子大 */
+    balance: (a, b) => farmFirst(a, b) || b.score - a.score ||
+      b.count.bad - a.count.bad || b.count.total - a.count.total,
+    /* 次品数量：**统计范围内的件数**，也就是成色条上有几格。数量相同看 D/C/B 多、再看缺口。
+       ⚠️ 别改成只数 D/C/B：面板上一件一格，「几件」必须和条块长度对得上 ——
+       否则名次和眼睛看到的条长反着来（旧算法把 5 件的纺月排在 9 件的宗室前面）。 */
+    junk: (a, b) => farmFirst(a, b) || b.count.total - a.count.total ||
+      b.count.bad - a.count.bad || b.gap - a.gap,
+    /* 覆盖人数：多少人还在穿。同人数看综合分 */
+    owners: (a, b) => farmFirst(a, b) || b.count.owners - a.count.owners || b.score - a.score,
+    /* 提升弹性：补一件能涨多少分。同弹性看综合分 */
+    boost: (a, b) => farmFirst(a, b) || b.drop - a.drop || b.score - a.score
+  }
+
+  /* 每个维度各算一份名次，各自截到 topN。
+     改排序只换序列、不重算任何一项统计 —— 所以切起来是瞬时的，也不会出现「两种排序数字对不上」。 */
+  const orders = {} as Record<AdviceSort, string[]>
+  for (const k of ADVICE_SORTS) {
+    orders[k] = [...sets].sort(ORDER_BY[k]).slice(0, ADVICE_RULES.topN).map(s => s.nameZh)
+  }
+  /* sets 自身按默认口径（综合权衡）排好：调试时直接看 sets 也是熟悉的那个顺序 */
+  sets.sort(ORDER_BY.balance)
 
   for (const s of sets) {
     /* 每档内从低到高 —— 页面自上而下读，最该换的排最上面 */
@@ -421,7 +465,7 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
     }
   }
 
-  return { minLevel: ADVICE_RULES.minLevel, includeSS, sets: sets.slice(0, ADVICE_RULES.topN) }
+  return { minLevel: ADVICE_RULES.minLevel, includeSS, orders, sets }
 }
 
 /** 一行摘要，给日志和「一段话」用：「套装 · 3废7能用12达标（22件/6人）」 */

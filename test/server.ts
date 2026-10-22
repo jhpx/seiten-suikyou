@@ -18,7 +18,7 @@ import { startServer } from '../src/server/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/upstream/enka-account.ts'
-import { buildAdvice, ADVICE_RULES } from '../src/service/account.service.ts'
+import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/account.service.ts'
 import type { EnkaPayload } from '../src/domain/enka.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -287,6 +287,70 @@ let chsView = null
     '含 SS 时有「全SS套」')
   ok(!buildAdvice(allSS as any, 'chs', { includeSS: false })
     .sets.some((s: any) => s.nameZh === '全SS套'), '不含 SS 时「全SS套」一条都不剩')
+
+  /* ⑧ 四种排序：名次全在后端算（`orders`），页面只按名字重画。
+     每份都必须是「该维度降序」，而且要能排出**不同的第一名** ——
+     四份永远一样就说明某个维度压根没接上（全在拿 score 兜底），那种错很隐蔽。 */
+  const sortMix = [
+    /* 甲：3 件 D 20 分 → 件数最少、也不够烂得能拉高落差。身上另两件 45 → 落差 (60+90)/5 − 20 = 10 */
+    mkAvatar(1, [mkPiece('甲套', 20, 'D', 1), mkPiece('甲套', 20, 'D', 2),
+      mkPiece('甲套', 20, 'D', 3), mkPiece('xa', 45, 'SS', 4), mkPiece('xa', 45, 'SS', 5)]),
+    /* 乙：1 件 D 5 + 1 件 A 40 → 落差 31，弹性最大 */
+    mkAvatar(2, [mkPiece('乙套', 5, 'D', 1), mkPiece('乙套', 40, 'A', 2),
+      mkPiece('xb', 45, 'SS', 3), mkPiece('xb', 45, 'SS', 4), mkPiece('xb', 45, 'SS', 5)]),
+    /* 再给乙套添一个人（两件都不烂）→ 乙套共 4 件、覆盖 2 人；落差被摊到 19 仍压过甲 */
+    mkAvatar(3, [mkPiece('乙套', 40, 'A', 1), mkPiece('乙套', 35, 'S', 2),
+      mkPiece('xc', 45, 'SS', 3), mkPiece('xc', 45, 'SS', 4), mkPiece('xc', 45, 'SS', 5)])
+  ]
+  const four = buildAdvice(sortMix as any, 'chs')
+  const bySet = new Map(four.sets.map((s: any) => [s.nameZh, s]))
+  for (const k of ADVICE_SORTS) {
+    const seq = four.orders[k]
+    ok(Array.isArray(seq) && seq.length > 0 && seq.length <= ADVICE_RULES.topN,
+      `orders.${k} 是数组且不超过 topN`, String(seq?.length))
+    ok(seq.every(n => bySet.has(n)), `orders.${k} 里的名字都能在 sets 里找到`)
+  }
+  /* sets 自身按「综合权衡」排 —— 没有 orders 时（老调用方、调试）它就是对的顺序 */
+  eq(four.orders.balance, four.sets.slice(0, ADVICE_RULES.topN).map((s: any) => s.nameZh),
+    'sets 本身按综合权衡排（与 orders.balance 同序）')
+  /* 逐份验单调。夹具里全是 5★（farmable 全 true），所以只比主字段就该一路不升 */
+  const mono: [keyof typeof four.orders, (s: any) => number][] = [
+    ['junk', s => s.count.total],
+    ['owners', s => s.count.owners],
+    ['boost', s => s.drop]
+  ]
+  for (const [k, pick] of mono) {
+    const seq = four.orders[k].map(n => bySet.get(n))
+    ok(seq.every((s: any, i: number) => i === 0 || pick(seq[i - 1]) >= pick(s)),
+      `orders.${k} 按该维度降序`, JSON.stringify(seq.map(pick)))
+  }
+  /* 两套在三个维度上的**相对位置**就是「维度真的在起作用」的证据：
+     甲 3 件全烂、弹性小，乙 4 件、人多（2 人）、弹性大 —— 三个维度乙都在前。
+     不拿第一名来断，是因为陪跑的 SS 散套也会占位（它们继承的是同一个人的落差）。 */
+  const before = (seq: string[], x: string, y: string) =>
+    seq.includes(x) && seq.includes(y) && seq.indexOf(x) < seq.indexOf(y)
+  ok(before(four.orders.junk, '乙套', '甲套'), '次品数量：乙套排在甲套前（4 件 vs 3 件）',
+    JSON.stringify(four.orders.junk))
+  ok(before(four.orders.boost, '乙套', '甲套'), '提升弹性：乙套排在甲套前（19 vs 10）',
+    JSON.stringify(four.orders.boost))
+  ok(before(four.orders.owners, '乙套', '甲套'), '覆盖人数：乙套排在甲套前（2 人 vs 1 人）',
+    JSON.stringify(four.orders.owners))
+
+  /* 「次品数量」数的是**统计范围内的件数**（= 成色条上的格子数），不是 D/C/B 的件数。
+     这里特意让「件多但一件都不烂」对上「件少但全烂」：
+     旧算法（数 D/C/B）会让后者在前，正好和眼睛看到的条长反着来 —— 这条断言就是钉那个的。 */
+  const junkMix = [
+    mkAvatar(1, [mkPiece('多件套', 30, 'A', 1), mkPiece('多件套', 32, 'A', 2),
+      mkPiece('多件套', 34, 'S', 3), mkPiece('多件套', 36, 'S', 4), mkPiece('zz', 45, 'SS', 5)]),
+    mkAvatar(2, [mkPiece('多烂套', 20, 'D', 1), mkPiece('多烂套', 20, 'D', 2),
+      mkPiece('zy', 45, 'SS', 3), mkPiece('zy', 45, 'SS', 4), mkPiece('zy', 45, 'SS', 5)])
+  ]
+  const jm = buildAdvice(junkMix as any, 'chs')
+  const jmSet = new Map(jm.sets.map((s: any) => [s.nameZh, s]))
+  eq((jmSet.get('多件套') as any)?.count.bad, 0, '「多件套」一件次品都没有（4 件全是 A/S）')
+  ok(before(jm.orders.junk, '多件套', '多烂套'),
+    '次品数量按件数排：4 件全 A/S 的排在 2 件全 D 的前面（条块更长）',
+    JSON.stringify(jm.orders.junk))
 
   /* 角色级数据时间：明细页靠它说「这个角色什么时候同步的」，不能拿 UID 级时间冒充 ——
      展柜是分批攒的，角色之间能差好几天。这里把迪卢克的时间改成一个明显不同的时刻，
