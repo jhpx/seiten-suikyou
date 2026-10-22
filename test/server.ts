@@ -182,12 +182,35 @@ let chsView = null
     /* 2 件以上才进统计（1 件不激活套装效果，是散件） */
     ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.setCount >= 2),
       `${s.nameZh} 明细都是凑到 2 件以上的`)
+    /* 框位（framePos）：这一行要画框的部位。本人身上凑够 2 件的套装都算（含本套），
+       散件不算 —— 所以 4+1 与 2+2+1 都是四个框。页面靠它给「别的套装的格子」补框。 */
+    const byAv = new Map<number, any[]>()
+    for (const p of [...s.bad, ...s.mid, ...s.good]) {
+      const list = byAv.get(p.avatarId) ?? []
+      list.push(p)
+      byAv.set(p.avatarId, list)
+    }
+    for (const [, list] of byAv) {
+      const fp: number[] = list[0].framePos
+      ok(Array.isArray(fp) && fp.every((n: any) => n >= 1 && n <= 5),
+        `${s.nameZh} 框位都是 1~5 的部位号`, JSON.stringify(fp))
+      ok(new Set(fp).size === fp.length, `${s.nameZh} 框位不重复`, JSON.stringify(fp))
+      ok(list.every((p: any) => JSON.stringify(p.framePos) === JSON.stringify(fp)),
+        `${s.nameZh} 同一个人的框位只算一份`)
+      /* 补出来的占位不是「别套的件」，不在框位里；主套那行本来就补满 5 格，用不上框 */
+      ok(list.filter((p: any) => !p.missing).every((p: any) => fp.includes(p.pos)),
+        `${s.nameZh} 卡片里这几件真件自己在框里`, JSON.stringify({ pos: list.map(p => p.pos), fp }))
+      ok(list.filter((p: any) => p.missing).every((p: any) => p.mark === 0 && p.markText === '---'),
+        `${s.nameZh} 拼凑件是 0 分、显示 ---`)
+    }
     ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.posName && p.name),
       `${s.nameZh} 明细都带角色名与部位名`)
-    /* 初始词条条数：夹具是真 enka 响应，roll 与等级自洽，每件都该认得出 3 或 4 */
-    ok([...s.bad, ...s.mid, ...s.good].every((p: any) => p.initSubs === 3 || p.initSubs === 4),
-      `${s.nameZh} 每件都认得出初始 3/4 词条`,
-      JSON.stringify([...s.bad, ...s.mid, ...s.good].map((p: any) => p.initSubs)))
+    /* 初始词条条数：夹具是真 enka 响应，roll 与等级自洽，每件**真件**都该认得出 3 或 4；
+       拼凑件没有词条这回事（initSubs 恒 null），也不能混进「初始三词条占比」 */
+    const real = [...s.bad, ...s.mid, ...s.good].filter((p: any) => !p.missing)
+    ok(real.every((p: any) => p.initSubs === 3 || p.initSubs === 4),
+      `${s.nameZh} 每件真件都认得出初始 3/4 词条`,
+      JSON.stringify(real.map((p: any) => p.initSubs)))
   }
   /* 刷不出来的（4★ 套）沉底，且不影响 5★ 之间的分数排序 */
   const farmable = adv.sets.filter((s: any) => s.farmable)
@@ -212,8 +235,11 @@ let chsView = null
     buildAdvice(avatars, 'chs').sets.find((s: any) => s.nameZh === set)!
 
   /* ① 稀烂程度就是 Σ(42 − 单件分)：6.9 分贡献 35.1、30 分贡献 12 */
+  /* ① 稀烂程度 = Σ(42 − 单件分)，**缺件按满额算**：6.9 分贡献 35.1、30 分贡献 12，
+     另外三个部位是主套拼凑的 0 分件（missing），每件再贡献 42 → 47.1 + 126 = 173.1 */
   const gapSet = one([mkAvatar(1, [mkPiece('靶套', 6.9, 'D', 1), mkPiece('靶套', 30, 'A', 2)])])
-  ok(Math.abs(gapSet.gap - 47.1) < 1e-9, 'gap = Σ(42 − 单件分)', String(gapSet.gap))
+  ok(Math.abs(gapSet.gap - 173.1) < 1e-9, 'gap = Σ(42 − 单件分) + 缺件 × 42', String(gapSet.gap))
+  eq(gapSet.bad.filter((p: any) => p.missing).length, 3, '只有 2 件就补 3 个 0 分占位（凑满 5 格）')
   /* ② 档位只管展示分档，不进得分：同样的分数标 D 还是标 A，gap 必须一模一样。
      「越烂越优先」由差值本身表达，再叠一张档位权重表就是同一件事算两遍。 */
   ok(Math.abs(
@@ -281,12 +307,16 @@ let chsView = null
   /* 「凑齐 2 件」那道门仍按**身上实穿**的件数判：一件 SS + 一件 A 也算凑齐了，
      只是 SS 那件在后面各项统计里不算数（所以这里 total 是 1 而不是整条消失）。 */
   eq(ssOut.count.total, 1, '身上穿 2 件（1 SS + 1 A）→ 套装仍在，明细只剩 1 件')
-  /* 两件都是 SS 的套装：不含 SS 的这份里一件都不剩，整条不列 */
+  /* 两件都是 SS 的套装：SS 件摘掉后只剩主套拼出来的缺件位 ——
+     这套仍在（他确实差 3 件），但明细里全是 `missing`，一件真实件都没有 */
   const allSS = [mkAvatar(1, [mkPiece('全SS套', 38, 'SS', 1), mkPiece('全SS套', 39, 'SS', 2)])]
   ok(buildAdvice(allSS as any, 'chs').sets.some((s: any) => s.nameZh === '全SS套'),
     '含 SS 时有「全SS套」')
-  ok(!buildAdvice(allSS as any, 'chs', { includeSS: false })
-    .sets.some((s: any) => s.nameZh === '全SS套'), '不含 SS 时「全SS套」一条都不剩')
+  const allSSOut = buildAdvice(allSS as any, 'chs', { includeSS: false })
+    .sets.find((s: any) => s.nameZh === '全SS套')
+  ok(!!allSSOut, '不含 SS 时「全SS套」仍在（缺件要算），只是没有真实件')
+  ok(!!allSSOut && [...allSSOut.bad, ...allSSOut.mid, ...allSSOut.good].every((p: any) => p.missing),
+    '不含 SS 时「全SS套」的明细全是拼凑缺件')
 
   /* ⑧ 四种排序：名次全在后端算（`orders`），页面只按名字重画。
      每份都必须是「该维度降序」，而且要能排出**不同的第一名** ——
@@ -325,8 +355,7 @@ let chsView = null
       `orders.${k} 按该维度降序`, JSON.stringify(seq.map(pick)))
   }
   /* 两套在三个维度上的**相对位置**就是「维度真的在起作用」的证据：
-     甲 3 件全烂、弹性小，乙 4 件、人多（2 人）、弹性大 —— 三个维度乙都在前。
-     不拿第一名来断，是因为陪跑的 SS 散套也会占位（它们继承的是同一个人的落差）。 */
+     甲 3 件全烂、弹性小；乙 4 件、人多（2 人）、弹性大 —— 三个维度乙都在前（夹具都是穿满 5 件的，不涉及缺件）。 */
   const before = (seq: string[], x: string, y: string) =>
     seq.includes(x) && seq.includes(y) && seq.indexOf(x) < seq.indexOf(y)
   ok(before(four.orders.junk, '乙套', '甲套'), '次品数量：乙套排在甲套前（4 件 vs 3 件）',
@@ -347,10 +376,41 @@ let chsView = null
   ]
   const jm = buildAdvice(junkMix as any, 'chs')
   const jmSet = new Map(jm.sets.map((s: any) => [s.nameZh, s]))
+  /* 夹具里两人都穿满 5 件，没有缺件位 —— 4 件真件全是 A/S，一件次品都没有 */
   eq((jmSet.get('多件套') as any)?.count.bad, 0, '「多件套」一件次品都没有（4 件全是 A/S）')
   ok(before(jm.orders.junk, '多件套', '多烂套'),
     '次品数量按件数排：4 件全 A/S 的排在 2 件全 D 的前面（条块更长）',
     JSON.stringify(jm.orders.junk))
+
+  /* ⑨ 缺件 = **身上没穿东西的空槽位**，只补到「五个位置都有东西」为止：
+     · 补的是主套（件数最多；件数一样看已有件总分，得分高的先补）
+     · 穿着散件的部位**不算缺件** —— 他穿了 5 件就没有缺件，只是这套没占满五个位置
+     · 别的套装不补：他只是那套的 2 件用户，缺多少并不说明他想要那套 */
+  const padMix = [
+    /* 只穿 3 件（甲 2 + 乙 1）→ 主套甲，身上只剩部位 4、5 空着 → 补 2 格 */
+    mkAvatar(1, [mkPiece('甲套', 20, 'D', 1), mkPiece('甲套', 20, 'D', 2), mkPiece('乙套', 40, 'A', 3)]),
+    /* 穿满 5 件（丙 4 + 丁 1）→ 一个缺件都没有，散件那格不算缺 */
+    mkAvatar(2, [mkPiece('丙套', 30, 'A', 1), mkPiece('丙套', 30, 'A', 2),
+      mkPiece('丙套', 30, 'A', 3), mkPiece('丙套', 30, 'A', 4), mkPiece('丁套', 45, 'SS', 5)])
+  ]
+  const pad = buildAdvice(padMix as any, 'chs')
+  const padOf = (name: string) => {
+    const s = pad.sets.find((x: any) => x.nameZh === name)!
+    const all = [...s.bad, ...s.mid, ...s.good]
+    return { total: all.length, missing: all.filter((p: any) => p.missing).length }
+  }
+  eq(padOf('甲套').missing, 2, '只穿 3 件 → 主套补 2 个空槽位')
+  eq(padOf('丙套').total, 4, '穿满 5 件 → 丙套就是 4 件（第 5 格是散件，不补）')
+  eq(padOf('丙套').missing, 0, '穿满 5 件 → 一个缺件都没有')
+  ok(!pad.sets.some((s: any) => s.nameZh === '乙套') && !pad.sets.some((s: any) => s.nameZh === '丁套'),
+    '只穿 1 件的散件套不进统计（既不是主套，也不到 2 件）')
+
+  /* 只穿 1 件：主套就是那套（分再高也只有它），补 4 个空槽位 */
+  const solo = buildAdvice([mkAvatar(3, [mkPiece('高套', 45, 'SS', 2)])] as any, 'chs')
+  const soloHigh = solo.sets.find((s: any) => s.nameZh === '高套')
+  ok(!!soloHigh, '只穿 1 件的主套也会进统计')
+  eq([...soloHigh!.bad, ...soloHigh!.mid, ...soloHigh!.good].filter((p: any) => p.missing).length, 4,
+    '只穿 1 件 → 补 4 个缺件位')
 
   /* 角色级数据时间：明细页靠它说「这个角色什么时候同步的」，不能拿 UID 级时间冒充 ——
      展柜是分批攒的，角色之间能差好几天。这里把迪卢克的时间改成一个明显不同的时刻，

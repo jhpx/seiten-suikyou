@@ -18,7 +18,7 @@ import type { FetchEnkaOpts } from '../upstream/enka.ts'
 import { ingestPayload } from '../upstream/enka-account.ts'
 import type { IngestResult } from '../upstream/enka-account.ts'
 import { errMessage, fmtTime } from '../common/util.ts'
-import { shapeCharacter } from './character.service.ts'
+import { shapeCharacter, slotLabel } from './character.service.ts'
 import type { MarkDetail } from './character.service.ts'
 
 /** 列表页一行（只有昵称等级这类概要，不带角色） */
@@ -208,8 +208,22 @@ export interface AdvicePiece {
   markClass: string
   /** 这个角色身上属于该套装的件数：2 = 只吃 2 件套效果，4/5 = 想凑 4 件套 */
   setCount: number
+  /**
+   * 这一行要给哪些部位画框（1~5）。装的是**本人身上凑够 2 件的套装**占的格子，包括本套。
+   *
+   * 散件（那套在他身上只有 1 件、吃不到套装效果）不在里面 —— 于是 4+1 与 2+2+1
+   * 都是四个框 + 一个散件空位。页面只拿到这张卡的件，看不到身上另外那套，所以位置由这里给。
+   */
+  framePos: number[]
   /** 初始 3 / 4 词条（null = 这件认不出来，页面不画角标） */
   initSubs: number | null
+  /**
+   * 拼凑件：这套是本人的「主套」但没穿满 5 件，缺的部位补一个 0 分的占位。
+   * 它和真件一样占一个格子、进成色条、进缺口（42 − 0），但：
+   *   · `markText` 固定 `---`（页面只画部位图 + 这个符号，不显示分数）
+   *   · `initSubs` 恒为 null —— 没有词条这回事，不能混进「初始三词条占比」
+   */
+  missing?: boolean
 }
 
 export interface AdviceSet {
@@ -282,6 +296,12 @@ function tierOf (markClass: string): 'bad' | 'mid' | 'good' | null {
   return TIER_BY_CLASS[markClass] ?? null
 }
 
+/** 五个部位号：1 花 2 羽 3 沙 4 杯 5 冠 */
+const SLOTS = [1, 2, 3, 4, 5] as const
+
+/** 拼凑件在分数位上显示什么（页面只画部位图 + 这个符号） */
+const MISSING_MARK = '---'
+
 /**
  * 账号里所有角色 → 套装建议列表（`sets` 是全量，四种名次在 `orders` 里各截 `topN`）。
  *
@@ -332,13 +352,46 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
         markText: a.mark || '',
         markClass: a.markClass || 'D',
         initSubs: a.initSubs ?? null,
-        setCount: 0           // 下面统一回填，这时还不知道这一套有几件
+        setCount: 0,          // 下面统一回填，这时还不知道这一套有几件
+        framePos: []          // 同上
       })
       bySet.set(a.setNameZh, list)
     }
 
+    /* 主套 = 件数最多的那套；件数一样时看已有件总分，**得分高的先补**
+       （同一档件数里，那套底子更好，补齐更值）。平手到最后一律按名字排，保证结果稳定。 */
+    let mainSet: string | null = null
+    let mainCount = 0
+    let mainSum = -1
+    for (const [name, list] of [...bySet].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const sum = list.reduce((x, p) => x + p.mark, 0)
+      if (list.length > mainCount || (list.length === mainCount && sum > mainSum)) {
+        mainSet = name
+        mainCount = list.length
+        mainSum = sum
+      }
+    }
+
+    /* 空槽位 = 身上**没穿任何圣遗物**的部位。缺件只在这里补 ——
+       穿着散件的部位不算缺件（那是「这套没占这个位置」，不是「这个位置空着」）。
+       所以穿满 5 件的人永远没有缺件，不管他分成几套穿。 */
+    const emptyPos = SLOTS.filter(pos => !av.artifacts.some(a => !a.empty && a.pos === pos))
+
+    /* 这一行画框的格子：本人身上「凑够 2 件」的套装占的位置（包括本套那几格）。
+       散件 —— 那套只在他身上出现 1 件、吃不到套装效果 —— 不画框，
+       所以 4+1 和 2+2+1 都是「四个框 + 一个散件空位」。
+       ⚠️ 每人算一次、且必须在补件之前：补出来的占位不是「别套的件」，
+       算进去会让别的卡满屏都是框。 */
+    const framePos: number[] = []
+    for (const [, list] of bySet) {
+      if (list.length < 2) continue
+      for (const q of list) framePos.push(q.pos)
+    }
+
     for (const [setName, pieces] of bySet) {
-      if (pieces.length < 2) continue
+      const isMain = setName === mainSet
+      /* 主套哪怕只有 1 件也进统计（它就是这个人的目标套），其余套装仍旧要凑到 2 件 */
+      if (pieces.length < 2 && !isMain) continue
       let slot = acc.get(setName)
       if (!slot) {
         /* 套装展示名与图标先取第一条 —— 同一个套装名在各角色身上是同一张图 */
@@ -360,8 +413,29 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
       }
       const pieceStar = av.artifacts.find(a => !a.empty && a.setNameZh === setName)?.star ?? 5
       if (pieceStar > slot.star) slot.star = pieceStar
+      /* 主套补缺件：只补**空槽位**（身上没穿东西的部位），拼一个 0 分的占位（`missing`）。
+         占位和真件一样占一个格子、进成色条、进缺口（42 − 0），但没有分数、没有词条。
+         ⚠️ 穿着散件的部位不补：他穿了 5 件就没有缺件，只是这套没占满五个位置。 */
+      if (isMain) {
+        for (const pos of emptyPos) {
+          pieces.push({
+            avatarId: av.avatarId,
+            name: av.name,
+            pos,
+            posName: slotLabel(pos, loc),
+            mark: 0,
+            markText: MISSING_MARK,
+            markClass: 'D',
+            initSubs: null,
+            setCount: 0,
+            framePos: [],
+            missing: true
+          })
+        }
+      }
       for (const p of pieces) {
         p.setCount = pieces.length
+        p.framePos = framePos
         /* 不含 SS 的口径：SS 件从统计里整件摘掉。摘在这一步而不是建 piece 时，
            是为了「凑齐 2 件」那道门还能看见身上实穿的件数（见函数头注释）。 */
         if (!includeSS && p.markClass === 'SS') continue
@@ -468,7 +542,7 @@ export function buildAdvice (avatars: AvatarView[], locale: string = i18n.DEFAUL
   return { minLevel: ADVICE_RULES.minLevel, includeSS, orders, sets }
 }
 
-/** 一行摘要，给日志和「一段话」用：「套装 · 3废7能用12达标（22件/6人）」 */
+/** 一行摘要，给日志用：「昔日宗室之仪 · 3/6/0（9 件 / 5 人）」= D-C-B / A-S / SS（总数 / 人数） */
 export function adviceLine (s: AdviceSet): string {
   const c = s.count
   return `${s.name} · ${c.bad}/${c.mid}/${c.good}（${c.total} 件 / ${c.owners} 人）`
