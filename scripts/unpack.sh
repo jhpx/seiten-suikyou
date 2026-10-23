@@ -43,6 +43,5 @@ echo "✓ 代码  $DEST"
 echo "✓ current -> $DEST"
 echo
 echo "下一步（依赖只在这台机器上用 npm 装）："
-echo "  cd $DEST && npm install --omit=dev --no-audit --no-fund \\"
-echo "       --registry=https://registry.npmmirror.com --loglevel=http"
+echo "  cd $DEST && pnpm install --prod"
 echo "  systemctl restart seiten-suikyou"
