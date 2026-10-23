@@ -1,6 +1,6 @@
 {
   "name": "seiten-suikyou",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "星天水镜 - 基于 miao-plugin 评分内核的原神角色养成评估器",
   "type": "module",
   "private": true,
