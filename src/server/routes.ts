@@ -34,4 +34,12 @@ export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
 
   app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/damage',
     guard('read'), character.damage(ctx))
+
+  /* —— 模拟比对：换一套配装，重算面板与伤害 ——
+     ⚠️ 模拟是全站第一个收请求体的接口（配装是结构化对象，塞 URL 既超长又不可读）。
+        路径参数与语言照旧走 URL，响应包络不变。 */
+  app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/simulator',
+    guard('read'), character.simCatalog(ctx))
+  app.post('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/simulator',
+    guard('read'), character.simulate(ctx))
 }

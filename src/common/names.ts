@@ -140,6 +140,23 @@ export function fromZh (text: string | null | undefined, locale: string = DEFAUL
   return gi === undefined ? null : pick(load().names[gi], resolveLocale(locale))
 }
 
+/**
+ * 中文名 → 官方文案 hash（fromZh 的逆运算，但返回 hash 本身）。
+ *
+ * 为什么需要它：**人工构造的圣遗物没有 enka 的 nameHash / setHash**（那是抓取时才有的东西），
+ * 而显示层（`service/character.service.ts` 的 shapeCharacter）是从 hash 取本地化名的。
+ * 补上 hash，人工件就能走与真实件完全相同的显示路径 —— 不用另写一套名字逻辑。
+ */
+export function hashOfZh (text: string | null | undefined): number | null {
+  const gi = text ? zhIndex().get(text) : undefined
+  if (gi === undefined) return null
+  const table = load()
+  for (const [hash, row] of Object.entries(table.nameIndex)) {
+    if (row === gi) return Number(hash)
+  }
+  return null
+}
+
 /** 供调试/测试用：拿到原始表（只读） */
 export function raw (): NamesTable {
   return load()

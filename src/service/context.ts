@@ -10,13 +10,17 @@
 import type { MiddlewareHandler } from 'hono'
 
 import type { AccountSummary } from './account.service.ts'
-import type { DamageResult } from './character.service.ts'
+import type { DamageResult, SimCatalog, SimRequest, SimResult } from './character.service.ts'
 import type { IngestResult } from '../upstream/enka-account.ts'
 import { buildAccountView } from './account.service.ts'
 import { weightFilterOptions } from './character.service.ts'
 
 /** 一整包账号视图（类型从视图层推，控制器不另抄一份形状） */
 export type AccountView = ReturnType<typeof buildAccountView>
+
+/* 模拟接口的入参 / 出参类型也一并从这里出去：控制器只认这份契约，
+   直接 import service/character.service.ts 会被 arch 断言逮住（rest 不许引 service 实现）。 */
+export type { SimCatalog, SimRequest, SimResult }
 
 /** 首页「按属性权重筛选」的选项（跟着语言走，前端不写死词条名） */
 export type WeightOption = ReturnType<typeof weightFilterOptions>[number]
@@ -38,6 +42,10 @@ export interface ApiContext {
   characters: {
     /** 伤害视图；判别「账号没数据 / 没这个角色 / 算不出来」 */
     damage: (uid: number, avatarId: number) => Promise<DamageResult>
+    /** 可选装备目录（这个角色能换什么武器/套装/主词条） */
+    simCatalog: (uid: number, avatarId: number) => SimCatalog | null
+    /** 按改后的配装重算面板与伤害 */
+    simulate: (uid: number, avatarId: number, req: SimRequest) => Promise<SimResult>
   }
   /** 抓一次并落库（并发同 uid 会合并） */
   ingest: (uid: number) => Promise<IngestResult>

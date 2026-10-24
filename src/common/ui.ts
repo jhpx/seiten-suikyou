@@ -72,6 +72,14 @@ const TABLE: Record<string, Record<string, string>> = {
     adviceSortBoost: '提升弹性',
     adviceEmpty: '没有需要刷的套装，现有的都还够用。',
     adviceUnfarmable: '刷不到',
+    /* 模拟比对页：左栏「当前配装」/ 右栏「调整后」。两栏的标题字要短 ——
+       窄屏下两栏上下堆叠，标题长了会把整行挤成两行。 */
+    simEntry: '模拟比对', simCurrent: '当前配装', simAdjusted: '调整后',
+    simEdit: '改', simReset: '复原',
+    simSet: '套装', simLevel: '等级', simMainStat: '主词条', simSubStats: '副词条', simAddStat: '加一条',
+    /* 右栏是**手填的最终数值**，不是真实装备的「若干次 roll 之和」两种口径对不上，所以不显示评分 */
+    simCalculating: '重算中…', simEmpty: '改一改右边的武器或圣遗物，这里就会跟着变。',
+    simStar: '星级',
   },
   cht: {
     title: '星天水鏡', subtitle: '聖遺物評分',
@@ -121,6 +129,11 @@ const TABLE: Record<string, Record<string, string>> = {
     adviceSortBoost: '提升彈性',
     adviceEmpty: '沒有需要刷的套裝，現有的都還夠用。',
     adviceUnfarmable: '刷不到',
+    simEntry: '模擬比對', simCurrent: '目前配裝', simAdjusted: '調整後',
+    simEdit: '改', simReset: '復原',
+    simSet: '套裝', simLevel: '等級', simMainStat: '主詞條', simSubStats: '副詞條', simAddStat: '加一條',
+    simCalculating: '重算中…', simEmpty: '改一下右邊的武器或聖遺物，這裡就會跟著變。',
+    simStar: '星級',
   },
   en: {
     title: 'Seiten Suikyou', subtitle: 'Artifact Scoring',
@@ -173,6 +186,11 @@ const TABLE: Record<string, Record<string, string>> = {
     adviceSortBoost: 'Upside',
     adviceEmpty: 'Nothing worth farming — what you have is good enough.',
     adviceUnfarmable: 'Not farmable',
+    simEntry: 'Compare', simCurrent: 'Current', simAdjusted: 'Adjusted',
+    simEdit: 'Edit', simReset: 'Reset',
+    simSet: 'Set', simLevel: 'Level', simMainStat: 'Main stat', simSubStats: 'Substats', simAddStat: 'Add',
+    simCalculating: 'Recalculating…', simEmpty: 'Change the weapon or an artifact on the right and this updates.',
+    simStar: 'Rarity',
   },
   ja: {
     title: '星天水鏡', subtitle: '聖遺物スコア',
@@ -223,6 +241,11 @@ const TABLE: Record<string, Record<string, string>> = {
     adviceSortBoost: '伸びしろ',
     adviceEmpty: '厳選が必要なセットはありません。',
     adviceUnfarmable: '入手不可',
+    simEntry: 'シミュ比較', simCurrent: '現在の装備', simAdjusted: '調整後',
+    simEdit: '変更', simReset: '元に戻す',
+    simSet: 'セット', simLevel: 'レベル', simMainStat: 'メイン', simSubStats: 'サブ', simAddStat: '追加',
+    simCalculating: '再計算中…', simEmpty: '右の武器か聖遺物を変えると、ここも変わります。',
+    simStar: 'レア度',
   },
   ko: {
     title: '성천수경', subtitle: '성유물 점수',
@@ -273,6 +296,11 @@ const TABLE: Record<string, Record<string, string>> = {
     adviceSortBoost: '상승 여력',
     adviceEmpty: '파밍할 성유물이 없습니다.',
     adviceUnfarmable: '획득 불가',
+    simEntry: '시뮬 비교', simCurrent: '현재 장착', simAdjusted: '조정 후',
+    simEdit: '변경', simReset: '되돌리기',
+    simSet: '세트', simLevel: '레벨', simMainStat: '주 옵션', simSubStats: '부 옵션', simAddStat: '추가',
+    simCalculating: '다시 계산 중…', simEmpty: '오른쪽의 무기나 성유물을 바꾸면 여기도 따라 바뀝니다.',
+    simStar: '등급',
   }
 }
 

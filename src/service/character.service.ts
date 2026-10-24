@@ -9,13 +9,16 @@
  * 这里**不出现状态码** —— 「账号没数据」「没这个角色」用判别联合表达，
  * 由 rest 层决定回 404 还是别的。
  */
-import { Artifact as MiaoArtifact, ArtisMark, Format, i18n, Weapon } from '../index.ts'
+import { Artifact as MiaoArtifact, ArtisMark, Format, i18n, Weapon as MiaoWeapon } from '../index.ts'
 import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
 import type { MiaoProfile } from '../kernel/materialize.ts'
+import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf } from '../kernel/simulate.ts'
+import type { SimDraft } from '../kernel/simulate.ts'
 import { calcDamage } from '../kernel/damage.ts'
 import { Artifact } from '../domain/artifact.ts'
+import { Weapon } from '../domain/weapon.ts'
 import { isIntegerStatKey } from '../domain/stat.ts'
-import type { Character } from '../domain/character.ts'
+import { Character } from '../domain/character.ts'
 import type { Db } from '../config/db.ts'
 import * as repo from '../config/store.ts'
 import { fmtTime, num } from '../common/util.ts'
@@ -537,7 +540,7 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
   /* 武器：图标 + 主/副属性 + 精炼描述，全来自 miao 的 Weapon 元数据（上游是 Avatar.getWeaponDetail()，
      我们没搬 Avatar，照它的逻辑重算）。`Weapon.get()` 认不出时返回 `false`（不是 null/undefined）——
      先归一到 `Weapon | null`，后面 `wObj?.xxx` 才不会在 `false` 上报错。 */
-  const wObj = ch.weapon.equipped ? (Weapon.get(ch.weapon.itemId) || null) : null
+  const wObj = ch.weapon.equipped ? (MiaoWeapon.get(ch.weapon.itemId) || null) : null
   const weaponAttrs: Record<string, string> = {}
   let weaponDesc = ''
   if (wObj) {
@@ -591,6 +594,8 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
       /* 三态，前端按它选文案，别再靠「name 是不是空串」猜：
          'none' 没装备武器 | 'unknown' 装备了但 i18n 表和 miao 元数据都不认识（新版本武器）| 'ok' 查到名字了 */
       state: !ch.weapon.equipped ? 'none' : (wName ? 'ok' : 'unknown'),
+      /* 模拟比对页要把「当前这把」在下拉里选中，只能靠 id 认（按名字认会栽在本地化上） */
+      itemId: ch.weapon.itemId ?? 0,
       name: wName,
       nameZh: profile.weapon.name || '',
       sName: wObj?.sName || profile.weapon.name || '',       // 卡片里显示的是缩写名（上游 weapon.sName || weapon.name）
@@ -681,4 +686,230 @@ export async function damageOf (ch: Character): Promise<DamageView | null> {
     enemyName: dmg.enemyName,
     enemyLv: dmg.enemyLv
   }
+}
+
+/* ───────────────────────── 模拟比对（改一套配装 → 重算） ───────────────────────── */
+
+/**
+ * 模拟请求：用户改过的那几件（没改的不用传）。
+ *
+ * ⚠️ 形状是**领域语义**（套装名 + 部位 + 词条数值），不是内核 id：
+ *   内核那套 append_prop_ids 编码（一个 roll 一段）是 enka 的抓取格式，
+ *   人手填的「暴击率 20%」没有对应的编码 —— 直接给数值更贴近人话，
+ *   数值由内核按 attrMap 的基准值自己算（见 kernel/simulate.ts）。
+ */
+export interface SimRequest {
+  /** 武器：null / 不传 = 沿用角色当前武器 */
+  weapon?: { itemId: number; level: number; affix: number } | null
+  /** 圣遗物：只列被改过的部位 */
+  artifacts?: Array<{
+    set: string
+    pos: number
+    star: number
+    level: number
+    mainKey: string
+    subs: Array<{ key: string; value: number }>
+  }>
+}
+
+/**
+ * 模拟结果的三种情况 —— 与 DamageResult 同一个套路（用判别联合，不抛错）。
+ *
+ * `view` 为 null：内核算不出来（角色没被 miao 认识 / 没配 calc.js）——
+ * 对页面是「算不出」，不是「请求错了」。
+ */
+export type SimResult =
+  | { kind: 'ok'; view: SimView | null }
+  | { kind: 'no_data' }
+  | { kind: 'no_character' }
+
+/** 模拟的产物：与 shapeCharacter 同构的角色视图 + 伤害表 */
+export interface SimView {
+  /** 角色视图（面板 / 圣遗物卡 / 武器卡 …）—— 与明细页那份同构 */
+  avatar: ReturnType<typeof shapeCharacter>
+  /** 伤害表（与 damageOf 同构）；算不出时是 null */
+  damage: DamageView | null
+}
+
+/**
+ * 模拟一个角色：拿角色当前配装当底，按用户改过的部分重算面板与伤害。
+ *
+ * 走的是**和真实件完全同一条内核链路**（materialize → Attr.calc → ArtisMark → ProfileDmg），
+ * 所以左右两栏的数值口径必然一致 —— 这不是「页面自己算一遍」，是「同一内核算两遍」。
+ */
+export async function characterSim (db: Db, uid: number, avatarId: number, req: SimRequest): Promise<SimResult> {
+  const account = repo.loadAccountWithCharacters(db, uid)
+  if (!account) return { kind: 'no_data' }
+  const character = (account.characters || []).find(ch => ch.avatarId === avatarId)
+  if (!character) return { kind: 'no_character' }
+
+  const base = toMiaoProfile(character)
+  if (!base) return { kind: 'ok', view: null }
+
+  const draft: SimDraft = {
+    weapon: req.weapon ? { ...req.weapon } : null,
+    artifacts: (req.artifacts || []).map(a => ({ ...a, subs: a.subs.map(s => ({ ...s })) }))
+  }
+  const profile = buildSimProfile(base, draft, base.elem || '')
+
+  /* 评分：与真实件同一入口（ArtisMark.getMarkDetail），右栏的评分因此和左栏同口径 */
+  const result = ArtisMark.getMarkDetail(profile, true) as MarkDetail
+
+  /* 视图：把「人工件」翻译成领域模型，好让 shapeCharacter 走同一条成型路径。
+     人工件没有 enka 的 nameHash / setHash（那是抓取时才有的东西），
+     所以用 hashOfZh 从中文名反查 —— 查不到就退回中文名（i18n 出口本来就这个口径）。 */
+  const view = shapeCharacter(
+    simCharacterOf(character, profile, draft),
+    profile,
+    result,
+    i18n.DEFAULT_LOCALE
+  )
+  const dmg = await calcDamage(profile)
+  return {
+    kind: 'ok',
+    view: {
+      avatar: view,
+      damage: dmg
+        ? {
+            rows: dmg.entries.map(e => ({
+              title: e.title,
+              dmg: e.dmg === null ? null : Format.comma(e.dmg, 0),
+              avg: e.avg === null ? '' : Format.comma(e.avg, 0),
+              unit: e.unit
+            })),
+            buffs: dmg.buffs.map(msg => {
+              const i = msg.indexOf('：')
+              return i < 0 ? { title: msg, desc: '' } : { title: msg.slice(0, i), desc: msg.slice(i + 1) }
+            }),
+            createdBy: dmg.createdBy,
+            enemyName: dmg.enemyName,
+            enemyLv: dmg.enemyLv
+          }
+        : null
+    }
+  }
+}
+
+/**
+ * 把「人工配装」翻成领域模型（Character / Weapon / Artifact），
+ * 让 shapeCharacter 能用同一条路径成型 —— 显示口径（词条标题、套装名、图标）全复用。
+ *
+ * ⚠️ 这里只喂**显示需要**的字段：Artifact 的 enka 数值（mainStatValue / subStats）
+ *   人工件没有（用户给的是最终值，内核那边已经算好了），所以留空 ——
+ *   shapeCharacter 显示副词条时优先用 enka 值，没有就退回内核值，正好是人工件要的。
+ */
+function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): Character {
+  const artifacts = (ch.artifacts || []).map(a => {
+    const spec = (draft.artifacts || []).find(s => s.pos === a.pos)
+    if (!spec) return a
+    const name = artifactNameOf(spec.set, spec.pos)
+    if (!name) return a
+    /* 套装名 → 官方文案 hash（本地化用）；查不到就 null，显示层会退回中文名 */
+    const setHash = i18n.hashOfZh(spec.set)
+    return new Artifact({
+      pos: a.pos,
+      itemId: a.itemId,
+      levelRaw: spec.level,
+      star: spec.star,
+      mainPropId: 0,
+      appendPropIds: [],
+      mainStatValue: null,
+      subStats: [],
+      nameHash: i18n.hashOfZh(name),
+      setHash
+    })
+  })
+
+  const weapon = draft.weapon
+    ? new Weapon({
+        itemId: draft.weapon.itemId,
+        /* 武器中文名从 miao 元数据反查（草稿里只带 id —— 名字是显示层的事，不该由前端传）。
+           `MiaoWeapon.get` 认不出时返回 false（不是 null），先归一再用。 */
+        nameHash: i18n.hashOfZh((MiaoWeapon.get(draft.weapon.itemId) || null)?.name || ''),
+        level: draft.weapon.level,
+        promote: promoteOf(draft.weapon.level),
+        affix: draft.weapon.affix
+      })
+    : ch.weapon
+
+  return new Character({
+    uid: ch.uid,
+    avatarId: ch.avatarId,
+    level: ch.level,
+    promote: ch.promote,
+    cons: ch.cons,
+    fetter: ch.fetter,
+    costume: ch.costume,
+    skillLevelMap: ch.skillLevelMap,
+    weapon,
+    artifacts,
+    source: ch.source,
+    fetchedAt: ch.fetchedAt
+  })
+}
+
+/**
+ * 可选装备目录：这个角色能换什么。
+ *
+ * 武器按**角色武器类型**过滤（迪奥娜只能拿弓）—— 目录层就滤掉，页面与接口都不用再判一次。
+ */
+export function simCatalogOf (db: Db, uid: number, avatarId: number): SimCatalog | null {
+  const account = repo.loadAccountWithCharacters(db, uid)
+  if (!account) return null
+  const character = (account.characters || []).find(ch => ch.avatarId === avatarId)
+  if (!character) return null
+  const profile = toMiaoProfile(character)
+  if (!profile) return null
+
+  const char = profile.char
+  const weaponType = char.weaponType || ''
+  const raw = simCatalog(weaponType)
+  const loc = i18n.DEFAULT_LOCALE
+  return {
+    /* 武器：名字走 i18n（官方文案），查不到退回 miao 元数据里的中文名 */
+    weapons: raw.weapons.map(w => ({
+      itemId: w.itemId,
+      name: i18n.weaponName(w.itemId, loc) || w.name,
+      star: w.star
+    })),
+    /* 套装：miao 按中文名索引，所以中文名是**主键**，显示名另给一份 */
+    sets: raw.sets.map(s => ({
+      key: s.set,
+      name: i18n.fromZh(s.set, loc) || s.set
+    })),
+    /* 各部位的主词条候选（key → 显示名）
+       主词条是**大词条**（生命值/攻击力百分比…），用面板那套用字（ATTR_TITLE_ZH 口径） */
+    mains: [1, 2, 3, 4, 5].map(pos => ({
+      pos,
+      options: mainKeysOf(pos).map(key => ({
+        key,
+        name: mainStatName(key),
+        /* 主词条都是百分比形态；元素伤害那项按角色元素显示 */
+        elem: key === 'dmg'
+      }))
+    })),
+    /* 副词条候选：大小词条同名（都是「攻击力」），必须标出是哪个，
+       否则用户分不清填的是百分比还是固定值。int = 整数口径（显示时不带小数）。 */
+    subs: subAttrKeys().map(key => ({
+      key,
+      name: artiLabel(key, loc),
+      int: isIntegerStatKey(key)
+    }))
+  }
+}
+
+/** 主词条的显示名：用面板那套用字（生命值/攻击力/元素伤加成…），与面板属性表一致 */
+function mainStatName (key: string): string {
+  if (key === 'dmg') return STAT_TITLE_FIX.dmg.chs
+  if (key === 'phy') return '物伤加成'
+  if (key === 'heal') return '治疗加成'
+  return ATTR_TITLE_ZH[key] || key
+}
+
+/** 可选装备目录（页面渲染下拉框用） */
+export interface SimCatalog {
+  weapons: Array<{ itemId: number; name: string; star: number }>
+  sets: Array<{ key: string; name: string }>
+  mains: Array<{ pos: number; options: Array<{ key: string; name: string; elem: boolean }> }>
+  subs: Array<{ key: string; name: string; int: boolean }>
 }
