@@ -549,10 +549,14 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
       atkBase?: number
       attr?: { key: string; value: number }
     }
-    if (wCalc.atkBase) weaponAttrs.atkBase = Format.comma(wCalc.atkBase, 1)
+    /* 主属性攻击力：游戏里武器面板**只有整数**（608、454、741），没有小数点。
+       calcAttr 是按等级两端线性插值出来的浮点（401.31…），直接 comma(_,1) 会给出
+       「401.3」这种游戏里不存在、也跟面板数值对不上的串 —— 一律收整到 0 位。 */
+    if (wCalc.atkBase) weaponAttrs.atkBase = Format.comma(wCalc.atkBase, 0)
     if (wCalc.attr?.key) {
-      /* 精通显整数（和游戏、和 attrValueText 一个口径），其余是百分比 */
-      weaponAttrs[wCalc.attr.key] = wCalc.attr.key === 'mastery'
+      /* 副属性：整数口径（精通）显整数，其余百分比 —— 判据用 isIntegerStatKey，
+         跟圣遗物词条、面板属性表同一套，别在这儿另写「key === 'mastery'」的特判 */
+      weaponAttrs[wCalc.attr.key] = isIntegerStatKey(wCalc.attr.key)
         ? Format.comma(wCalc.attr.value, 0)
         : pctText(wCalc.attr.value)
     }
@@ -737,7 +741,7 @@ export interface SimView {
  * 走的是**和真实件完全同一条内核链路**（materialize → Attr.calc → ArtisMark → ProfileDmg），
  * 所以左右两栏的数值口径必然一致 —— 这不是「页面自己算一遍」，是「同一内核算两遍」。
  */
-export async function characterSim (db: Db, uid: number, avatarId: number, req: SimRequest): Promise<SimResult> {
+export async function characterSim (db: Db, uid: number, avatarId: number, req: SimRequest, locale: string): Promise<SimResult> {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
   const character = (account.characters || []).find(ch => ch.avatarId === avatarId)
@@ -762,7 +766,7 @@ export async function characterSim (db: Db, uid: number, avatarId: number, req: 
     simCharacterOf(character, profile, draft),
     profile,
     result,
-    i18n.DEFAULT_LOCALE
+    locale
   )
   const dmg = await calcDamage(profile)
   return {
@@ -853,7 +857,7 @@ function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): 
  *
  * 武器按**角色武器类型**过滤（迪奥娜只能拿弓）—— 目录层就滤掉，页面与接口都不用再判一次。
  */
-export function simCatalogOf (db: Db, uid: number, avatarId: number): SimCatalog | null {
+export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: string): SimCatalog | null {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return null
   const character = (account.characters || []).find(ch => ch.avatarId === avatarId)
@@ -864,7 +868,7 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number): SimCatalog
   const char = profile.char
   const weaponType = char.weaponType || ''
   const raw = simCatalog(weaponType)
-  const loc = i18n.DEFAULT_LOCALE
+  const loc = i18n.resolveLocale(locale)
   return {
     /* 武器：名字走 i18n（官方文案），查不到退回 miao 元数据里的中文名 */
     weapons: raw.weapons.map(w => ({
@@ -883,7 +887,7 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number): SimCatalog
       pos,
       options: mainKeysOf(pos).map(key => ({
         key,
-        name: mainStatName(key),
+        name: mainStatName(key, loc),
         /* 主词条都是百分比形态；元素伤害那项按角色元素显示 */
         elem: key === 'dmg'
       }))
@@ -898,12 +902,10 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number): SimCatalog
   }
 }
 
-/** 主词条的显示名：用面板那套用字（生命值/攻击力/元素伤加成…），与面板属性表一致 */
-function mainStatName (key: string): string {
-  if (key === 'dmg') return STAT_TITLE_FIX.dmg.chs
-  if (key === 'phy') return '物伤加成'
-  if (key === 'heal') return '治疗加成'
-  return ATTR_TITLE_ZH[key] || key
+/** 主词条的显示名：直接走面板那套标签（statLabel），**必须带 locale** ——
+    以前这里硬编码中文（ATTR_TITLE_ZH），英文/日文界面下主词条下拉仍是中文。 */
+function mainStatName (key: string, locale: string): string {
+  return statLabel(key, locale)
 }
 
 /** 可选装备目录（页面渲染下拉框用） */

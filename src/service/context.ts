@@ -42,10 +42,10 @@ export interface ApiContext {
   characters: {
     /** 伤害视图；判别「账号没数据 / 没这个角色 / 算不出来」 */
     damage: (uid: number, avatarId: number) => Promise<DamageResult>
-    /** 可选装备目录（这个角色能换什么武器/套装/主词条） */
-    simCatalog: (uid: number, avatarId: number) => SimCatalog | null
-    /** 按改后的配装重算面板与伤害 */
-    simulate: (uid: number, avatarId: number, req: SimRequest) => Promise<SimResult>
+    /** 可选装备目录（这个角色能换什么武器/套装/主词条）；名字按 locale 给 */
+    simCatalog: (uid: number, avatarId: number, locale: string) => SimCatalog | null
+    /** 按改后的配装重算面板与伤害；返回的面板/词条名按 locale 给 */
+    simulate: (uid: number, avatarId: number, req: SimRequest, locale: string) => Promise<SimResult>
   }
   /** 抓一次并落库（并发同 uid 会合并） */
   ingest: (uid: number) => Promise<IngestResult>

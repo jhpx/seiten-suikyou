@@ -88,8 +88,8 @@ export function createApp ({
     },
     characters: {
       damage: (uid, avatarId) => characterDamage(db, uid, avatarId),
-      simCatalog: (uid, avatarId) => simCatalogOf(db, uid, avatarId),
-      simulate: (uid, avatarId, req) => characterSim(db, uid, avatarId, req)
+      simCatalog: (uid, avatarId, locale) => simCatalogOf(db, uid, avatarId, locale),
+      simulate: (uid, avatarId, req, locale) => characterSim(db, uid, avatarId, req, locale)
     },
     ingest: ingest.fetch
   }

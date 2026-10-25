@@ -11,10 +11,14 @@
 import type { Context, Handler } from 'hono'
 
 import type { ApiContext, SimRequest } from '../service/context.ts'
+import * as i18n from '../common/i18n.ts'
 import { fail, noData, ok, uidParam } from './reply.ts'
 
 /* 路径里的数字段（:uid / :avatarId 已被路由正则限死数字，uid 的格式校验交给 uidParam） */
 const num = (c: Context, name: string): number => Number(c.req.param(name))
+
+/* 语言从 query 取，跟账号视图同一口径 —— 少了它，模拟页右栏会永远显示默认语言 */
+const localeOf = (c: Context): string => i18n.resolveLocale(c.req.query('locale'))
 
 export const damage = (ctx: ApiContext): Handler => async (c) => {
   const uid = uidParam(c)
@@ -32,7 +36,7 @@ export const simCatalog = (ctx: ApiContext): Handler => (c) => {
   const uid = uidParam(c)
   if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   const avatarId = num(c, 'avatarId')
-  const catalog = ctx.characters.simCatalog(uid, avatarId)
+  const catalog = ctx.characters.simCatalog(uid, avatarId, localeOf(c))
   if (!catalog) return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
   return ok(c, catalog)
 }
@@ -52,7 +56,7 @@ export const simulate = (ctx: ApiContext): Handler => async (c) => {
     return fail(c, 400, 'bad_request', '请求体不是合法的 JSON')
   }
 
-  const result = await ctx.characters.simulate(uid, avatarId, req)
+  const result = await ctx.characters.simulate(uid, avatarId, req, localeOf(c))
   if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
   if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
   return ok(c, result.view)
