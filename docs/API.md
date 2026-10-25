@@ -210,7 +210,8 @@
 | `elem` / `elemText` / `elemBg` / `elemIcon` | 元素 key / 元素名 / 元素底图 / 元素图标（响应里的相对路径 `assets/...`） |
 | `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`） |
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
-| `weapon` | `{ state:'none'|'unknown'|'ok', name, sName, icon(相对路径 assets/...), level, star, attrs, desc }` |
+| `weapon` | `{ state:'none'|'unknown'|'ok', name, sName, icon(相对路径 assets/...), level, attrs, desc }` |
+| `weapon.attrs` | `[{ key, label, value }]`：`key` 是标准词条 key（`atkBase` / `atk` / `hp` / `mastery` / `cpct` / `cdmg` / `recharge` …），`label` 是已本地化的官方名（基础攻击力 / 攻击力 / 生命值…），`value` 是显示串（`608` / `49.6%`） |
 | `score` | `{ mark:'SSS', markValue:62, markClass:'SSS', isDefaultWeight, isCustomWeight }` |
 | `sets` | 圣遗物套装汇总（`[{ name, count, pieces:[pos…] }]`），用于 2+2 合并花 |
 | `artifacts` | 5 件圣遗物明细，每件含 `icon`（相对路径 `assets/...`）、`main`、`attrs[]`、`mark` |

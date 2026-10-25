@@ -52,18 +52,36 @@ export async function characterDamage (db: Db, uid: number, avatarId: number): P
 export const KEY_TITLE = ArtisMark.getKeyTitleMap('gs') as Record<string, string>
 
 /*
- * 官方用字修正表 —— 只放「miao 那张表跟游戏官方叫法不一致」的条目，目前只有一条。
+ * 标题覆盖表 —— 两类条目，都只在这里写、不进 vendor/i18n/names.json（那是同步脚本的生成物，
+ * 改了会被覆盖）：
  *
- * `dmg` 在 miao 的 i18n 表里是「伤害增加」/ “DMG Bonus”（它自己出图时的简称），
- * 但游戏里这一条就叫**元素伤害加成**。面板上物伤/治疗/元素伤三行连着读，
- * 写成「伤害增加」看不出到底是哪个加成 —— 所以按官方名改。
- * ⚠️ 别改 vendor/i18n/names.json：那是同步脚本的生成物，改了会被覆盖。
+ *   ① 跟游戏官方叫法不一致的：`dmg` 在 miao 的 i18n 表里是「伤害增加」/“DMG Bonus”（它自己
+ *      出图时的简称），但游戏里这条就叫**元素伤害加成**。面板上物伤/治疗/元素伤三行连着读，
+ *      写成「伤害增加」看不出是哪个加成。
+ *   ② miao 词条表里根本没有的武器专属词条：`atkBase`（基础攻击力）。它不是「词条」，
+ *      是武器面板上的第一行，官方中文叫「基础攻击力」，英文 Base ATK。
  */
 const STAT_TITLE_FIX: Record<string, Record<string, string>> = {
   dmg: {
     chs: '元素伤害加成', cht: '元素傷害加成',
     en: 'Elemental DMG Bonus', ja: '元素ダメージ加成', kr: '원소 피해 보너스'
+  },
+  atkBase: {
+    chs: '基础攻击力', cht: '基礎攻擊力',
+    en: 'Base ATK', ja: '基礎攻撃力', kr: '기초 공격력'
   }
+}
+
+/*
+ * 武器副属性的 key 归一 → **标准词条 key**（domain/stat.ts 那一套）。
+ *
+ * miao 的 Weapon.calcAttr() 给的是 `atkPct` / `hpPct` / `defPct`，而标准 key 是
+ * `atk` / `hp` / `def`（不带 Pct 才是百分比，带 `Plus` 才是固定值 —— 反着记会把
+ * 大生命指到小生命上）。不归一的话 statLabel 查不到、只能退回裸 key 或硬编码短名
+ * （前端原来那张 W_ATTR_TITLE 就写成「攻击 / 生命 / 精通 / 爆伤」，不是官方叫法）。
+ */
+const WEAPON_KEY_FIX: Record<string, string> = {
+  atkPct: 'atk', hpPct: 'hp', defPct: 'def'
 }
 
 /** 词条 key → 本地化标题。修正表 → i18n 表 → miao 中文标题 → key 本身 */
@@ -541,7 +559,9 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
      我们没搬 Avatar，照它的逻辑重算）。`Weapon.get()` 认不出时返回 `false`（不是 null/undefined）——
      先归一到 `Weapon | null`，后面 `wObj?.xxx` 才不会在 `false` 上报错。 */
   const wObj = ch.weapon.equipped ? (MiaoWeapon.get(ch.weapon.itemId) || null) : null
-  const weaponAttrs: Record<string, string> = {}
+  /* 数组而不是 Record：**名字必须由后端按 locale 给**（statLabel），前端不该再存一张
+     硬编码中文表 —— 那张表既不全（没有基础攻击力）、叫法也不标准（「爆伤」「精通」）。 */
+  const weaponAttrs: Array<{ key: string; label: string; value: string }> = []
   let weaponDesc = ''
   if (wObj) {
     /* 内核 Weapon 的这个方法没有类型声明 —— 按我们真正读的字段断言 */
@@ -552,13 +572,24 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     /* 主属性攻击力：游戏里武器面板**只有整数**（608、454、741），没有小数点。
        calcAttr 是按等级两端线性插值出来的浮点（401.31…），直接 comma(_,1) 会给出
        「401.3」这种游戏里不存在、也跟面板数值对不上的串 —— 一律收整到 0 位。 */
-    if (wCalc.atkBase) weaponAttrs.atkBase = Format.comma(wCalc.atkBase, 0)
+    if (wCalc.atkBase) {
+      weaponAttrs.push({
+        key: 'atkBase',
+        label: statLabel('atkBase', loc),
+        value: Format.comma(wCalc.atkBase, 0)
+      })
+    }
     if (wCalc.attr?.key) {
       /* 副属性：整数口径（精通）显整数，其余百分比 —— 判据用 isIntegerStatKey，
          跟圣遗物词条、面板属性表同一套，别在这儿另写「key === 'mastery'」的特判 */
-      weaponAttrs[wCalc.attr.key] = isIntegerStatKey(wCalc.attr.key)
-        ? Format.comma(wCalc.attr.value, 0)
-        : pctText(wCalc.attr.value)
+      const key = WEAPON_KEY_FIX[wCalc.attr.key] || wCalc.attr.key
+      weaponAttrs.push({
+        key,
+        label: statLabel(key, loc),
+        value: isIntegerStatKey(key)
+          ? Format.comma(wCalc.attr.value, 0)
+          : pctText(wCalc.attr.value)
+      })
     }
     weaponDesc = (wObj.getAffixDesc?.(profile.weapon.affix) as { desc?: string } | undefined)?.desc || ''
   }
@@ -876,10 +907,13 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: str
       name: i18n.weaponName(w.itemId, loc) || w.name,
       star: w.star
     })),
-    /* 套装：miao 按中文名索引，所以中文名是**主键**，显示名另给一份 */
+    /* 套装：miao 按中文名索引，所以中文名是**主键**，显示名另给一份。
+       positions 是这套在游戏里有哪些部位 —— 前端按部位过滤下拉，别让人选「祭雷之人的花」：
+       那种组合 `artifactRefOf` 认不出，后端会整件草稿静默跳过（值一点不变，只被染了模拟色）。 */
     sets: raw.sets.map(s => ({
       key: s.set,
-      name: i18n.fromZh(s.set, loc) || s.set
+      name: i18n.fromZh(s.set, loc) || s.set,
+      positions: s.positions
     })),
     /* 各部位的主词条候选（key → 显示名）
        主词条是**大词条**（生命值/攻击力百分比…），用面板那套用字（ATTR_TITLE_ZH 口径） */
@@ -911,7 +945,7 @@ function mainStatName (key: string, locale: string): string {
 /** 可选装备目录（页面渲染下拉框用） */
 export interface SimCatalog {
   weapons: Array<{ itemId: number; name: string; star: number }>
-  sets: Array<{ key: string; name: string }>
+  sets: Array<{ key: string; name: string; positions: number[] }>
   mains: Array<{ pos: number; options: Array<{ key: string; name: string; elem: boolean }> }>
   subs: Array<{ key: string; name: string; int: boolean }>
 }

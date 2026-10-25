@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { eq as sqlEq } from 'drizzle-orm'
 
 import { startServer } from '../src/server/index.ts'
+import { ArtifactSet } from '../src/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/upstream/enka-account.ts'
@@ -640,7 +641,8 @@ console.log('\n=== 9. 武器三态 ===')
       /* 关键：等级/精炼是 enka 给的，跟元数据认不认识无关，必须留 */
       eq(w.level, 90, '  等级留着（证明是「装备着」而不是「没装备」）')
       eq(w.affix, 1 + 1, '  精炼留着')
-      eq(w.attrs, {}, '  属性/描述为空（元数据里确实没有）')
+      /* attrs 是数组 `{key,label,value}`（名字由后端按 locale 给），空就是空数组 */
+      eq(w.attrs, [], '  属性/描述为空（元数据里确实没有）')
       eq(w.desc, '', '')
     } else {
       eq(w.icon, null, '  真没装备时不给图（给张类型图反倒像有武器）')
@@ -884,6 +886,45 @@ console.log('\n=== 12. 跨域 ===')
     eq(pre.status, 204, '通配 *：预检同样回 204')
     a.server.close()
   }
+}
+
+/* ---------------- 13. 模拟比对：可换套装必须「这一部位真的有」 ---------------- */
+/*
+ * 起因是一次真实误判：把「花」的套装选成「祭雷之人」，再改副词条 —— 页面只把数值染成模拟色，
+ * 一个数都没变。因为祭X之人那批 4★ 套只有理之冠，`artifactRefOf(套装, 1)` 返回 null，
+ * `buildSimProfile` 就把**整件草稿**（主词条 + 副词条）跳过了。
+ * 所以目录必须把「这套有哪些部位」交给前端去过滤；这里钉住「列出来的组合都真能换」。
+ */
+console.log('\n=== 13. 模拟比对目录 ===')
+{
+  const diluc = chsView.avatars.find((a: any) => a.nameZh === '迪卢克')
+  const base = `/api/accounts/${UID}/characters/${diluc.avatarId}/simulator`
+  const cat = (await json(base + '?locale=chs')).data
+
+  ok(cat.sets.every((s: any) => Array.isArray(s.positions) && s.positions.length > 0),
+    '每个套装都带「有哪些部位」')
+  ok(cat.sets.every((s: any) => s.positions.every((p: number) => p >= 1 && p <= 5)),
+    '部位序号都在 1..5')
+
+  /* 关键不变量：目录里每个 (套装, 部位) 组合都必须真能换到部件 —— 取不到就是「能选但换不了」 */
+  const bad = cat.sets.filter((s: any) => s.positions.some((p: number) => !ArtifactSet.get(s.key)?.getArtiName(p)))
+  eq(bad.map((s: any) => s.key), [], '每个(套装,部位)组合都能取到部件名')
+  ok(cat.sets.some((s: any) => s.positions.length < 5), '目录里确实有「只有部分部位」的套装（祭X之人）')
+
+  /* 真换一套 + 改一条副词条：卡上的套装名和数值都得跟着草稿走 */
+  const flower = diluc.artifacts.find((a: any) => a.pos === 1)
+  const target = cat.sets.find((s: any) => s.positions.includes(1) && s.key !== flower.setNameZh)
+  const post = async (body: unknown): Promise<any> => readJson(await fetch(app.url + base + '?locale=chs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  }))
+  const r = await post({
+    weapon: null,
+    artifacts: [{ set: target.key, pos: 1, star: 5, level: 21, mainKey: 'hpPlus', subs: [{ key: 'atk', value: 4.5 }] }]
+  })
+  const got = r.data.avatar.artifacts.find((a: any) => a.pos === 1)
+  eq(got.setName, target.name, `换套装生效（${flower.setNameZh} → ${got.setName}）`)
+  eq(got.subs.map((s: any) => s.key), ['atk'], '副词条是草稿里那条（不是原件剩下的）')
+  eq(got.subs[0].value, '4.5%', '改副词条数值 4.5 生效（没被整件跳过）')
 }
 
 /* ---------------- 收尾 ---------------- */

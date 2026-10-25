@@ -203,7 +203,11 @@ export function buildSimProfile (base: MiaoProfile, draft: SimDraft, elem: strin
       level,
       star: spec.star,
       main: { key: main.main.key, value: main.main.value },
-      attrs: (spec.subs || []).map(s => ({ key: s.key, value: s.value, upNum: 1, eff: 0 }))
+      /* ⚠️ 值为 0（或被填成 NaN）的词条**别喂给内核**：miao 的 `ArtisMark.formatArti` 里写的是
+         `val = ds.value || ds[1]` —— 0 是 falsy，会被当成「压根没这个字段」，
+         接着 `Format.comma(undefined)` 出来就是页面上那个「NaN.0」。
+         顺带这也符合语义：0 值词条加不加都不影响任何数值，等于用户把它删了。 */
+      attrs: (spec.subs || []).filter(s => s.value).map(s => ({ key: s.key, value: s.value, upNum: 1, eff: 0 }))
     }
   }
 
@@ -233,13 +237,29 @@ export interface SimWeaponOption {
 export interface SimSetOption {
   /** miao 索引用的套装名（中文） */
   set: string
+  /**
+   * 这套在游戏里**有哪些部位**（1 花 2 羽 3 沙 4 杯 5 冠）。
+   *
+   * ⚠️ 不是每套都五个部位：祭X之人那批 4★ 套只有理之冠。前端必须按它过滤下拉 ——
+   *   选一个不存在的组合（祭雷之人的花）时，`artifactRefOf` 返回 null，
+   *   `buildSimProfile` 会**整件草稿跳过**（主词条、副词条一起吞掉），
+   *   页面上只看到「值被染成模拟色、但一点没变」，怎么查都像前端没刷新。
+   */
+  positions: number[]
+}
+
+/** 一套圣遗物有哪些部位可换（顺序恒为 1..5，空数组 = 一套都不认） */
+export function setPositionsOf (set: string): number[] {
+  const obj = setOf(set)
+  if (!obj) return []
+  return [1, 2, 3, 4, 5].filter(pos => obj.getArtiName(pos))
 }
 
 /**
  * 角色能用的武器（按武器类型过滤）+ 全部套装。
  *
  * 武器类型是角色的**硬约束**（迪奥娜只能拿弓）—— 目录按类型过滤，页面就不用自己判，
- * 服务端也不接受类型不符的武器。
+ * 服务端也不接受类型不符的武器。套装同理按「有没有这个部位」过滤，见 SimSetOption.positions。
  */
 export function simCatalog (weaponType: string): { weapons: SimWeaponOption[]; sets: SimSetOption[] } {
   const weapons: SimWeaponOption[] = []
@@ -250,6 +270,6 @@ export function simCatalog (weaponType: string): { weapons: SimWeaponOption[]; s
   weapons.sort((a, b) => b.star - a.star || a.itemId - b.itemId)
 
   const sets: SimSetOption[] = []
-  Meta.forEach('gs', 'artiSet', (ds: any) => { sets.push({ set: ds.name }) })
+  Meta.forEach('gs', 'artiSet', (ds: any) => { sets.push({ set: ds.name, positions: setPositionsOf(ds.name) }) })
   return { weapons, sets }
 }
