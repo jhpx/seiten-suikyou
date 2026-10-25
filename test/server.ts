@@ -901,6 +901,51 @@ console.log('\n=== 13. 模拟比对目录 ===')
   const base = `/api/accounts/${UID}/characters/${diluc.avatarId}/simulator`
   const cat = (await json(base + '?locale=chs')).data
 
+  /* 武器简介 = 模板 + 数值表：`$[0]` 是随精炼变的数值位，affixVals[i] 给它在精 1..5 的取值。
+     必须留下占位符 —— 游戏里那几个数是高亮的，前端得知道哪几个字是数值。 */
+  ok(cat.weapons.every((w: any) => typeof w.affixText === 'string' && Array.isArray(w.affixVals)),
+    '每把武器都带简介模板与数值表')
+  ok(cat.weapons.every((w: any) => !/[<>]/.test(w.affixText)),
+    '简介模板里没有残留的 HTML 标记（miao 原文带 <nobr>）')
+  {
+    /* 占位符个数 == 数值表行数，且每行都满 5 档；否则前端渲染会缺字或直接空白 */
+    const bad = cat.weapons.filter((w: any) => {
+      const n = [...String(w.affixText).matchAll(/\$\[(\d+)\]/g)].length
+      return n !== (w.affixVals || []).length || (w.affixVals || []).some((v: any) => v.length !== 5)
+    })
+    eq(bad.map((w: any) => w.name), [], '占位符与数值表一一对应、每档 5 个值')
+  }
+  /* ⚠️ 只断言 4★ 以上：1★/2★ 那批（无锋剑之类）本来就没有精炼效果，空模板是对的 */
+  ok(cat.weapons.filter((w: any) => w.star >= 4).every((w: any) => w.affixText.length > 0 && w.affixVals.length > 0),
+    '4★ 以上武器的简介非空')
+
+  /* 主/副属性：按等级档位各给一份，否则「选 Lv.1 却显示 90 级的数值」。
+     档位就取 main.values 的键 —— 前端下拉也是照它生成的，两边天然一致。
+     ⚠️ 1★/2★ 满级只到 70，所以只有 1/20/40/60 四档（前端不能写死六档，否则能选到 Lv.90）。 */
+  const LV = ['1', '20', '40', '60', '70', '80', '90']
+  ok(cat.weapons.filter((w: any) => w.star >= 3).every((w: any) => LV.every(lv => w.main?.values?.[lv])),
+    '3★ 以上武器带 7 个等级档位的主属性')
+  /* 1★/2★ 满级 70 → 档位到 70 为止；70 这一档不能省，否则这类武器只能显示成 60 级 */
+  ok(cat.weapons.filter((w: any) => w.star <= 2).every((w: any) =>
+    ['1', '20', '40', '60', '70'].every(lv => w.main?.values?.[lv]) && !w.main.values['80'] && !w.main.values['90']),
+  '1★/2★ 档位到 70 为止（没有 80/90）')
+  ok(cat.weapons.every((w: any) => LV.every(lv => !w.main.values[lv] || !/\./.test(w.main.values[lv]))),
+    '主属性是整数（游戏里武器面板没有小数点）')
+  /* 3★ 以上都有副属性；1★/2★ 那批没有，sub 是 null */
+  ok(cat.weapons.filter((w: any) => w.star >= 3).every((w: any) => w.sub && LV.every(lv => w.sub.values[lv])),
+    '3★ 以上武器都带副属性（各档位齐全）')
+  ok(cat.weapons.filter((w: any) => w.star <= 2).every((w: any) => w.sub === null),
+    '1★/2★ 没有副属性（sub 是 null）')
+  ok(cat.weapons.every((w: any) => !w.sub || /[%\d]/.test(w.sub.values['90'])), '副属性带单位或数值')
+  ok(cat.weapons.every((w: any) => w.star >= 1), '每把武器都有星级（下拉要标 3★/4★/5★）')
+  {
+    /* 阿莫斯之弓是迪卢克拿不了的（弓 vs 双手剑）—— 拿目录里真有的那把验数值 */
+    const w = cat.weapons.find((x: any) => x.star === 5)
+    const atks = LV.map(lv => Number(String(w.main.values[lv]).replace(/,/g, '')))
+    ok(atks.every((v: number, i: number) => i === 0 || v > atks[i - 1]), '主属性随等级递增')
+    ok(w.sub.values['90'] !== w.sub.values['1'], '副属性随等级递增（90 档 ≠ 1 档）')
+  }
+
   ok(cat.sets.every((s: any) => Array.isArray(s.positions) && s.positions.length > 0),
     '每个套装都带「有哪些部位」')
   ok(cat.sets.every((s: any) => s.positions.every((p: number) => p >= 1 && p <= 5)),
@@ -910,6 +955,16 @@ console.log('\n=== 13. 模拟比对目录 ===')
   const bad = cat.sets.filter((s: any) => s.positions.some((p: number) => !ArtifactSet.get(s.key)?.getArtiName(p)))
   eq(bad.map((s: any) => s.key), [], '每个(套装,部位)组合都能取到部件名')
   ok(cat.sets.some((s: any) => s.positions.length < 5), '目录里确实有「只有部分部位」的套装（祭X之人）')
+
+  /* 套装最高星级：上游 miao 的数据里没有这个字段，是我们手写的一张表（domain/artifact.ts）。
+     它决定下拉里标 5★/4★/3★，也决定等级上限（4★ 满级 +16、3★ +12）。 */
+  ok(cat.sets.every((s: any) => s.star >= 3 && s.star <= 5), '每个套装都带最高星级（3~5）')
+  {
+    const starOf = (name: string): number => cat.sets.find((s: any) => s.key === name)?.star
+    eq(starOf('冰风迷途的勇士'), 5, '冰风迷途的勇士是 5★ 套')
+    eq(starOf('行者之心'), 4, '行者之心最高 4★（没有五星版本）')
+    eq(starOf('冒险家'), 3, '冒险家最高 3★')
+  }
 
   /* 真换一套 + 改一条副词条：卡上的套装名和数值都得跟着草稿走 */
   const flower = diluc.artifacts.find((a: any) => a.pos === 1)
@@ -925,6 +980,27 @@ console.log('\n=== 13. 模拟比对目录 ===')
   eq(got.setName, target.name, `换套装生效（${flower.setNameZh} → ${got.setName}）`)
   eq(got.subs.map((s: any) => s.key), ['atk'], '副词条是草稿里那条（不是原件剩下的）')
   eq(got.subs[0].value, '4.5%', '改副词条数值 4.5 生效（没被整件跳过）')
+
+  /* 星级：4★ 满级 +16（levelRaw 17）、5★ +20（21）。档位表只此一份，由目录下发 */
+  eq(cat.starLevels, [
+    { star: 5, maxLevel: 21 }, { star: 4, maxLevel: 17 }, { star: 3, maxLevel: 13 },
+    { star: 2, maxLevel: 9 }, { star: 1, maxLevel: 5 }
+  ], '星级 → 满级档位')
+
+  /* 4★ 硬填 +20：后端必须夹到 +16，否则主词条按 5★ 的档位算，凭空多一截 */
+  const num = (text: string): number => Number(String(text).replace(/[%,]/g, ''))
+  const four = (await post({
+    weapon: null,
+    artifacts: [{ set: target.key, pos: 1, star: 4, level: 21, mainKey: 'hpPlus', subs: [] }]
+  })).data.avatar.artifacts.find((a: any) => a.pos === 1)
+  const five = (await post({
+    weapon: null,
+    artifacts: [{ set: target.key, pos: 1, star: 5, level: 21, mainKey: 'hpPlus', subs: [] }]
+  })).data.avatar.artifacts.find((a: any) => a.pos === 1)
+  eq(four.level, 16, '4★ 传 levelRaw 21 被夹到 +16')
+  eq(five.level, 20, '5★ 传 21 就是 +20')
+  ok(num(four.main.value) < num(five.main.value),
+    `4★ +16 的主词条比 5★ +20 低（${four.main.value} < ${five.main.value}）`)
 }
 
 /* ---------------- 收尾 ---------------- */

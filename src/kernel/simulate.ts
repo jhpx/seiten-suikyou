@@ -191,7 +191,9 @@ export function buildSimProfile (base: MiaoProfile, draft: SimDraft, elem: strin
     if (!core[spec.pos]) continue
     const ref = artifactRefOf(spec.set, spec.pos)
     if (!ref) continue
-    const level = Math.max(0, (spec.level || 1) - 1)
+    /* 等级夹到**该星级的满级**：4★ 只到 +16，越界填 +20 会让主词条凭空多一截
+       （前端下拉已经按同一张表生成档位，这里再兜一道，防别的调用方乱传） */
+    const level = Math.max(0, Math.min(spec.level || 1, artifactMaxLevel(spec.star)) - 1)
     const kernelKey = resolveMainKey(spec.mainKey, elem)
     const mainId = mainIdOf(spec.pos, kernelKey)
     if (mainId === null) continue
@@ -225,12 +227,45 @@ export function buildSimProfile (base: MiaoProfile, draft: SimDraft, elem: strin
 
 /* ───────────────────────── 可选装备目录 ───────────────────────── */
 
+/**
+ * 武器等级档位（也是 SimWeaponOption.atks / sub.values 的键）。
+ * 游戏里是 1/20/40/50/60/70/80/90 八档，这里去掉 50（跟 40、60 各差 10 级，选起来没意义），
+ * 但**70 必须留着** —— 那是 1★/2★ 的满级，去掉的话这类武器只能显示成 60 级。
+ */
+export const WEAPON_LEVELS = [1, 20, 40, 60, 70, 80, 90]
+
+/** 武器满级：1★/2★ 只到 70，3★ 以上能到 90（游戏内规则） */
+function weaponMaxLevel (star: number): number {
+  return star <= 2 ? 70 : 90
+}
+
+/** 这把武器能选的等级档位 —— 弹窗里那个下拉照它生成（1★/2★ 到 70，其余到 90） */
+export function weaponLevelsOf (star: number): number[] {
+  const max = weaponMaxLevel(star)
+  return WEAPON_LEVELS.filter(lv => lv <= max)
+}
+
 /** 一把可选武器 */
 export interface SimWeaponOption {
   itemId: number
   name: string
   type: string
   star: number
+  /**
+   * 精炼效果 = **模板 + 数值表**：`affixText` 里的 `$[0]` `$[1]` 是随精炼变化的数值位，
+   * `affixVals[i]` 是第 i 位在精 1..5 的取值（各 5 个，下标 0 = 精 1）。
+   *
+   * 拆开而不直接给渲染好的五段文字，是因为**游戏里那几个数字是高亮的** —— 前端得知道
+   * 哪几个字是数值才能分色，整段字符串做不到。占位符是 miao 原文就有的（affixData.text）。
+   * ⚠️ 精炼改一档，描述里的数值全变（20% → 25%…），所以五档必须各留一份。
+   * 1★/2★ 那 10 把没有精炼效果：text 是空串、vals 是空数组。
+   */
+  affixText: string
+  affixVals: string[][]
+  /** 主属性（基础攻击力）在各等级档位的**原始数值**，显示口径（整数）由 service 层定 */
+  atks: Record<number, number>
+  /** 副属性（攻击力% / 暴击率…）；1★/2★ 那批没有副属性 */
+  sub: { key: string; values: Record<number, number> } | null
 }
 
 /** 一套可选圣遗物套装 */
@@ -256,6 +291,18 @@ export function setPositionsOf (set: string): number[] {
 }
 
 /**
+ * 星级 → 满级，**enka 的 1 基口径**（4★ 满级是「+16」，即 levelRaw 17）。
+ *
+ * 圣遗物的主词条是按星级 + 等级算的：把一件 4★ 填成 +20，主词条会凭空多出一截，
+ * 所以这张表既是弹窗档位的来源（目录里下发给前端），也在 buildSimProfile 里兜底夹紧。
+ */
+const ARTIFACT_MAX_LEVEL: Record<number, number> = { 1: 5, 2: 9, 3: 13, 4: 17, 5: 21 }
+
+export function artifactMaxLevel (star: number): number {
+  return ARTIFACT_MAX_LEVEL[star] || ARTIFACT_MAX_LEVEL[5]
+}
+
+/**
  * 角色能用的武器（按武器类型过滤）+ 全部套装。
  *
  * 武器类型是角色的**硬约束**（迪奥娜只能拿弓）—— 目录按类型过滤，页面就不用自己判，
@@ -265,7 +312,32 @@ export function simCatalog (weaponType: string): { weapons: SimWeaponOption[]; s
   const weapons: SimWeaponOption[] = []
   Meta.forEach('gs', 'weapon', (ds: any) => {
     if (ds.type !== weaponType) return
-    weapons.push({ itemId: ds.id, name: ds.name, type: ds.type, star: ds.star || 1 })
+    /* 精炼描述、主副属性只有 Weapon 实例上有（getDetail / calcAttr），元数据 ds 上取不到 */
+    const obj = (MiaoWeapon.get(ds.id) || null) as any
+    /* atks / sub 都按等级档位各给一份：页面上选了等级，右侧那栏要跟着变，
+       只给 90 级的值会出现「选 Lv.1 却显示 608」这种自相矛盾的显示。 */
+    const atks: Record<number, number> = {}
+    const subVals: Record<number, number> = {}
+    let subKey = ''
+    for (const lv of weaponLevelsOf(ds.star || 1)) {
+      const calc = obj?.calcAttr?.(lv, promoteOf(lv)) || {}
+      if (calc.atkBase) atks[lv] = calc.atkBase
+      if (calc.attr?.key) {
+        subKey = calc.attr.key
+        subVals[lv] = calc.attr.value
+      }
+    }
+    const affix = obj?.getDetail?.()?.affixData || {}
+    weapons.push({
+      itemId: ds.id,
+      name: ds.name,
+      type: ds.type,
+      star: ds.star || 1,
+      affixText: affix.text || '',
+      affixVals: Object.values(affix.datas || {}) as string[][],
+      atks,
+      sub: subKey ? { key: subKey, values: subVals } : null
+    })
   })
   weapons.sort((a, b) => b.star - a.star || a.itemId - b.itemId)
 

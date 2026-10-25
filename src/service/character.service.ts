@@ -12,10 +12,10 @@
 import { Artifact as MiaoArtifact, ArtisMark, Format, i18n, Weapon as MiaoWeapon } from '../index.ts'
 import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
 import type { MiaoProfile } from '../kernel/materialize.ts'
-import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf } from '../kernel/simulate.ts'
+import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf, artifactMaxLevel } from '../kernel/simulate.ts'
 import type { SimDraft } from '../kernel/simulate.ts'
 import { calcDamage } from '../kernel/damage.ts'
-import { Artifact } from '../domain/artifact.ts'
+import { Artifact, setMaxStar } from '../domain/artifact.ts'
 import { Weapon } from '../domain/weapon.ts'
 import { isIntegerStatKey } from '../domain/stat.ts'
 import { Character } from '../domain/character.ts'
@@ -888,6 +888,23 @@ function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): 
  *
  * 武器按**角色武器类型**过滤（迪奥娜只能拿弓）—— 目录层就滤掉，页面与接口都不用再判一次。
  */
+/**
+ * miao 的文案里夹着 `<nobr>` 这类排版标记（游戏原文用它防折行）。
+ * 我们的显示层一律 textContent，标记带出去就原样露出来 —— 在出口统一洗掉。
+ */
+const plainText = (text: string): string => String(text || '').replace(/<[^>]*>/g, '')
+
+/**
+ * 「等级档位 → 数值」翻成「等级档位 → 显示文本」。
+ * 键必须转成字符串 —— JSON 的键没有数字这回事，前端拿到的永远是 `"20"`，
+ * 与其让每个调用方自己 String() 一遍，不如在出口统一。
+ */
+function levelValues (vals: Record<number, number>, fmt: (v: number) => string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [lv, v] of Object.entries(vals)) out[lv] = fmt(v)
+  return out
+}
+
 export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: string): SimCatalog | null {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return null
@@ -901,19 +918,38 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: str
   const raw = simCatalog(weaponType)
   const loc = i18n.resolveLocale(locale)
   return {
-    /* 武器：名字走 i18n（官方文案），查不到退回 miao 元数据里的中文名 */
-    weapons: raw.weapons.map(w => ({
-      itemId: w.itemId,
-      name: i18n.weaponName(w.itemId, loc) || w.name,
-      star: w.star
-    })),
+    /* 武器：名字走 i18n（官方文案），查不到退回 miao 元数据里的中文名。
+       affixText + affixVals 是精炼效果的「模板 + 数值表」（见 kernel 里那段的说明）；
+       main / sub 是主副属性按等级档位各给一份，弹窗右侧那栏显示用。 */
+    weapons: raw.weapons.map(w => {
+      /* 副属性 key 走武器那张修正表：miao 给 atkPct，标准叫法是 atk（攻击力%） */
+      const subKey = w.sub ? (WEAPON_KEY_FIX[w.sub.key] || w.sub.key) : ''
+      return {
+        itemId: w.itemId,
+        name: i18n.weaponName(w.itemId, loc) || w.name,
+        star: w.star,
+        affixText: plainText(w.affixText),
+        affixVals: w.affixVals,
+        /* 主属性一律整数（游戏里武器面板没有小数点）；副属性百分比还是整数，
+           跟明细页同一套判据（isIntegerStatKey），别在这儿另写特判 */
+        main: { label: statLabel('atkBase', loc), values: levelValues(w.atks, v => Format.comma(v, 0)) },
+        sub: subKey
+          ? {
+            label: statLabel(subKey, loc),
+            values: levelValues(w.sub!.values, v => isIntegerStatKey(subKey) ? Format.comma(v, 0) : pctText(v))
+          }
+          : null
+      }
+    }),
     /* 套装：miao 按中文名索引，所以中文名是**主键**，显示名另给一份。
        positions 是这套在游戏里有哪些部位 —— 前端按部位过滤下拉，别让人选「祭雷之人的花」：
-       那种组合 `artifactRefOf` 认不出，后端会整件草稿静默跳过（值一点不变，只被染了模拟色）。 */
+       那种组合 `artifactRefOf` 认不出，后端会整件草稿静默跳过（值一点不变，只被染了模拟色）。
+       star 是这套**最高几星**（下拉里标 5★/4★/3★，并决定等级上限）。 */
     sets: raw.sets.map(s => ({
       key: s.set,
       name: i18n.fromZh(s.set, loc) || s.set,
-      positions: s.positions
+      positions: s.positions,
+      star: setMaxStar(s.set)
     })),
     /* 各部位的主词条候选（key → 显示名）
        主词条是**大词条**（生命值/攻击力百分比…），用面板那套用字（ATTR_TITLE_ZH 口径） */
@@ -926,6 +962,9 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: str
         elem: key === 'dmg'
       }))
     })),
+    /* 星级 → 满级（enka 1 基口径：4★ 满级是 +16 → 17）。改圣遗物弹窗按它生成等级档位，
+       前端不自己存一张「几星到几级」的表 —— 那是游戏规则，只有这一份 */
+    starLevels: [5, 4, 3, 2, 1].map(star => ({ star, maxLevel: artifactMaxLevel(star) })),
     /* 副词条候选：大小词条同名（都是「攻击力」），必须标出是哪个，
        否则用户分不清填的是百分比还是固定值。int = 整数口径（显示时不带小数）。 */
     subs: subAttrKeys().map(key => ({
@@ -944,8 +983,17 @@ function mainStatName (key: string, locale: string): string {
 
 /** 可选装备目录（页面渲染下拉框用） */
 export interface SimCatalog {
-  weapons: Array<{ itemId: number; name: string; star: number }>
-  sets: Array<{ key: string; name: string; positions: number[] }>
+  weapons: Array<{
+    itemId: number
+    name: string
+    star: number
+    affixText: string
+    affixVals: string[][]
+    main: { label: string; values: Record<string, string> }
+    sub: { label: string; values: Record<string, string> } | null
+  }>
+  sets: Array<{ key: string; name: string; positions: number[]; star: number }>
   mains: Array<{ pos: number; options: Array<{ key: string; name: string; elem: boolean }> }>
+  starLevels: Array<{ star: number; maxLevel: number }>
   subs: Array<{ key: string; name: string; int: boolean }>
 }

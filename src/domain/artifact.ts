@@ -118,3 +118,23 @@ export class Artifact {
     return out
   }
 }
+
+/*
+ * 套装 → 最高星级。
+ *
+ * ⚠️ 上游 miao 的 `resources/meta-gs/artifact/data.json` 里**没有星级字段**（只有 id / name / idxs / skills），
+ *   所以这张表只能手写。只列「不是五星」的那批，其余一律按 5★，新套装不用维护。
+ *   数值来自游戏内图鉴：游医/冒险家/幸运儿 最高 3★，其余 14 套最高 4★（都没有五星版本）。
+ * 用途：改圣遗物弹窗的套装下拉标「5★/4★/3★」，并决定等级上限（4★ 满级 +16、3★ +12）。
+ */
+const SET_MAX_STAR: Record<string, number> = {
+  游医: 3, 冒险家: 3, 幸运儿: 3,
+  行者之心: 4, 勇士之心: 4, 守护之心: 4, 奇迹: 4,
+  战狂: 4, 武人: 4, 教官: 4, 赌徒: 4, 流放者: 4, 学士: 4,
+  祭火之人: 4, 祭水之人: 4, 祭雷之人: 4, 祭冰之人: 4
+}
+
+/** 这套圣遗物最高几星（查不到就是 5★ —— 绝大多数套装都有五星版本） */
+export function setMaxStar (setNameZh: string): number {
+  return SET_MAX_STAR[setNameZh] || 5
+}
