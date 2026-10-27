@@ -64,7 +64,7 @@
 - `vendor/i18n/names.json` 是生成的官方名称数据；`src/common/ui.ts` 是手写的界面文案。两者用途不同，不要互相替代。
 - 当前依赖方向为 `common/i18n` 读取 `names` 和 `ui`；`names` 与 `ui` 不应互相依赖。修改该结构时，检查 `test/arch.ts` 的依赖断言。
 - `domain/` 不应依赖官方文案表；领域模型应表达领域含义，而不是依赖显示语言。
-- 词条数值显示统一走 `service/character.service.ts` 中现有的 `attrValueText(...)` 逻辑，以保持不同数据源之间的显示口径。不要绕过它直接使用 `Format.pct`，除非已确认新场景的语义不同并补充测试。
+- 词条数值显示统一走 `service/artifact.service.ts` 中现有的 `attrValueText(...)` 逻辑（圣遗物与词条的「显示口径」已抽到该叶子模块，`character.service.ts` 单向引它），以保持不同数据源之间的显示口径。不要绕过它直接使用 `Format.pct`，除非已确认新场景的语义不同并补充测试。
 - 前端静态文案通过 `/api/meta` 提供。需要增加或修改界面文案时，检查 `src/common/ui.ts` 和接口返回，不要在前端重复硬编码。
 
 ## 上游数据与评分内核

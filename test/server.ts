@@ -19,7 +19,7 @@ import { ArtifactSet } from '../src/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/upstream/enka-account.ts'
-import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/account.service.ts'
+import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/advice.ts'
 import type { EnkaPayload } from '../src/domain/enka.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))

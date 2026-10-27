@@ -3,13 +3,16 @@
  * （面板 / 圣遗物卡 / 词条汇总 / 天赋 / 命座 / 武器）都在这。
  *
  * 与 account.service.ts 对照：那边管账号层（列表 / 详情 / 抓取 / 账号整包视图）。
- * 词条标题、百分比舍入、面板文本这些「怎么显示」的规则也在这 —— 用它们的只有角色面板与圣遗物卡。
+ * 词条标题、百分比舍入、面板文本这些「怎么显示」的规则，以及单件圣遗物卡片
+ * （statLabel / attrValueText / artiLabel / artifactOf …），已经抽到
+ * artifact.service.ts —— 那是个只引 kernel / domain / common 的叶子，本文件单向引它，
+ * 避免 character → artifact → character 的环。
  * 账号域只借用 common/util.ts 的 fmtTime。
  *
  * 这里**不出现状态码** —— 「账号没数据」「没这个角色」用判别联合表达，
  * 由 rest 层决定回 404 还是别的。
  */
-import { Artifact as MiaoArtifact, ArtisMark, Format, i18n, Weapon as MiaoWeapon } from '../index.ts'
+import { ArtisMark, Format, i18n, Weapon as MiaoWeapon } from '../index.ts'
 import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
 import type { MiaoProfile } from '../kernel/materialize.ts'
 import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf, artifactMaxLevel } from '../kernel/simulate.ts'
@@ -21,7 +24,13 @@ import { isIntegerStatKey } from '../domain/stat.ts'
 import { Character } from '../domain/character.ts'
 import type { Db } from '../config/db.ts'
 import * as repo from '../config/store.ts'
-import { fmtTime, num } from '../common/util.ts'
+import { fmtTime } from '../common/util.ts'
+/* 显示口径 + 圣遗物卡片：叶子模块，单向引用，不成环 */
+import {
+  statLabel, pctText, attrValueText, KEY_TITLE,
+  artifactOf, artifactIcon, assetSeg, artiLabel, shortLabel
+} from './artifact.service.ts'
+import type { MarkedArtifact } from './artifact.service.ts'
 
 /* ───────────────────────── 用例 ───────────────────────── */
 
@@ -44,33 +53,7 @@ export async function characterDamage (db: Db, uid: number, avatarId: number): P
   return { kind: 'ok', view: await damageOf(character) }
 }
 
-/* ───────────────────────── 显示口径（词条标题 / 数值串 / 面板文本） ───────────────────────── */
-
-/* miao 自己的词条中文标题（含 `pyro → 火伤加成` 这类元素名，由 Format.eachElem 生成）。
-   i18n 表查不到时的兜底；圣遗物卡片标题（artiLabel）也用它。
-   内核是 vendored JS，返回值 TS 只能推成 `{}`，断言成字典、形状由上游保证。 */
-export const KEY_TITLE = ArtisMark.getKeyTitleMap('gs') as Record<string, string>
-
-/*
- * 标题覆盖表 —— 两类条目，都只在这里写、不进 vendor/i18n/names.json（那是同步脚本的生成物，
- * 改了会被覆盖）：
- *
- *   ① 跟游戏官方叫法不一致的：`dmg` 在 miao 的 i18n 表里是「伤害增加」/“DMG Bonus”（它自己
- *      出图时的简称），但游戏里这条就叫**元素伤害加成**。面板上物伤/治疗/元素伤三行连着读，
- *      写成「伤害增加」看不出是哪个加成。
- *   ② miao 词条表里根本没有的武器专属词条：`atkBase`（基础攻击力）。它不是「词条」，
- *      是武器面板上的第一行，官方中文叫「基础攻击力」，英文 Base ATK。
- */
-const STAT_TITLE_FIX: Record<string, Record<string, string>> = {
-  dmg: {
-    chs: '元素伤害加成', cht: '元素傷害加成',
-    en: 'Elemental DMG Bonus', ja: '元素ダメージ加成', kr: '원소 피해 보너스'
-  },
-  atkBase: {
-    chs: '基础攻击力', cht: '基礎攻擊力',
-    en: 'Base ATK', ja: '基礎攻撃力', kr: '기초 공격력'
-  }
-}
+/* ───────────────────────── 显示口径（面板 / 武器 / 词条数值） ───────────────────────── */
 
 /*
  * 武器副属性的 key 归一 → **标准词条 key**（domain/stat.ts 那一套）。
@@ -82,13 +65,6 @@ const STAT_TITLE_FIX: Record<string, Record<string, string>> = {
  */
 const WEAPON_KEY_FIX: Record<string, string> = {
   atkPct: 'atk', hpPct: 'hp', defPct: 'def'
-}
-
-/** 词条 key → 本地化标题。修正表 → i18n 表 → miao 中文标题 → key 本身 */
-export function statLabel (key: string, locale: string): string {
-  /* 先归一语言码：修正表是按 chs/en 这种小写码写的，外面传进来的可能带大写或别名 */
-  const loc = i18n.resolveLocale(locale)
-  return STAT_TITLE_FIX[key]?.[loc] || i18n.statName(key, loc) || KEY_TITLE[key] || key
 }
 
 /*
@@ -104,82 +80,6 @@ export function statLabel (key: string, locale: string): string {
 export function weightFilterOptions (locale: string): Array<{ key: string; label: string }> {
   return ['hp', 'atk', 'def', 'mastery', 'cpct', 'cdmg', 'recharge', 'dmg', 'phy', 'heal']
     .map(key => ({ key, label: statLabel(key, locale) }))
-}
-
-/*
- * 词条数值 → 给人看的串。**数值来源**：优先 enka 的原始 `statValue`，拿不到才退回内核算的值。
- * 因为 miao 的基准表是 float32 —— 5★ 生之花满级主词条它算 4,778.6 而游戏真值 4,780（enka 给的就是 4780），
- * 精通真值 33 它算 32.6。enka 是官方算好的，直接用它才和游戏一模一样。
- * 内核只剩两个用途：给评分（不碰显示）、以及没存 enka 值时的兜底。
- *
- * ⚠️ 「显示」和「算分」是两条路：改这里的口径不影响任何评分（评分仍 100% 走内核）。
- * 两处「怎么显示」的修正仍然需要：
- *   ① 整数词条（精通 / 小攻击 / 小生命 / 小防御，含花、羽那两个固定值主词条）：miao 一律
- *      `Format.comma(val, 1)`，于是成了「209.1」这种**游戏里不存在**的值 → 收整到 0 位。
- *   ② 百分比：miao 的 `Format.pct` 是 `(v*1).toFixed(1)`，**分不清 5.25 和 5.2499998**。
- *      内核裸数字是 float32 精度的十进制（5★ 大生命第 3 档真值 0.0525，内核表里 0.05249999836087227）→
- *      显成 5.2%，而游戏按十进制四舍五入是 5.3%。enka 的 statValue 是**已乘 100 的十进制**（5.8、46.6），
- *      没有这个噪声 → 有 enka 值时直接 decRound 到 1 位；没有时才回去舍内核的 float32 裸数字。
- * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num*1).toFixed(fix)`，Number('1,015.8') 是 NaN。
- *    先剥逗号再进。（「哪些词条是整数口径」的判据在 domain/stat.ts 的 isIntegerStatKey）
- */
-/* 十进制四舍五入前「推一把」的量，为什么需要见 decRound */
-const ROUND_NUDGE = 1e-9
-
-/*
- * 按十进制四舍五入到 fix 位（half-up，游戏口径）：① 先收敛到 6 位小数，把 1e-8 量级的 float32 噪声吸掉
- * （5.249999836 → 5.25）；② 再加 1e-9 后 toFixed —— double 在 x.x5 上可能落在半分界**下方**
- * （0.0315*100 = 3.1499999999999995），不推这一把会舍成 3.1 而不是 3.2。
- * 收敛到 6 位后 1e-9 只动得了「正好落在半分界上」的值，其余离边界至少 1e-6、推不动。
- */
-function decRound (v: unknown, fix = 1): string {
-  const n = Number(v)
-  return (Number(n.toFixed(6)) + ROUND_NUDGE * Math.sign(n)).toFixed(fix)
-}
-
-/* 百分比统一走这里，别用 Format.pct —— 理由见上面 ②。面板行与武器属性都经它 */
-const pctText = (v: unknown): string => decRound(v) + '%'
-
-/*
- * 词条数值出口：优先级 enka 值 > 内核裸数字 > 内核串。enka 值能直接用是因为它和游戏同口径
- * （固定值词条本来就是整数，百分比已乘 100）。
- *   key      miao 词条 key（cpct / hpPlus …）
- *   value    内核给好的格式化串（兜底用）
- *   coreRaw  内核的裸数字（百分比词条要用它做十进制舍入）
- *   enkaVal  enka 的原始 statValue（优先用它；混不到时 null / undefined）
- */
-export function attrValueText (key: string, value: string, coreRaw?: unknown, enkaVal?: number | null): string {
-  /* ⚠️ enkaVal 由调用方从**模型字段**取来，已是 number|null —— 直接 ?? null，不重复 num。
-     这儿**绝不能**退化成 Number()：`Number(null) === 0` 会把「没有 enka 值」读成「值 = 0」，
-     主词条会显示成 0 / 0.0% 且兜底整条失效。 */
-  const enka = enkaVal ?? null
-  if (isIntegerStatKey(key)) {                                   // 整数词条（精通/小攻/小生/小防）：一律收整
-    const n = enka ?? num(String(value).replace(/,/g, ''))
-    return n !== null ? Format.comma(n, 0) : value
-  }
-  /* 百分比：有 enka 值就直接按十进制舍（它已是 ×100 的十进制）；没有才退回内核裸数字（要先收敛 float32 噪声） */
-  if (enka !== null) return pctText(enka)
-  const core = num(coreRaw)
-  return core !== null ? pctText(core) : value
-}
-
-/** 从内核的 artis 模型里取「这一件的裸数字」，交给 attrValueText 兜底用。
- *  副词条按 key 存成 Map：内核已把一个 key 的多次强化合成一条，所以 key 唯一。 */
-export function rawNumsOf (artisEntry: any): { main: unknown; sub: Map<string, unknown> } {
-  return {
-    main: artisEntry?.main?.value,
-    sub: new Map((artisEntry?.attrs || []).map((a: any) => [a.key, a.value]))
-  }
-}
-
-/** 从一件圣遗物（模型）取 enka 的原始数值，按 miao key 归拢 —— 显示数值的第一来源。
- *  主词条只有一个 key、由调用方用 `marked.main.key` 定位，不在这儿再解一遍；副词条的 key 走 Stat.key。 */
-export function enkaNumsOf (artifact: Artifact | null | undefined): { main: number | null; sub: Map<string, number> } {
-  const sub = new Map<string, number>()
-  for (const stat of artifact?.subStats || []) {
-    if (stat.key && stat.value !== null) sub.set(stat.key, stat.value)
-  }
-  return { main: artifact?.mainStatValue ?? null, sub }
 }
 
 /* 面板要显示哪几项、怎么格式化；顺序就是展示顺序（生命/攻击/防御整数，其余百分比） */
@@ -207,20 +107,8 @@ export function panelText (attr: Record<string, number> | null | undefined, loca
 
 /* ───────────────────────── 视图成型（角色面板 / 圣遗物卡 / 词条汇总） ───────────────────────── */
 
-/** 内核给的一件圣遗物的评分结果（= `result.artis[pos]`） */
-interface MarkedArtifact {
-  name?: string
-  set?: string
-  level?: number
-  mark?: string
-  _mark?: number
-  markClass?: string
-  main?: { key: string; value: string; _mark?: number }
-  attrs?: Array<{ key: string; value: string; upNum?: number; eff?: string; _mark?: number }>
-}
-
-/* 面板属性表的一行。给名字是因为调用方（页面之外还有测试）要按下标找行、比 key 与名字，
-   用 Record<string, unknown> 的每处都得断言一次。 */
+/** 面板属性表的一行。给名字是因为调用方（页面之外还有测试）要按下标找行、比 key 与名字，
+ *  用 Record<string, unknown> 的每处都得断言一次。 */
 export interface AttrRow {
   key: string
   /** 图标 key：dmg 行换成具体元素（pyro/dendro…），拿不到元素时留 'dmg'（CSS 里不画） */
@@ -246,49 +134,12 @@ export interface MarkDetail {
   artis?: Record<number, MarkedArtifact>
 }
 
-/* miao 单条词条「分」公式：46.6 * _mark / 600（与 artis-mark.html 右栏数字逐字一致） */
-function statPoint (_mark: number | null | undefined): string | null {
-  return _mark != null ? (Number(_mark) * 46.6 / 600).toFixed(1) : null
-}
-
-/* 圣遗物卡片上用的**另一套**标题：miao 模板取 Artifact.getArtisKeyTitle()，它区分大小词条
-   （atk→大攻击、hpPlus→小生命），而 i18n 表里 hpPlus 只有「生命值」，直接沿用就丢了「大/小」。 */
-let ARTI_TITLE: Record<string, string> = {}
-try { ARTI_TITLE = (MiaoArtifact.getArtisKeyTitle('gs') as Record<string, string>) || {} } catch { ARTI_TITLE = {} }
-
-/* 「有效词条汇总」里 miao 会把标题再缩短一档：大生命/小生命 → 生命，暴击率 → 暴击 */
-const SHORT_TITLE: Record<string, string> = {
-  暴击率: '暴击', 暴击伤害: '爆伤', 充能效率: '充能', 元素精通: '精通',
-  效果命中: '命中', 效果抵抗: '抵抗', 击破特攻: '击破',
-  大生命: '生命', 大攻击: '攻击', 大防御: '防御',
-  小生命: '生命', 小攻击: '攻击', 小防御: '防御'
-}
-
-/* 中文按 miao 的卡片来（区分大/小词条）；其它语言走 i18n 表 —— miao 那张只有中文，硬套会把英文界面打回中文 */
-function artiLabel (key: string, locale: string): string {
-  if (locale !== 'chs' && locale !== 'cht') return statLabel(key, locale)
-  return ARTI_TITLE[key] || KEY_TITLE[key] || statLabel(key, locale)
-}
-
-/* 汇总区的短标题：先取词条标题，再按 SHORT_TITLE 缩一档（非中文缩不动，原样返回） */
-function shortLabel (key: string, locale: string): string {
-  const title = artiLabel(key, locale)
-  return SHORT_TITLE[title] || title
-}
-
-/* 安全的 URL 路径段：中文/空格都 encode，但保留斜杠给目录层级 */
-function assetSeg (s: string | null | undefined): string {
-  return s ? encodeURIComponent(s) : ''
-}
-
-/*
- * 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。
+/* 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。
  * vendor 里那个被 sync 脚本整体置空了（要读磁盘、依赖 image-size），而这里要的只是拼路径。
  *
  * 三条规则一个字都不能改：① 天赋 A 的图标按**武器类型**取公共图（普攻图标本来就是武器图标）；
  * ② 天赋 E/Q 的图标**就是提升它的那个命座图标**（talentCons 里写的 3 / 5），角色目录里没有 talent-e.webp；
- * ③ 立绘用 imgs/splash.webp，不是 character-img/ 那套（后者是别的功能的同人插画）。
- */
+ * ③ 立绘用 imgs/splash.webp，不是 character-img/ 那套（后者是别的功能的同人插画）。 */
 function charImgs (char: any): Record<string, string> {
   const base = `assets/meta-gs/character/${assetSeg(char.name)}/`
   const talentCons = char.talentCons || {}
@@ -332,10 +183,10 @@ const ATTR_TABLE: Array<[string, string]> = [
 const DMG_ATTRS: Array<[string, string]> = [['dmg', 'pct'], ['phy', 'pct'], ['heal', 'pct']]
 
 /* 面板属性名 —— 中文下跟 miao 出图用字对齐。
-   ⚠️ 别改用 KEY_TITLE / artiLabel 那两张表：它们给的是「大生命 / 大攻击 / 充能效率」（圣遗物卡片要区分
-     大小词条），而面板是属性总值、不区分。
-   ⚠️ 也不能照抄上游模板那张（`hp:'生命值' … dmg:'伤害加成'`）：它只有 dmg、没有 phy/heal，
-     沿用 `dmg:'伤害加成'` 会把元素/物理/治疗三个名字合并成一个（实测芭芭拉 65.9% 显成「伤害加成」）。 */
+ * ⚠️ 别改用 KEY_TITLE / artiLabel 那两张表：它们给的是「大生命 / 大攻击 / 充能效率」（圣遗物卡片要区分
+ *   大小词条），而面板是属性总值、不区分。
+ * ⚠️ 也不能照抄上游模板那张（`hp:'生命值' … dmg:'伤害加成'`）：它只有 dmg、没有 phy/heal，
+ *   沿用 `dmg:'伤害加成'` 会把元素/物理/治疗三个名字合并成一个（实测芭芭拉 65.9% 显成「伤害加成」）。 */
 const ATTR_TITLE_ZH: Record<string, string> = {
   hp: '生命值', atk: '攻击力', def: '防御力', mastery: '元素精通',
   cpct: '暴击率', cdmg: '暴击伤害', recharge: '元素充能',
@@ -382,71 +233,6 @@ export function attrTableOf (profile: Pick<MiaoProfile, 'attr' | 'base'>, locale
   /* 前七项恒为满行：miao 模板是死循环那张表，缺项的属性也照样出一行 0.0%，行高和对齐才稳定（别 continue）。
      末尾三种加成**只按权重表出行**（理由见 DMG_ATTRS 的注释）。 */
   return [...ATTR_TABLE.map(makeRow), ...DMG_ATTRS.filter(([key]) => (charWeight[key] || 0) > 0).map(makeRow)]
-}
-
-/** 圣遗物位置：1 花 2 羽 3 沙 4 杯 5 冠 */
-export function slotLabel (pos: number, locale: string): string {
-  return i18n.slotName(pos, locale) || ['', '生之花', '死之羽', '时之沙', '空之杯', '理之冠'][pos] || `#${pos}`
-}
-
-/* 圣遗物素材图：`imgs/<套装官方中文名>/<部位>.webp`。部位 1=花 2=羽 3=沙 4=杯 5=头（见 Artifact.pos）。 */
-function artifactIcon (setNameZh: string | null | undefined, pos: number): string | null {
-  return setNameZh ? `assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
-}
-
-/** 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
- *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
-function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: Artifact | undefined, locale: string, raw: unknown) {
-  const posName = slotLabel(pos, locale)
-  if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
-
-  const setNameZh = marked.set || ''
-  /* 初始副词条条数：3 = 初始三词条、4 = 初始四词条（见 Artifact.quality）。
-     只认这两个值 —— 别的一律当「不知道」：夹具里 roll 条数与等级不自洽会算出负数/2，
-     老数据缺 appendPropIds 会算出 0。页面就不画角标，建议层也不算它。 */
-  const initRaw = artifact?.quality()
-  const initSubs = initRaw === 3 || initRaw === 4 ? initRaw : null
-  const enka = enkaNumsOf(artifact)                 // 显示数值：优先 enka 原始 statValue，内核重算的只兜底
-  const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
-  const subs = (marked.attrs || [])
-    .filter(x => x.key)
-    .map(x => ({
-      key: x.key,
-      label: artiLabel(x.key, locale),
-      value: attrValueText(x.key, x.value, rawSub.get(x.key), enka.sub.get(x.key)),
-      upNum: x.upNum || 0,
-      eff: x.eff ?? '-',                             // 词条有效率：miao 算好的百分比串，'-' = 非有效词条
-      _mark: x._mark ?? null,
-      point: statPoint(x._mark)                      // 单条词条的原始 miao 分（未缩放），前端按 46.6/600*_mark 显示
-    }))
-
-  return {
-    pos,
-    posName,
-    empty: false,
-    name: (artifact?.nameHash && i18n.name(artifact.nameHash, locale)) || marked.name,
-    nameZh: marked.name,
-    setName: (artifact?.setHash && i18n.setNameByHash(artifact.setHash, locale)) || setNameZh,
-    setNameZh,
-    level: marked.level,
-    star: artifact?.star ?? 5,
-    /* 初始 3 / 4 词条，不知道该件时 null（页面不画角标） */
-    initSubs,
-    mark: marked.mark,                               // 给眼睛看的串（1 位小数）
-    markValue: marked._mark || 0,                    // 给进度环用（0..70 的原始分）
-    markClass: marked.markClass,
-    icon: artifactIcon(setNameZh, pos),            // 404 时前端用占位图
-    main: marked.main?.key
-      ? {
-          key: marked.main.key,
-          label: artiLabel(marked.main.key, locale),
-          value: attrValueText(marked.main.key, marked.main.value, rawMain, enka.main),
-          _mark: marked.main._mark ?? null,
-          point: statPoint(marked.main._mark)
-        }
-      : null,
-    subs
-  }
 }
 
 /* 词条按权重分三档，页面靠这个类名上色（miao 卡片的「有效/无效词条」规则） */

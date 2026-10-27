@@ -360,7 +360,7 @@ for (const side of ['upstream', 'kernel', 'common']) {
 const DOMAINS = ['account', 'character']
 const LAYERS: Array<{ dir: string, suffix: string, plain: string[] }> = [
   { dir: 'rest', suffix: '.rest.ts', plain: ['meta.ts', 'reply.ts'] },
-  { dir: 'service', suffix: '.service.ts', plain: ['context.ts'] },
+  { dir: 'service', suffix: '.service.ts', plain: ['context.ts', 'advice.ts', 'artifact.service.ts'] },
   { dir: 'repository', suffix: '.repo.ts', plain: [] }
 ]
 for (const { dir, suffix, plain } of LAYERS) {

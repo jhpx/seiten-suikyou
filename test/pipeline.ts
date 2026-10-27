@@ -821,7 +821,7 @@ const dmgRowsOf = (rows: AttrRow[]): AttrRow[] => rows.filter((r) => DMG3.includ
  *   分界下方（0.0315*100 = 3.1499999999999995），照样舍反。所以必须在这一层做十进制舍入。
  * ⚠️ 「非分界值」那组是防手抖的：舍入写宽一点（比如四舍五入到 2 位再截）会让每一行都 +0.1。 */
 console.log('\n=== 12. 百分比的显示舍入（float32 噪声 / 半分界）===')
-const { attrValueText } = await import('../src/service/character.service.ts')
+const { attrValueText } = await import('../src/service/artifact.service.ts')
 {
   /* [key, 内核已格式化好的串, 内核的裸数字, 期望, 这是什么档位] —— 裸数字都是真实档位算出来的原值 */
   const cases: Array<[string, string, number, string, string]> = [
