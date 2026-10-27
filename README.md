@@ -342,7 +342,7 @@ seiten-suikyou/
 │   ├── bootstrap.js          #   入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
 │   ├── core.js               #   基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
 │   ├── roster.js             #   feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
-│   ├── filter.js             #   feature：筛选条 = 排序｜视图切换｜漏斗多选面板（元素 / 评分 / 权重）
+│   ├── filter.js             #   feature：筛选条 = 排序｜视图切换｜漏斗多选面板（稀有度 / 元素 / 圣遗物套装 / 评价等级 / 评价权重）
 │   ├── sort.js               #   feature：多条件排序（至多 3 字段的排序链）
 │   ├── detail.js             #   feature：角色明细画布 + 缩放
 │   ├── i18n.js               #   feature：loadMeta / 切语言 / 静态文案

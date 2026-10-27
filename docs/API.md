@@ -37,7 +37,7 @@
 
 取值见 `/api/meta` 返回的 `locales`。不传或传错 → 退回默认语言（当前 `chs` 简体中文）。
 候选：`chs` / `cht` / `en` / `ja` / `ko`（别名也收：`zh-cn`、`zh-tw`、`jp`、`kr` 等，见 `common/names.ts` 的 `ALIASES`）。
-但注意：元素名（`elemText`）、敌人名（`enemyName`）只有 miao 的中文，不随 locale 切换。
+但注意：敌人名（`enemyName`）只有 miao 的中文，不随 locale 切换；元素名（`elemText`）已按 locale 本地化（七元素在 `common/ui.ts` 的 ui 表里）。
 
 ### 1.4 限流
 

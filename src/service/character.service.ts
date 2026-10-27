@@ -162,6 +162,13 @@ function charImgs (char: any): Record<string, string> {
    elem 本来就叫 pyro/cryo/…，直接当文件名用。只有旅行者是 multi、没有对应图，按上游兜底取 hydro。 */
 const ELEM_BG = new Set(['pyro', 'hydro', 'anemo', 'electro', 'dendro', 'cryo', 'geo'])
 const elemOf = (elem: string): string => (ELEM_BG.has(elem) ? elem : 'hydro')
+/* 元素名按 locale 走 ui 表（七元素全收）；key 不在表里的未知元素回落到 miao 的中文单字 */
+const ELEM_UI: Record<string, string> = {
+  pyro: 'elemPyro', hydro: 'elemHydro', cryo: 'elemCryo', electro: 'elemElectro',
+  anemo: 'elemAnemo', geo: 'elemGeo', dendro: 'elemDendro'
+}
+const elemNameLocalized = (elem: string, loc: string): string =>
+  (ELEM_UI[elem] ? i18n.uiText(ELEM_UI[elem], loc) : '') || Format.elemName(elem)
 
 /* 面板属性表 —— 顺序和键照抄 miao 模板的 attrMap（profile-detail.html:46）：每项三列（总值 / 基础值 / 绿字） */
 const ATTR_TABLE: Array<[string, string]> = [
@@ -403,7 +410,7 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     cons: profile.cons ?? 0,
     fetter: profile.fetter ?? null,
     elem,
-    elemText: Format.elemName(elem),          // 元素名暂时只有 miao 的中文单字（i18n 表没收录元素，不想为它多同步一轮）
+    elemText: elemNameLocalized(elem, loc),    // 元素名按 locale 走 ui 表（七元素全收），未知元素回落 miao 中文单字
     elemBg: `assets/common/bg/bg-${elemOf(elem)}.webp`,
     /* 首页角色卡的两张图（明细页用不到）：星级底色、左上角元素图标。两个 URL 都在此拼好、前端不自己拼路径 */
     rarityBg: `assets/common/item/bg${char.star === 4 ? 4 : 5}.png`,
