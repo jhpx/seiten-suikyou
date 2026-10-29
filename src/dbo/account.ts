@@ -10,10 +10,10 @@
  *    怎么算交给上游层（domain 不碰 node:crypto）。
  */
 import { num, str } from '../common/util.ts'
-import type { Character } from './character.ts'
+import type { CharacterDbo } from './character.ts'
 import type { EnkaPlayerInfo } from './enka.ts'
 
-export class Account {
+export class AccountDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）。数字 number|null，字符串缺了就是 null。 */
   uid: number | null
   nickname: string | null
@@ -24,7 +24,7 @@ export class Account {
   nameCard: number | null
   payloadHash: string | null
   fetchedAt: string | null
-  characters: Character[]
+  characters: CharacterDbo[]
 
   constructor ({
     uid, nickname, level, worldLevel, signature,
@@ -33,7 +33,7 @@ export class Account {
     /* 外部原始值一律 unknown（enka JSON / DB 列）；num() / str() 在这儿归一（唯一的一次） */
     uid?: unknown; nickname?: unknown; level?: unknown; worldLevel?: unknown; signature?: unknown
     avatarIcon?: unknown; nameCard?: unknown; payloadHash?: unknown; fetchedAt?: unknown
-    characters?: Character[]
+    characters?: CharacterDbo[]
   } = {}) {
     this.uid = num(uid)
     this.nickname = str(nickname)
@@ -49,8 +49,8 @@ export class Account {
 
   /* enka 的 playerInfo → Account（不含 characters 与 payloadHash ——
      前者由调用方按 avatarInfoList 挂上，后者是上游层算的指纹）。 */
-  static ofEnka (info: EnkaPlayerInfo, uid: number): Account {
-    return new Account({
+  static ofEnka (info: EnkaPlayerInfo, uid: number): AccountDbo {
+    return new AccountDbo({
       uid,
       nickname: info.nickname,
       level: info.level,

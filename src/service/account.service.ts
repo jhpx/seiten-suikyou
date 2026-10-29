@@ -10,13 +10,13 @@ import type { Db } from '../config/db.ts'
 import * as repo from '../config/store.ts'
 import { ArtisMark } from '../index.ts'
 import { i18n } from '../index.ts'
-import { toMiaoProfile } from '../kernel/materialize.ts'
-import type { Account } from '../domain/account.ts'
-import type { EnkaPayload } from '../domain/enka.ts'
-import { fetchEnka } from '../upstream/enka.ts'
-import type { FetchEnkaOpts } from '../upstream/enka.ts'
-import { ingestPayload } from '../upstream/enka-account.ts'
-import type { IngestResult } from '../upstream/enka-account.ts'
+import { toMiaoProfile } from '../gateway/miao/materialize.ts'
+import type { AccountDbo } from '../dbo/account.ts'
+import type { EnkaPayload } from '../dbo/enka.ts'
+import { fetchEnka } from '../gateway/enka/enka.ts'
+import type { FetchEnkaOpts } from '../gateway/enka/enka.ts'
+import { ingestPayload } from '../gateway/enka/enka-account.ts'
+import type { IngestResult } from '../gateway/enka/enka-account.ts'
 import { errMessage, fmtTime } from '../common/util.ts'
 import { buildAdvice } from './advice.ts'
 import type { AdviceBundle } from './advice.ts'
@@ -57,7 +57,7 @@ export function countAccounts (db: Db): number {
  *  不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 —— 新角色先于 miao 更新是常态。
  *  fetchedAt 是 UID 级（= 上次同步 enka，通常取 fetch_log 最新一条）；角色各自的在 shapeCharacter 里出。 */
 export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }: {
-  account: Account | null
+  account: AccountDbo | null
   locale?: string
   fetchedAt?: string | null
 }) {

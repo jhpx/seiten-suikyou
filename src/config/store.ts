@@ -15,14 +15,14 @@ import * as characterBo from '../repository/character.repo.ts'
 import type { AccountRow } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
 import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from './schema.ts'
-import { Account } from '../domain/account.ts'
-import { Character } from '../domain/character.ts'
-import { Weapon } from '../domain/weapon.ts'
-import { Artifact } from '../domain/artifact.ts'
+import { AccountDbo } from '../dbo/account.ts'
+import { CharacterDbo } from '../dbo/character.ts'
+import { WeaponDbo } from '../dbo/weapon.ts'
+import { ArtifactDbo } from '../dbo/artifact.ts'
 
 /* ---------------- 行 ↔ 对象 ---------------- */
 
-function accountRow (a: Account, stamp?: string): typeof accountT.$inferInsert {
+function accountRow (a: AccountDbo, stamp?: string): typeof accountT.$inferInsert {
   return {
     uid: a.uid!,
     nickname: a.nickname,
@@ -36,9 +36,9 @@ function accountRow (a: Account, stamp?: string): typeof accountT.$inferInsert {
   }
 }
 
-const accountOf = (row: AccountRow): Account => new Account(row)
+const accountOf = (row: AccountRow): AccountDbo => new AccountDbo(row)
 
-function characterRow (c: Character, stamp?: string): typeof characterT.$inferInsert {
+function characterRow (c: CharacterDbo, stamp?: string): typeof characterT.$inferInsert {
   return {
     uid: c.uid!,
     avatarId: c.avatarId!,
@@ -53,10 +53,10 @@ function characterRow (c: Character, stamp?: string): typeof characterT.$inferIn
   }
 }
 
-const characterOf = (row: CharacterRow, weapon: Weapon, artifacts: Artifact[]): Character =>
-  new Character({ ...row, weapon, artifacts })
+const characterOf = (row: CharacterRow, weapon: WeaponDbo, artifacts: ArtifactDbo[]): CharacterDbo =>
+  new CharacterDbo({ ...row, weapon, artifacts })
 
-function weaponRow (c: Character): typeof weaponT.$inferInsert {
+function weaponRow (c: CharacterDbo): typeof weaponT.$inferInsert {
   return {
     uid: c.uid!,
     avatarId: c.avatarId!,
@@ -68,9 +68,9 @@ function weaponRow (c: Character): typeof weaponT.$inferInsert {
   }
 }
 
-const weaponOf = (row: WeaponRow | undefined): Weapon => new Weapon(row ?? {})
+const weaponOf = (row: WeaponRow | undefined): WeaponDbo => new WeaponDbo(row ?? {})
 
-function artifactRow (a: Artifact, uid: number, avatarId: number): typeof artifactT.$inferInsert {
+function artifactRow (a: ArtifactDbo, uid: number, avatarId: number): typeof artifactT.$inferInsert {
   return {
     uid,
     avatarId,
@@ -88,18 +88,18 @@ function artifactRow (a: Artifact, uid: number, avatarId: number): typeof artifa
 }
 
 /* JSON 列读回来是普通对象，交给 constructor 换成 Stat（那里顺带把字符串数值归一成 number） */
-const artifactOf = (row: ArtifactRow): Artifact =>
-  new Artifact({ ...row, subStats: row.subStats ?? [] })
+const artifactOf = (row: ArtifactRow): ArtifactDbo =>
+  new ArtifactDbo({ ...row, subStats: row.subStats ?? [] })
 
 /* ---------------- 写 ---------------- */
 
 /** 账号那一行。合并式：本次没值的列保留库里旧值（语义在 repository/account.repo.ts 的 mergeAccount） */
-export function saveAccount (db: Conn, a: Account, stamp?: string): void {
+export function saveAccount (db: Conn, a: AccountDbo, stamp?: string): void {
   accountBo.mergeAccount(db, accountRow(a, stamp))
 }
 
 /** 一个角色 = 三张表的行整块重写（数据是整包来的，见 repository/character.repo.ts 的 replaceCharacter） */
-export function saveCharacter (db: Conn, c: Character, stamp?: string): void {
+export function saveCharacter (db: Conn, c: CharacterDbo, stamp?: string): void {
   const uid = c.uid!
   const avatarId = c.avatarId!
 
@@ -111,7 +111,7 @@ export function saveCharacter (db: Conn, c: Character, stamp?: string): void {
 }
 
 export interface SaveFetchArgs {
-  account: Account
+  account: AccountDbo
   source?: string
   stamp?: string
   ttl?: number | null
@@ -154,7 +154,7 @@ export function logFailure (db: Conn, { uid, source = 'enka', note = '', stamp =
 /* ---------------- 读 ---------------- */
 
 /** 只读账号那一行（不带角色）。列表页 / 页脚只要昵称等级时用它 */
-export function loadAccount (db: Conn, uid: number): Account | null {
+export function loadAccount (db: Conn, uid: number): AccountDbo | null {
   const row = accountBo.findAccount(db, uid)
   return row ? accountOf(row) : null
 }
@@ -168,13 +168,13 @@ export function listCharacterIds (db: Conn, uid: number): number[] {
 }
 
 /* 一批角色连武器带圣遗物 —— 固定三条查询（不按角色数 N+1），子行在内存里按 avatarId 分组 */
-function loadCharacters (db: Conn, uid: number, avatarIds: number[]): Character[] {
+function loadCharacters (db: Conn, uid: number, avatarIds: number[]): CharacterDbo[] {
   if (!avatarIds.length) return []
 
   const rows = new Map(characterBo.findCharacters(db, uid, avatarIds).map(r => [r.avatarId, r]))
   const weapons = new Map(characterBo.findWeapons(db, uid, avatarIds).map(r => [r.avatarId, r]))
 
-  const artifacts = new Map<number, Artifact[]>()
+  const artifacts = new Map<number, ArtifactDbo[]>()
   for (const row of characterBo.findArtifacts(db, uid, avatarIds)) {
     const list = artifacts.get(row.avatarId) || []
     list.push(artifactOf(row))
@@ -189,7 +189,7 @@ function loadCharacters (db: Conn, uid: number, avatarIds: number[]): Character[
 }
 
 /** 读一个角色（带武器与圣遗物） */
-export function loadCharacter (db: Conn, uid: number, avatarId: number): Character | null {
+export function loadCharacter (db: Conn, uid: number, avatarId: number): CharacterDbo | null {
   return loadCharacters(db, uid, [avatarId])[0] ?? null
 }
 
@@ -197,12 +197,12 @@ export function loadCharacter (db: Conn, uid: number, avatarId: number): Charact
  * 读整个账号：账号行 + 名下的角色们（Account 是聚合根）。库里连账号带角色都没有 → null，上层据此回 404。
  * avatarIds 给了就只读那几个（页面按需加载），不给读全部。
  */
-export function loadAccountWithCharacters (db: Conn, uid: number, avatarIds: number[] | null = null): Account | null {
+export function loadAccountWithCharacters (db: Conn, uid: number, avatarIds: number[] | null = null): AccountDbo | null {
   const ids = avatarIds && avatarIds.length ? avatarIds : listCharacterIds(db, uid)
   const characters = loadCharacters(db, uid, ids)
   const account = loadAccount(db, uid)
   if (!account && !characters.length) return null
-  const merged = account || new Account({ uid })
+  const merged = account || new AccountDbo({ uid })
   merged.characters = characters
   return merged
 }

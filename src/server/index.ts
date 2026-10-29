@@ -11,8 +11,7 @@
  *   domain/      领域模型：Account / Character / Weapon / Artifact
  *   config/      存储基建：constants（全局默认值）+ schema / db / store（表定义、连接、聚合读写）
  *   repository/  一张表一行：account.repo.ts / character.repo.ts
- *   upstream/    对外部数据源：抓取（enka）+ 原始响应翻译成实体（enka-account）
- *   kernel/      对 miao 评分内核：materialize（实体 → profile）、damage（伤害出口）
+ *   gateway/     外部系统隔离：miao/ 引擎适配（materialize 实体→profile、damage 伤害）+ enka/ 抓取（原始响应→实体）
  *   common/      i18n（多语言门面）、names（官方文案表）、ui（界面文案）、util
  *
  * 装配顺序：cors 必须在限流前（预检不占配额），静态托管必须在路由后

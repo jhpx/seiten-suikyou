@@ -72,7 +72,7 @@ export const isIntegerStatKey = (key: string): boolean => {
 
 /* 一条词条 = 类型 + 数值。类型用 enka 的字符串 prop 表示 —— 和 `sub_stats` 落库的形状一致，
    存读对称、不用来回换名；拿 miao 短 key 走 `key` getter（内核的词汇，只在显示/对数值时用）。 */
-export class Stat {
+export class StatDbo {
   /* 字段必须显式声明（TS 不从 constructor 的 `this.x = ...` 反推） */
   prop: string
   value: number | null

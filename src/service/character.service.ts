@@ -5,7 +5,7 @@
  * 与 account.service.ts 对照：那边管账号层（列表 / 详情 / 抓取 / 账号整包视图）。
  * 词条标题、百分比舍入、面板文本这些「怎么显示」的规则，以及单件圣遗物卡片
  * （statLabel / attrValueText / artiLabel / artifactOf …），已经抽到
- * artifact.service.ts —— 那是个只引 kernel / domain / common 的叶子，本文件单向引它，
+ * artifact.service.ts —— 那是个只引 gateway / domain / common 的叶子，本文件单向引它，
  * 避免 character → artifact → character 的环。
  * 账号域只借用 common/util.ts 的 fmtTime。
  *
@@ -13,15 +13,15 @@
  * 由 rest 层决定回 404 还是别的。
  */
 import { ArtisMark, Format, i18n, Weapon as MiaoWeapon } from '../index.ts'
-import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
-import type { MiaoProfile } from '../kernel/materialize.ts'
-import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf, artifactMaxLevel } from '../kernel/simulate.ts'
-import type { SimDraft } from '../kernel/simulate.ts'
-import { calcDamage } from '../kernel/damage.ts'
-import { Artifact, setMaxStar } from '../domain/artifact.ts'
-import { Weapon } from '../domain/weapon.ts'
-import { isIntegerStatKey } from '../domain/stat.ts'
-import { Character } from '../domain/character.ts'
+import { toMiaoProfile, deriveTalent } from '../gateway/miao/materialize.ts'
+import type { MiaoProfile } from '../gateway/miao/materialize.ts'
+import { buildSimProfile, mainKeysOf, promoteOf, simCatalog, subAttrKeys, artifactNameOf, artifactMaxLevel } from '../gateway/miao/simulate.ts'
+import type { SimDraft } from '../gateway/miao/simulate.ts'
+import { calcDamage } from '../gateway/miao/damage.ts'
+import { ArtifactDbo, setMaxStar } from '../dbo/artifact.ts'
+import { WeaponDbo } from '../dbo/weapon.ts'
+import { isIntegerStatKey } from '../dbo/stat.ts'
+import { CharacterDbo } from '../dbo/character.ts'
 import type { Db } from '../config/db.ts'
 import * as repo from '../config/store.ts'
 import { fmtTime } from '../common/util.ts'
@@ -285,7 +285,7 @@ export function classTitleOf (result: MarkDetail | null | undefined): string {
 
 /** 一个角色 → 视图对象：`ch` 是领域模型（含武器与圣遗物），`profile` 来自 toMiaoProfile，
  *  `result` 是 ArtisMark.getMarkDetail(profile, true) 的结果，`locale` 认不出会退回默认语言 */
-export function shapeCharacter (ch: Character, profile: MiaoProfile, result: MarkDetail, locale: string = i18n.DEFAULT_LOCALE) {
+export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: MarkDetail, locale: string = i18n.DEFAULT_LOCALE) {
   const loc = i18n.resolveLocale(locale)
   const char = profile.char
   const artifactsByPos = new Map((ch.artifacts || []).map(a => [a.pos, a] as const))
@@ -321,7 +321,7 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
     for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
   }
   /* enka 侧的同一套加法在模型上做（Artifact.subStatTotals），显示优先用它（与游戏同口径） */
-  const enkaAll = Artifact.subStatTotals(ch.artifacts)
+  const enkaAll = ArtifactDbo.subStatTotals(ch.artifacts)
   const allAttr = Array.from({ length: 9 }, (_, i) => {
     const a = allAttrRaw[i]
     if (!a || !a.key) return {}
@@ -349,8 +349,8 @@ export function shapeCharacter (ch: Character, profile: MiaoProfile, result: Mar
   }))
 
   /* 武器：图标 + 主/副属性 + 精炼描述，全来自 miao 的 Weapon 元数据（上游是 Avatar.getWeaponDetail()，
-     我们没搬 Avatar，照它的逻辑重算）。`Weapon.get()` 认不出时返回 `false`（不是 null/undefined）——
-     先归一到 `Weapon | null`，后面 `wObj?.xxx` 才不会在 `false` 上报错。 */
+     我们没搬 Avatar，照它的逻辑重算）。`WeaponDbo.get()` 认不出时返回 `false`（不是 null/undefined）——
+     先归一到 `WeaponDbo | null`，后面 `wObj?.xxx` 才不会在 `false` 上报错。 */
   const wObj = ch.weapon.equipped ? (MiaoWeapon.get(ch.weapon.itemId) || null) : null
   /* 数组而不是 Record：**名字必须由后端按 locale 给**（statLabel），前端不该再存一张
      硬编码中文表 —— 那张表既不全（没有基础攻击力）、叫法也不标准（「爆伤」「精通」）。 */
@@ -482,7 +482,7 @@ export interface DamageView {
 }
 
 /*
- * 一个角色 → 伤害表视图对象。内部就是 materialize 桥 + calcDamage（见 kernel/damage.ts），
+ * 一个角色 → 伤害表视图对象。内部就是 materialize 桥 + calcDamage（见 gateway/miao/damage.ts），
  * 本函数只做「给页面用的整形」：数值按 miao 出图的口径格式化（Format.comma(v, 0)）、
  * buff 串按冒号拆成两列。
  *
@@ -492,7 +492,7 @@ export interface DamageView {
  *
  * ⚠️ 敌人名（enemyName）只有 miao 的中文（'小宝'），和 elemText 一个情况：内核没给别的语言。
  */
-export async function damageOf (ch: Character): Promise<DamageView | null> {
+export async function damageOf (ch: CharacterDbo): Promise<DamageView | null> {
   const profile = toMiaoProfile(ch)
   if (!profile) return null
   const dmg = await calcDamage(profile)
@@ -524,7 +524,7 @@ export async function damageOf (ch: Character): Promise<DamageView | null> {
  * ⚠️ 形状是**领域语义**（套装名 + 部位 + 词条数值），不是内核 id：
  *   内核那套 append_prop_ids 编码（一个 roll 一段）是 enka 的抓取格式，
  *   人手填的「暴击率 20%」没有对应的编码 —— 直接给数值更贴近人话，
- *   数值由内核按 attrMap 的基准值自己算（见 kernel/simulate.ts）。
+ *   数值由内核按 attrMap 的基准值自己算（见 gateway/miao/simulate.ts）。
  */
 export interface SimRequest {
   /** 武器：null / 不传 = 沿用角色当前武器 */
@@ -626,7 +626,7 @@ export async function characterSim (db: Db, uid: number, avatarId: number, req: 
  *   人工件没有（用户给的是最终值，内核那边已经算好了），所以留空 ——
  *   shapeCharacter 显示副词条时优先用 enka 值，没有就退回内核值，正好是人工件要的。
  */
-function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): Character {
+function simCharacterOf (ch: CharacterDbo, profile: MiaoProfile, draft: SimDraft): CharacterDbo {
   const artifacts = (ch.artifacts || []).map(a => {
     const spec = (draft.artifacts || []).find(s => s.pos === a.pos)
     if (!spec) return a
@@ -634,7 +634,7 @@ function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): 
     if (!name) return a
     /* 套装名 → 官方文案 hash（本地化用）；查不到就 null，显示层会退回中文名 */
     const setHash = i18n.hashOfZh(spec.set)
-    return new Artifact({
+    return new ArtifactDbo({
       pos: a.pos,
       itemId: a.itemId,
       levelRaw: spec.level,
@@ -649,7 +649,7 @@ function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): 
   })
 
   const weapon = draft.weapon
-    ? new Weapon({
+    ? new WeaponDbo({
         itemId: draft.weapon.itemId,
         /* 武器中文名从 miao 元数据反查（草稿里只带 id —— 名字是显示层的事，不该由前端传）。
            `MiaoWeapon.get` 认不出时返回 false（不是 null），先归一再用。 */
@@ -660,7 +660,7 @@ function simCharacterOf (ch: Character, profile: MiaoProfile, draft: SimDraft): 
       })
     : ch.weapon
 
-  return new Character({
+  return new CharacterDbo({
     uid: ch.uid,
     avatarId: ch.avatarId,
     level: ch.level,
@@ -712,7 +712,7 @@ export function simCatalogOf (db: Db, uid: number, avatarId: number, locale: str
   const loc = i18n.resolveLocale(locale)
   return {
     /* 武器：名字走 i18n（官方文案），查不到退回 miao 元数据里的中文名。
-       affixText + affixVals 是精炼效果的「模板 + 数值表」（见 kernel 里那段的说明）；
+       affixText + affixVals 是精炼效果的「模板 + 数值表」（见 gateway/miao 里那段的说明）；
        main / sub 是主副属性按等级档位各给一份，弹窗右侧那栏显示用。 */
     weapons: raw.weapons.map(w => {
       /* 副属性 key 走武器那张修正表：miao 给 atkPct，标准叫法是 atk（攻击力%） */

@@ -13,7 +13,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { DEFAULT_LOCALE } from '../config/constants.ts'
-import { KEY_TO_PROP } from '../domain/stat.ts'
+import { KEY_TO_PROP } from '../dbo/stat.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TABLE = path.join(HERE, '..', '..', 'vendor', 'i18n', 'names.json')

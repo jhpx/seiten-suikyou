@@ -12,7 +12,7 @@
  *   但「有效率 / 强化命中次数」这类 roll 过程的衍生信息在人工件上没有意义，
  *   故 upNum 固定 1、eff 固定 0（页面显示为 '-'）。
  */
-import { Artifact as MiaoArtifact, ArtifactSet, Artis, ArtisAttr, Attr, Meta, Weapon as MiaoWeapon } from '../index.ts'
+import { Artifact as MiaoArtifact, ArtifactSet, Artis, ArtisAttr, Attr, Meta, Weapon as MiaoWeapon } from '../../index.ts'
 import type { MiaoProfile } from './materialize.ts'
 
 /* ───────────────────────── 草稿形状 ───────────────────────── */

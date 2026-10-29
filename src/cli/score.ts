@@ -14,13 +14,13 @@ import type { MarkDetail } from '../service/character.service.ts'
 import { fmtTime } from '../common/util.ts'
 import { openDb } from '../config/db.ts'
 import * as repo from '../config/store.ts'
-import { ingestPayload } from '../upstream/enka-account.ts'
-import type { IngestResult } from '../upstream/enka-account.ts'
-import { fetchEnka } from '../upstream/enka.ts'
-import { toMiaoProfile, deriveTalent } from '../kernel/materialize.ts'
-import type { MiaoProfile } from '../kernel/materialize.ts'
-import type { Character } from '../domain/character.ts'
-import type { EnkaPayload } from '../domain/enka.ts'
+import { ingestPayload } from '../gateway/enka/enka-account.ts'
+import type { IngestResult } from '../gateway/enka/enka-account.ts'
+import { fetchEnka } from '../gateway/enka/enka.ts'
+import { toMiaoProfile, deriveTalent } from '../gateway/miao/materialize.ts'
+import type { MiaoProfile } from '../gateway/miao/materialize.ts'
+import type { CharacterDbo } from '../dbo/character.ts'
+import type { EnkaPayload } from '../dbo/enka.ts'
 import { argValue, parseArgs } from '../common/util.ts'
 import { DEFAULT_DB_FILE } from '../config/constants.ts'
 
@@ -63,7 +63,7 @@ const padW = (value: unknown, cols: number): string => {
 const charName = (profile: MiaoProfile, locale: string): string =>
   i18n.avatarName(profile.id, locale) || profile.char.name
 
-function renderCharacter (character: Character, profile: MiaoProfile, result: MarkDetail, locale: string): string {
+function renderCharacter (character: CharacterDbo, profile: MiaoProfile, result: MarkDetail, locale: string): string {
   const char = profile.char
   const out: string[] = []
   const ui = (key: string): string => uiText(key, locale)
@@ -194,7 +194,7 @@ async function main () {
 
   /* ---- 3. 打分 ---- */
   const charFilter = argValue(args.char)
-  const results: Array<{ character: Character; profile: MiaoProfile; result: MarkDetail }> = []
+  const results: Array<{ character: CharacterDbo; profile: MiaoProfile; result: MarkDetail }> = []
   const skipped: Array<number | null> = []
   for (const character of account.characters) {
     const profile = toMiaoProfile(character)

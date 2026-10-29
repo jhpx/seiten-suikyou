@@ -8,8 +8,8 @@
  */
 /* fightPropMap 的键是游戏协议写死的 prop id（2000 = 最终生命……）；第三列是「换算到 miao 口径」
    要乘的系数 —— 百分比那边 enka 给小数、miao 给百分数，所以要 ×100。 */
-import type { EnkaAvatarInfo, EnkaPayload } from '../src/domain/enka.ts'
-import type { MiaoProfile } from '../src/kernel/materialize.ts'
+import type { EnkaAvatarInfo, EnkaPayload } from '../src/dbo/enka.ts'
+import type { MiaoProfile } from '../src/gateway/miao/materialize.ts'
 
 const FIGHT_PROPS: Array<[string, string, number]> = [
   ['2000', 'hp', 1],

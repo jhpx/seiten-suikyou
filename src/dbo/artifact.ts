@@ -8,7 +8,7 @@
  * 而 `subStats` 是 enka **合过**的那一份、只能用于显示；`mainPropId` 是数字 id（14001）；
  * 库里只存 id 与原始值，**不存名字**（名字是多语言的）。
  */
-import { Stat } from './stat.ts'
+import { StatDbo } from './stat.ts'
 import type { EnkaEquip } from './enka.ts'
 import { num } from '../common/util.ts'
 
@@ -24,7 +24,7 @@ const POS_BY_EQUIP_TYPE: Record<string, number> = {
 /* 兜底：部件 id 的第 4 位编了槽位，是 miao `Artifact.get()` 里 [4,2,5,1,3][name[3]-1] 的逆映射 */
 const POS_BY_ID_DIGIT: Record<string, number> = { 4: 1, 2: 2, 5: 3, 1: 4, 3: 5 }
 
-export class Artifact {
+export class ArtifactDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）*/
   pos: number | null
   itemId: number | null
@@ -33,7 +33,7 @@ export class Artifact {
   mainPropId: number | null
   appendPropIds: number[]
   mainStatValue: number | null
-  subStats: Stat[]
+  subStats: StatDbo[]
   nameHash: number | null
   setHash: number | null
 
@@ -42,10 +42,10 @@ export class Artifact {
     mainStatValue, subStats, nameHash, setHash
   }: {
     /* 外部原始值一律 unknown；num() 在这儿归一到 number|null，唯一的一次。
-       两个数组字段（enka 给 Stat 实例、库行给普通对象）因此收两种形状。 */
+       两个数组字段（enka 给 StatDbo 实例、库行给普通对象）因此收两种形状。 */
     pos?: unknown; itemId?: unknown; levelRaw?: unknown; star?: unknown; mainPropId?: unknown
     appendPropIds?: number[]; mainStatValue?: unknown
-    subStats?: Array<Stat | { prop: string; value: unknown }>
+    subStats?: Array<StatDbo | { prop: string; value: unknown }>
     nameHash?: unknown; setHash?: unknown
   }) {
     this.pos = num(pos)                          // 1 花 2 羽 3 沙 4 杯 5 头
@@ -56,19 +56,19 @@ export class Artifact {
     this.appendPropIds = appendPropIds || []     // 副词条逐次 roll 的 id → 喂内核（保序保重复）
     this.mainStatValue = num(mainStatValue)      // enka 原始主词条数值 → 显示
     /* 副词条 → 显示，不喂内核。库行读回来的是普通对象、enka 给的是 Stat —— 一律换成 Stat */
-    this.subStats = (subStats || []).map(s => (s instanceof Stat ? s : new Stat(s.prop, s.value)))
+    this.subStats = (subStats || []).map(s => (s instanceof StatDbo ? s : new StatDbo(s.prop, s.value)))
     this.nameHash = num(nameHash)                // 本件名字的官方文案 key
     this.setHash = num(setHash)                  // 套装名文案 key（同套 5 件共用一个）
   }
 
   /** enka 的一件装备 → Artifact；不是圣遗物（比如武器）、或位置认不出 → null */
-  static ofEnka (equip: EnkaEquip | null | undefined): Artifact | null {
+  static ofEnka (equip: EnkaEquip | null | undefined): ArtifactDbo | null {
     if (!equip?.reliquary) return null
     const relq = equip.reliquary
     const pos = POS_BY_EQUIP_TYPE[equip.flat?.equipType ?? ''] ||
       POS_BY_ID_DIGIT[String(equip.itemId)[3]] || null
     if (!pos) return null
-    return new Artifact({
+    return new ArtifactDbo({
       pos,
       itemId: equip.itemId,
       levelRaw: relq.level ?? 0,
@@ -81,7 +81,7 @@ export class Artifact {
          与 reliquary.appendPropIdList（逐次 roll、保序保重复）不是一回事 —— 两份都要留。 */
       subStats: (equip.flat?.reliquarySubstats || [])
         .filter(s => s && s.appendPropId)
-        .map(s => new Stat(s.appendPropId as string, s.statValue)),
+        .map(s => new StatDbo(s.appendPropId as string, s.statValue)),
       nameHash: equip.flat?.nameTextMapHash,
       setHash: equip.flat?.setNameTextMapHash
     })
@@ -107,7 +107,7 @@ export class Artifact {
 
   /* 一批圣遗物的副词条按 key 累加（页面「有效词条汇总」用）。
      ⚠️ **只给显示**：内核靠 appendPropIds 的重复次数算词条数，喂它这份汇总会把词条数抹掉。 */
-  static subStatTotals (artifacts: Artifact[] | null | undefined): Map<string, number> {
+  static subStatTotals (artifacts: ArtifactDbo[] | null | undefined): Map<string, number> {
     const out = new Map<string, number>()
     for (const a of artifacts || []) {
       for (const s of a.subStats || []) {

@@ -21,20 +21,20 @@ import { account as accountT, artifact as artifactT, character as characterT, we
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
-import { ingestPayload } from '../src/upstream/enka-account.ts'
-import { toMiaoProfile } from '../src/kernel/materialize.ts'
-import type { MiaoProfile } from '../src/kernel/materialize.ts'
+import { ingestPayload } from '../src/gateway/enka/enka-account.ts'
+import { toMiaoProfile } from '../src/gateway/miao/materialize.ts'
+import type { MiaoProfile } from '../src/gateway/miao/materialize.ts'
 import { shapeCharacter } from '../src/service/character.service.ts'
 import type { AttrRow, MarkDetail } from '../src/service/character.service.ts'
-import { Artifact } from '../src/domain/artifact.ts'
-import { Weapon } from '../src/domain/weapon.ts'
-import { Account } from '../src/domain/account.ts'
+import { ArtifactDbo } from '../src/dbo/artifact.ts'
+import { WeaponDbo } from '../src/dbo/weapon.ts'
+import { AccountDbo } from '../src/dbo/account.ts'
 /* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
    本文件两个都要用，所以把**我们的**那个按仓库惯例（materialize.ts 用 Miao* 前缀）
    反过来标成 Domain*，`Character` 依旧指 miao 的图鉴类。 */
-import { Character as DomainCharacter } from '../src/domain/character.ts'
-import type { EnkaEquip, EnkaPayload } from '../src/domain/enka.ts'
-import { Stat, enkaPropKey, ENKA_PROP_TO_KEY } from '../src/domain/stat.ts'
+import { CharacterDbo as DomainCharacter } from '../src/dbo/character.ts'
+import type { EnkaEquip, EnkaPayload } from '../src/dbo/enka.ts'
+import { StatDbo, enkaPropKey, ENKA_PROP_TO_KEY } from '../src/dbo/stat.ts'
 import { diffPanels } from './panel-check.ts'
 
 let failed = 0
@@ -209,7 +209,7 @@ ok(coreLevelOf(1) === 0, 'enka 的 1（0 级）→ 内核 0', `实际 ${coreLeve
 /* quality = 初始副词条条数 —— 5★ 下就靠它区分「初始三词条(3) / 初始四词条(4)」。
    为什么不能拿下面那份夹具来测：夹具是为**算分**造的，roll 条数与等级并不自洽
    （满级 21 却只给 4 条 roll），对它调 quality() 会得到负数。所以在这儿按真实档位单独造。 */
-const fakeArtifact = (levelRaw: number, rollCount: number): Artifact => new Artifact({
+const fakeArtifact = (levelRaw: number, rollCount: number): ArtifactDbo => new ArtifactDbo({
   pos: 1, itemId: 80540, levelRaw, star: 5, mainPropId: mainIdOf('hpPlus'),
   appendPropIds: Array.from({ length: rollCount }, () => rollIdsOf('cdmg')[0]),
   mainStatValue: 4780, subStats: []
@@ -274,16 +274,16 @@ console.log('\n=== 2b. 类型归一只在 constructor 做一次（之后字段�
    把这些断言拆掉，就得在别处补一堆防御式 num，类型也就谈不上「固定」了。 */
 
 /* ① 脏值直接进 constructor */
-const dirtyArt = new Artifact({
+const dirtyArt = new ArtifactDbo({
   pos: '1', itemId: '91501', levelRaw: '21', star: '5', mainPropId: '14001',
   mainStatValue: '4780',
-  subStats: [new Stat('FIGHT_PROP_HP_PERCENT', '46.6')],
+  subStats: [new StatDbo('FIGHT_PROP_HP_PERCENT', '46.6')],
   nameHash: '123', setHash: undefined
 })
 ok(dirtyArt.mainStatValue === 4780, '字符串主词条值 → number（constructor 归一）',
   `实际 ${JSON.stringify(dirtyArt.mainStatValue)}`)
 ok(dirtyArt.levelRaw === 21 && dirtyArt.pos === 1, '字符串等级 / 位置 → number')
-ok(dirtyArt.subStats[0].value === 46.6, 'Stat 的字符串值 → number')
+ok(dirtyArt.subStats[0].value === 46.6, 'StatDbo 的字符串值 → number')
 ok(dirtyArt.setHash === null, '缺字段（undefined）→ null，不是 0 / NaN',
   `实际 ${JSON.stringify(dirtyArt.setHash)}`)
 
@@ -415,7 +415,7 @@ const defCols = (t: SQLiteTable): string[] => getTableConfig(t).columns.map(c =>
   const fresh = openDb(':memory:')
   for (const [table, def, label] of [
     ['account', accountT, 'Account'], ['character', characterT, 'Character'],
-    ['weapon', weaponT, 'Weapon'], ['artifact', artifactT, 'Artifact']
+    ['weapon', weaponT, 'Weapon'], ['artifact', artifactT, 'ArtifactDbo']
   ] as const) {
     ok(JSON.stringify(builtCols(fresh, table)) === JSON.stringify(defCols(def)),
       `空库 ${table} 的列 == schema.ts 里 ${label} 那几列`,
@@ -917,7 +917,7 @@ console.log('\n=== 13. 圣遗物显示用 enka 原始数值（不走内核重算
      而且出口哪天开始调方法就会当场炸 —— 构造回模型才是造夹具的正路。 */
   const noEnka = new DomainCharacter({
     ...row,
-    artifacts: row.artifacts.map(a => new Artifact({ ...a, mainStatValue: null, subStats: [] }))
+    artifacts: row.artifacts.map(a => new ArtifactDbo({ ...a, mainStatValue: null, subStats: [] }))
   })
   const fallback = shapeCharacter(noEnka, toMiaoProfile(noEnka)!, scoreOf(noEnka)!, 'chs')
   const fbMain = fallback.artifacts.find(x => x.pos === 1)?.main?.value

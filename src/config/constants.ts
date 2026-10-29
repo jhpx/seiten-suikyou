@@ -2,7 +2,7 @@
  * 全局默认值 —— 换机器、换部署要动的值集中在这儿：语言、库路径、监听地址、上游源、超时、限流。
  *
  * 这里的值一律只是**默认值**：命令行参数与环境变量优先，覆盖逻辑分别在
- * `server/index.ts`、`upstream/enka.ts`、`server/rate-limit.ts` 里。
+ * `server/index.ts`、`gateway/enka/enka.ts`、`server/rate-limit.ts` 里。
  */
 import path from 'node:path'
 

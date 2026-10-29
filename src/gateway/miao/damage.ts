@@ -9,7 +9,7 @@
  *   → DmgBuffs（武器 + 圣遗物套装 + 角色 buff）→ DmgAttr.calcAttr 逐条施加
  *   → DmgCalc.getDmgFn 按各区乘区公式出 { dmg, avg }
  */
-import { ProfileDmg } from '../index.ts'
+import { ProfileDmg } from '../../index.ts'
 import type { MiaoProfile } from './materialize.ts'
 
 /** 一条伤害 —— calcData 返回里的 ret[i] */

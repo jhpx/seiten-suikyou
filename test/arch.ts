@@ -235,37 +235,37 @@ for (const f of ['icon_charge_efficiency.svg', 'icon_critical_hurt.svg', 'icon_h
 ok(/stroke-width="\.3"/.test(fs.readFileSync(path.join(SVG_DIR, 'icon_ice_add_hurt.svg'), 'utf8')),
   'icon_ice_add_hurt.svg 保留 stroke-width（冰花枝的粗细靠它）')
 
-// ─────────────────────────────── 7. 领域层不许反向依赖外层；共用件零依赖
-console.log('\n=== 7. 领域层（src/domain）只描述「是什么」，不依赖任何外层 ===')
+// ─────────────────────────────── 7. dbo 不许反向依赖外层；共用件零依赖
+console.log('\n=== 7. 数据库对象层（src/dbo）只描述「是什么」，不依赖任何外层 ===')
 
-/* 领域模型是最内层（domain/artifact.ts、domain/stat.ts）。它存在的意义正是
+/* 数据库对象是最内层（dbo/artifact.ts、dbo/stat.ts）。它存在的意义正是
    「让内存里的形状不再由 DB 列名决定」，所以它**不许**反过来知道：
-   DB 列名（repository）、上游响应（upstream）、miao 内核（kernel）、接口形状（service / rest）。
+   DB 列名（repository）、外部系统（gateway：miao 引擎 / enka 响应）、接口形状（service / rest）。
    一旦引了，它就退化成「跟着存储列名走的数据袋」—— 那正是它要解决的问题。
    能引的只有两种：同目录（`./xxx.ts`）、以及更底一层的 `../common/util.ts` ——
-   后者是纯 TS 零依赖（下面断死），不会把运行环境或外层概念带进领域层。
+   后者是纯 TS 零依赖（下面断死），不会把运行环境或外层概念带进数据库对象层。
    ⚠️ 只放 `util.ts` 一个文件进来，**不是整个 common/**：names.ts 要读 vendor 文案表、
-   还反过来问 domain 要 KEY_TO_PROP，引它等于把 IO 拽进领域层。 */
-const DOMAIN_DIR = path.join(ROOT, 'src', 'domain')
+   还反过来问 dbo 要 KEY_TO_PROP，引它等于把 IO 拽进数据库对象层。 */
+const DBO_DIR = path.join(ROOT, 'src', 'dbo')
 const COMMON_DIR = path.join(ROOT, 'src', 'common')
 const UTIL_FILE = path.join(COMMON_DIR, 'util.ts')
 const UTIL_SPEC = /^\.\.\/common\/util\.ts$/
-const domainFiles = fs.readdirSync(DOMAIN_DIR).filter(f => f.endsWith('.ts')).sort()
-ok(domainFiles.length > 0, `src/domain 下有 ${domainFiles.length} 个领域模型文件`)
-const domainOffenders = []
-for (const f of domainFiles) {
-  for (const [spec, line] of specifiersOf(path.join(DOMAIN_DIR, f))) {
-    const where = `src/domain/${f}:${line}`
+const dboFiles = fs.readdirSync(DBO_DIR).filter(f => f.endsWith('.ts')).sort()
+ok(dboFiles.length > 0, `src/dbo 下有 ${dboFiles.length} 个数据库对象文件`)
+const dboOffenders = []
+for (const f of dboFiles) {
+  for (const [spec, line] of specifiersOf(path.join(DBO_DIR, f))) {
+    const where = `src/dbo/${f}:${line}`
     if (spec.startsWith('./') || UTIL_SPEC.test(spec)) continue
-    domainOffenders.push(`${where} 引了外层/外部：${spec}`)
+    dboOffenders.push(`${where} 引了外层/外部：${spec}`)
   }
 }
-ok(domainOffenders.length === 0,
-  'src/domain 只引同目录与 src/common/util.ts（不碰 repository / config / upstream / kernel / service / rest / miao / 三方包）')
-for (const o of domainOffenders.slice(0, 20)) console.log('        ' + o)
+ok(dboOffenders.length === 0,
+  'src/dbo 只引同目录与 src/common/util.ts（不碰 repository / config / gateway / service / rest / miao / 三方包）')
+for (const o of dboOffenders.slice(0, 20)) console.log('        ' + o)
 
-/* util 反过来必须**零依赖** —— 领域层引它，所以它一条 import 都不能有：
-   引了 `node:` 就把运行环境带进领域层（`payload_hash` 的 crypto 之所以留在 upstream/，
+/* util 反过来必须**零依赖** —— dbo 层引它，所以它一条 import 都不能有：
+   引了 `node:` 就把运行环境带进 dbo 层（`payload_hash` 的 crypto 之所以留在 gateway/enka/，
    就是这个道理），引了任何 src 模块则等于开了条绕过分层的后门。
    common/ 里另外三个不受这条约束：names.ts 天生要读 vendor/i18n/names.json，
    ui.ts 是纯数据表，i18n.ts 是两张表的门面（谁也不引它，它引那两张）。
@@ -294,24 +294,24 @@ const configToSrc = specifiersOf(CONFIG_FILE).filter(([spec]) => spec.startsWith
 ok(configToSrc.length === 0, 'config/constants.ts 只放默认值（不引任何 src 模块）')
 for (const [spec, line] of configToSrc) console.log(`        src/config/constants.ts:${line} → ${spec}`)
 
-// ────────────────────────── 8. 分层：server(+cli) → rest → service → repository → domain
-console.log('\n=== 8. 分层方向（server / rest → service → repository → domain，只能从上往下引）===')
+// ────────────────────────── 8. 分层：server(+cli) → rest → service → repository → dbo
+console.log('\n=== 8. 分层方向（server / rest → service → repository → dbo，只能从上往下引）===')
 
 /* 当前形状：
  *     server/      装配（createApp / startServer / CLI 入口）+ URL 表 + 限流   ← 与 cli/ 平级
  *     rest/        控制器：一个资源一个文件，直接平铺，外加 params / reply 两个共用件
  *     service/     用例编排 + 视图组装 + 能力契约（context）
- *     domain/      领域模型        repository/  仓储 + DAO
- *     upstream/    抓取 + 原始响应 → 实体      kernel/  实体 → miao profile → 评分 / 伤害
+ *     dbo/         数据库对象        repository/  仓储 + DAO
+ *     gateway/     外部系统隔离：miao/ 引擎适配（实体 → miao profile → 评分 / 伤害）+ enka/ 抓取（原始响应 → 实体）
  *     common/      字典与纯函数
  *
  * 拆目录本身没有约束力 —— 只要 controller 能顺手 `import * as repo`，分层当晚就会塌回去。
  * 所以这里把方向钉死，五条最容易被违反的：
- *   ① repository 不碰任何上层（server / rest / service / upstream / kernel）；
+ *   ① repository 不碰任何上层（server / rest / service / gateway）；
  *   ② service 不碰 server / rest（业务层不该知道 HTTP 存在，判空就返回 null / 判别结果）；
  *   ③ rest 不碰 server —— 装配与路由在外层，控制器不该反过来看它，也不能自己起服务 / 托管静态；
  *      控制器还不直接引 repository / service，只认 context 给的那组用例能力；
- *   ④ upstream / kernel 是**叶子适配层**：只认识 domain / common / 三方，不向上引；
+ *   ④ gateway 是**叶子适配层**：只认识 dbo / common / 三方，不向上引；
  *   ⑤ repository 不许反向引 ../config/store.ts（存储门面引 repository，再引回去就成环）。
  * 反过来允许：server → rest / service（装配点要 openDb、要接能力集；例外只开给这一个目录）。 */
 const SRC = path.join(ROOT, 'src')
@@ -344,13 +344,13 @@ function importsInto (files: string[], layer: string, except: string[] = []): st
   return out
 }
 
-for (const layer of ['server', 'rest', 'service', 'repository', 'domain', 'config']) {
+for (const layer of ['server', 'rest', 'service', 'repository', 'dbo', 'config']) {
   ok(fs.existsSync(path.join(SRC, layer)), `src/${layer}/ 是分层目录之一`)
 }
 /* server 与 cli 是并列的两个进程入口，缺一个都说不通 */
 ok(fs.existsSync(path.join(SRC, 'cli')), 'src/cli/ 与 src/server/ 并列（命令行入口 / HTTP 入口）')
-/* 三个横向件：不参与竖向流水线，位置固定 */
-for (const side of ['upstream', 'kernel', 'common']) {
+/* 三个横向件：不参与竖向流水线，位置固定。gateway 封住外部系统（miao 引擎 + enka 数据源） */
+for (const side of ['gateway', 'common']) {
   ok(fs.existsSync(path.join(SRC, side)), `src/${side}/ 是横向件目录之一`)
 }
 /* 三层按**领域**对照 —— 同一个领域在 rest / service / repository 各有一个文件，后缀写明层。
@@ -381,8 +381,7 @@ const repoFiles = [
   ...tsFiles(path.join(SRC, 'config'))
 ]
 const serviceFiles = tsFiles(path.join(SRC, 'service'))
-const upstreamFiles = tsFiles(path.join(SRC, 'upstream'))
-const kernelFiles = tsFiles(path.join(SRC, 'kernel'))
+const gatewayFiles = tsFiles(path.join(SRC, 'gateway'))
 const REST = path.join(SRC, 'rest')
 const restFiles = tsFiles(REST)
 /* 控制器 = rest 顶层那几个文件（一个资源一个）；reply 是共用件，按名字排除 */
@@ -398,10 +397,9 @@ const repoUp = [
   ...importsInto(repoFiles, 'server'),
   ...importsInto(repoFiles, 'rest'),
   ...importsInto(repoFiles, 'service'),
-  ...importsInto(repoFiles, 'upstream'),
-  ...importsInto(repoFiles, 'kernel')
+  ...importsInto(repoFiles, 'gateway')
 ]
-ok(repoUp.length === 0, 'repository / config 只往下（不引 server / rest / service / upstream / kernel）')
+ok(repoUp.length === 0, 'repository / config 只往下（不引 server / rest / service / gateway）')
 for (const o of repoUp.slice(0, 20)) console.log('        ' + o)
 
 const sideUp = (files: string[]): string[] => [
@@ -413,13 +411,9 @@ const sideUp = (files: string[]): string[] => [
   ...importsInto(files, 'config', [path.join(SRC, 'config', 'constants.ts')])
 ]
 
-const upUp = sideUp(upstreamFiles)
-ok(upUp.length === 0, 'upstream 是叶子适配层（不引 server / rest / service / repository / config 存储；constants 除外）')
-for (const o of upUp.slice(0, 20)) console.log('        ' + o)
-
-const kerUp = sideUp(kernelFiles)
-ok(kerUp.length === 0, 'kernel 是叶子适配层（不引 server / rest / service / repository / config 存储；constants 除外）')
-for (const o of kerUp.slice(0, 20)) console.log('        ' + o)
+const gwUp = sideUp(gatewayFiles)
+ok(gwUp.length === 0, 'gateway 是叶子适配层（不引 server / rest / service / repository / config 存储；constants 除外）')
+for (const o of gwUp.slice(0, 20)) console.log('        ' + o)
 
 const svcUp = [...importsInto(serviceFiles, 'server'), ...importsInto(serviceFiles, 'rest')]
 ok(svcUp.length === 0, 'service 不引 server / rest（业务层不懂 HTTP）')

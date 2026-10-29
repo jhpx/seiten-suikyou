@@ -16,7 +16,7 @@
 import { num } from '../common/util.ts'
 import type { EnkaEquip } from './enka.ts'
 
-export class Weapon {
+export class WeaponDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）—— 五个字段统统 number|null */
   itemId: number | null
   nameHash: number | null
@@ -39,19 +39,19 @@ export class Weapon {
 
   /* 「没装备武器」的那一个 —— 全 null，别拿 0 充数（0 级 / 精 0 都不是合法状态）。
      出口要显示默认值时自己 `?? 1`（见 kernel/materialize.ts）。 */
-  static none (): Weapon { return new Weapon() }
+  static none (): WeaponDbo { return new WeaponDbo() }
 
   /* 到底装没装 —— 只看 itemId 有没有值（装备着但名字查不到 ≠ 没装：前者 enka 照样给 level/promote/affix） */
   get equipped (): boolean { return this.itemId !== null && this.itemId !== undefined }
 
   /** enka 的 equipList → Weapon；没装备武器 → none() */
-  static ofEnka (equipList: EnkaEquip[] | null | undefined): Weapon {
+  static ofEnka (equipList: EnkaEquip[] | null | undefined): WeaponDbo {
     const w = (equipList || []).find(e => e.flat?.itemType === 'ITEM_WEAPON')
-    if (!w) return Weapon.none()
+    if (!w) return WeaponDbo.none()
     /* enka 的 affixMap 是「额外精炼次数」（精1 存 0 或不存）→ +1 才是 1~5。
        +1 是**业务语义**不是类型转换，所以留在 ofEnka；类型归一到 constructor 为止。 */
     const affix = num(Object.values(w.weapon?.affixMap || {})[0])
-    return new Weapon({
+    return new WeaponDbo({
       itemId: w.itemId,
       nameHash: w.flat?.nameTextMapHash,
       level: w.weapon?.level,

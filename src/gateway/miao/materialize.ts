@@ -7,8 +7,8 @@
  * ⚠️ 入参是我们自己的领域模型 Character，不是 miao 的同名类 —— 所以这里把 miao 的两个同名类
  *    显式改名成 `Miao*` 以示区分。
  */
-import { Artis, Artifact as MiaoArtifact, Attr, Character as MiaoCharacter, Weapon as MiaoWeapon } from '../index.ts'
-import type { Character } from '../domain/character.ts'
+import { Artis, Artifact as MiaoArtifact, Attr, Character as MiaoCharacter, Weapon as MiaoWeapon } from '../../index.ts'
+import type { CharacterDbo } from '../../dbo/character.ts'
 
 /*
  * miao 内核的 profile —— **计算出口的形状**，我方与 miao 之间唯一的约定：
@@ -64,7 +64,7 @@ export function deriveTalent (char: any, skillLevelMap: Record<string, number> |
 }
 
 /** 一个角色（领域模型）→ miao profile；角色不被 miao 认识时返回 null */
-export function toMiaoProfile (character: Character): MiaoProfile | null {
+export function toMiaoProfile (character: CharacterDbo): MiaoProfile | null {
   const char = MiaoCharacter.get(character.avatarId)
   if (!char) return null
 
@@ -123,7 +123,7 @@ export function toMiaoProfile (character: Character): MiaoProfile | null {
 }
 
 /** 批量：一批角色 → 一批 profile，顺手把不认识的角色挑出来（skipped） */
-export function toMiaoProfiles (characters: Character[]): { profiles: MiaoProfile[]; skipped: Array<number | null> } {
+export function toMiaoProfiles (characters: CharacterDbo[]): { profiles: MiaoProfile[]; skipped: Array<number | null> } {
   const profiles: MiaoProfile[] = []
   const skipped: Array<number | null> = []
   for (const character of characters) {

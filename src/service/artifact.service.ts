@@ -1,7 +1,7 @@
 /*
  * 圣遗物与词条「显示口径」叶子 —— 角色面板与圣遗物卡共用的显示原语 + 单件圣遗物卡片。
  *
- * 为什么单独成一个叶子（只引 kernel / domain / common，不回头引任何 service）：
+ * 为什么单独成一个叶子（只引 gateway / domain / common，不回头引任何 service）：
  * 圣遗物卡（artifactOf）依赖 statLabel / KEY_TITLE 这套「显示脊柱」，而 character.service.ts
  * 的 shapeCharacter 又反过来依赖 artifactOf —— 若把圣遗物卡搬走、却把显示脊柱留在
  * character.service.ts，就会形成 character → artifact → character 的环。
@@ -10,8 +10,8 @@
  * 这里**不出现状态码**，也不碰任何业务编排；纯「给定一个领域模型 / miao 结果，怎么显示」。
  */
 import { ArtisMark, Format, i18n, Artifact as MiaoArtifact } from '../index.ts'
-import { Artifact } from '../domain/artifact.ts'
-import { isIntegerStatKey } from '../domain/stat.ts'
+import { ArtifactDbo } from '../dbo/artifact.ts'
+import { isIntegerStatKey } from '../dbo/stat.ts'
 import { num } from '../common/util.ts'
 
 /* miao 自己的词条中文标题（含 `pyro → 火伤加成` 这类元素名，由 Format.eachElem 生成）。
@@ -115,7 +115,7 @@ export function rawNumsOf (artisEntry: any): { main: unknown; sub: Map<string, u
 
 /** 从一件圣遗物（模型）取 enka 的原始数值，按 miao key 归拢 —— 显示数值的第一来源。
  *  主词条只有一个 key、由调用方用 `marked.main.key` 定位，不在这儿再解一遍；副词条的 key 走 Stat.key。 */
-export function enkaNumsOf (artifact: Artifact | null | undefined): { main: number | null; sub: Map<string, number> } {
+export function enkaNumsOf (artifact: ArtifactDbo | null | undefined): { main: number | null; sub: Map<string, number> } {
   const sub = new Map<string, number>()
   for (const stat of artifact?.subStats || []) {
     if (stat.key && stat.value !== null) sub.set(stat.key, stat.value)
@@ -182,7 +182,7 @@ export function artifactIcon (setNameZh: string | null | undefined, pos: number)
 
 /** 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
  *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
-export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: Artifact | undefined, locale: string, raw: unknown) {
+export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: ArtifactDbo | undefined, locale: string, raw: unknown) {
   const posName = slotLabel(pos, locale)
   if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
 
