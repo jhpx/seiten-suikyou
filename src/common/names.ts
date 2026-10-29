@@ -13,7 +13,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { DEFAULT_LOCALE } from '../config/constants.ts'
-import { KEY_TO_PROP } from '../dbo/stat.ts'
+import { KEY_TO_PROP } from './stat.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TABLE = path.join(HERE, '..', '..', 'vendor', 'i18n', 'names.json')
@@ -110,7 +110,7 @@ export function slotName (pos: number | string, locale: string = DEFAULT_LOCALE)
   return pick(load().slots[String(pos)], resolveLocale(locale))
 }
 
-/** 词条：吃 miao 的短名（cpct / cdmg / hpPlus …）。key → FIGHT_PROP_* 的映射在 domain/stat.ts
+/** 词条：吃 miao 的短名（cpct / cdmg / hpPlus …）。key → FIGHT_PROP_* 的映射在 common/stat.ts
  *  （那边是对数值用的正确方向，这儿只是拿去官方文案表查名）。 */
 export function statName (miaoKey: string, locale: string = DEFAULT_LOCALE): string | null {
   const prop = KEY_TO_PROP[miaoKey]

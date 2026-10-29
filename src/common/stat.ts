@@ -1,5 +1,5 @@
 /*
- * 词条（stat）—— 领域层
+ * 词条词汇表 —— 词条（stat）的三套名字对照。
  *
  * 同一个东西有三套名字，混一次就会把大生命当成小生命。这里把三套名字摆在**同一张表**里，一行就是一条词条：
  *
@@ -7,15 +7,14 @@
  *   enka 的字符串 prop（FIGHT_PROP_HP_PERCENT）   网络上的形状，也是库里 sub_stats 存的形状
  *   miao 的短 key（hp）                           内核内部的键，显示层一直用它
  *
+ * 这是**词汇表**，不是数据库对象 —— 和 names.ts（官方文案表）同类，被 repository/dbo/stat.ts 的 StatDbo 类
+ * 和 names.ts 的 statName 共同依赖。所以放在 common/（最底层叶子），不让存储层的对象反向依赖它。
+ *
  * ⚠️ 方向坑：**不带 _PERCENT 的是固定值** —— `FIGHT_PROP_HP` 是固定生命（满级花主词条
  *    4780）、对应 miao 的 `hpPlus`（小生命）；`FIGHT_PROP_HP_PERCENT`（46.6%）才对应 `hp`（大生命）。
- *    atk / def 同理，三对都这样。反着记不会报错、查名也照样对（官方这两条都叫「生命值」），
- *    但一旦拿它对数值，大生命就被指到固定值那一列上了。对数值的判据是 miao 自己的
- *    `mainIdMap`（14001 → hpPlus、15002 → hp）。
- *
+ *    atk / def 同理，三对都这样。
  * ⚠️ 这张表**只用于对数值 / 查名**，不参与算分 —— 评分 100% 走内核，内核自己从 id 解析。
  */
-import { num } from '../common/util.ts'
 
 const STAT_TYPES = {
   HP:                { prop: 'FIGHT_PROP_HP',                key: 'hpPlus'   },
@@ -50,7 +49,7 @@ export const ENKA_PROP_TO_KEY = Object.fromEntries(
   Object.values(STAT_TYPES).map(t => [t.prop, t.key]))
 
 /* miao key → enka prop。两个消费者：本文件的 isIntegerStatKey（判整数口径）、
-   src/common/names.ts 的 statName（拿 prop 去官方文案表查名）。
+   names.ts 的 statName（拿 prop 去官方文案表查名）。
    ⚠️ 这个方向是**唯一正确**的（hp → ..._PERCENT）；反着写不会报错、查名也照样对，
    但一旦拿它对数值就把大生命指到了固定值那一列。 */
 export const KEY_TO_PROP = Object.fromEntries(
@@ -63,26 +62,8 @@ export const enkaPropKey = (prop: string): string | null => ENKA_PROP_TO_KEY[pro
 const FIXED_PROPS = new Set([StatType.HP, StatType.ATTACK, StatType.DEFENSE])
 
 /* 一个 miao key 在游戏里是不是「整数口径」—— 固定值三项 + 元素精通。
-   显示层用它决定收整到 0 位还是按百分比舍 1 位（见 service/character.service.ts 的 attrValueText）：
-   这四类一律显整数，不存在「209.1」这种值。 */
+   显示层用它决定收整到 0 位还是按百分比舍 1 位：这四类一律显整数，不存在「209.1」这种值。 */
 export const isIntegerStatKey = (key: string): boolean => {
   const prop = KEY_TO_PROP[key]
   return prop === StatType.ELEMENTAL_MASTERY || FIXED_PROPS.has(prop)
-}
-
-/* 一条词条 = 类型 + 数值。类型用 enka 的字符串 prop 表示 —— 和 `sub_stats` 落库的形状一致，
-   存读对称、不用来回换名；拿 miao 短 key 走 `key` getter（内核的词汇，只在显示/对数值时用）。 */
-export class StatDbo {
-  /* 字段必须显式声明（TS 不从 constructor 的 `this.x = ...` 反推） */
-  prop: string
-  value: number | null
-
-  constructor (prop: string, value: unknown) {
-    this.prop = prop
-    /* 词条数值一律 number|null，在这儿转唯一的一次 —— 下游（subStatTotals / enkaNumsOf）直接信任它 */
-    this.value = num(value)
-  }
-
-  /** miao 短 key（cpct / hpPlus …）；认不出返回 null */
-  get key (): string | null { return enkaPropKey(this.prop) }
 }

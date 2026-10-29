@@ -15,10 +15,10 @@ import * as characterBo from '../repository/character.repo.ts'
 import type { AccountRow } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
 import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from './schema.ts'
-import { AccountDbo } from '../dbo/account.ts'
-import { CharacterDbo } from '../dbo/character.ts'
-import { WeaponDbo } from '../dbo/weapon.ts'
-import { ArtifactDbo } from '../dbo/artifact.ts'
+import { AccountDbo } from '../repository/dbo/account.ts'
+import { CharacterDbo } from '../repository/dbo/character.ts'
+import { WeaponDbo } from '../repository/dbo/weapon.ts'
+import { ArtifactDbo } from '../repository/dbo/artifact.ts'
 
 /* ---------------- 行 ↔ 对象 ---------------- */
 

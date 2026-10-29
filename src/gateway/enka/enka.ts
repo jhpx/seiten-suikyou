@@ -15,7 +15,7 @@
  */
 
 /* 本文件的返回值就是「enka 原始响应」= 领域层那份形状契约（纯类型，剥类型后不留运行时依赖） */
-import type { EnkaPayload } from '../../dbo/enka.ts'
+import type { EnkaPayload } from './enka-shape.ts'
 import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../../config/constants.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。

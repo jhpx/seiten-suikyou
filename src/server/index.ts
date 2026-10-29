@@ -7,12 +7,11 @@
  * 目录速查：
  *   server/      装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
  *   rest/        控制器：一个资源一个文件（account / character，.rest.ts 后缀）+ meta.ts / reply.ts 系统与共用件
- *   service/     用例编排 + 视图组装：account / character（.service.ts，领域三层对照）+ context.ts 契约
- *   domain/      领域模型：Account / Character / Weapon / Artifact
+ *   service/     用例编排 + 组装器 + 传输 dto：account / character / simulator（.service.ts）+ dto/ + assembler/ + context.ts 契约
  *   config/      存储基建：constants（全局默认值）+ schema / db / store（表定义、连接、聚合读写）
- *   repository/  一张表一行：account.repo.ts / character.repo.ts
- *   gateway/     外部系统隔离：miao/ 引擎适配（materialize 实体→profile、damage 伤害）+ enka/ 抓取（原始响应→实体）
- *   common/      i18n（多语言门面）、names（官方文案表）、ui（界面文案）、util
+ *   repository/  一张表一行（.repo.ts）+ dbo/ 数据库对象（Account / Character / Weapon / Artifact / Stat）
+ *   gateway/     外部系统隔离：miao/ 引擎适配（materialize 实体→profile、damage 伤害）+ enka/ 抓取与翻译（原始响应→dbo）
+ *   common/      i18n（多语言门面）、names（官方文案表）、stat（词条词汇表）、ui（界面文案）、util
  *
  * 装配顺序：cors 必须在限流前（预检不占配额），静态托管必须在路由后
  * （能命中接口的路径先被路由回掉，剩下的才当文件找）。
@@ -32,7 +31,8 @@ import { i18n } from '../index.ts'
 import { openDb } from '../config/db.ts'
 import { accountView, countAccounts, createIngestService, listAccounts } from '../service/account.service.ts'
 import type { FetchImpl } from '../service/account.service.ts'
-import { characterDamage, characterSim, simCatalogOf, weightFilterOptions } from '../service/character.service.ts'
+import { characterDamage, weightFilterOptions } from '../service/character.service.ts'
+import { characterSim, simCatalogOf } from '../service/simulator.service.ts'
 import { argValue, errMessage, parseArgs } from '../common/util.ts'
 import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../config/constants.ts'
 import { clientIp, createRateGate } from './rate-limit.ts'

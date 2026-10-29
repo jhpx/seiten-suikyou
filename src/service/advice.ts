@@ -10,9 +10,15 @@
 import { i18n } from '../index.ts'
 import { slotLabel } from './artifact.service.ts'
 import type { CharacterDto } from './dto/character.dto.ts'
+import { ADVICE_SORTS } from './dto/advice.dto.ts'
+import type { AdvicePiece, AdviceSet, AdviceSort, AdviceView } from './dto/advice.dto.ts'
 
 /** shapeCharacter 的产物 —— 建议层不重算评分，直接吃页面已经成型的那份 */
 export type AvatarView = CharacterDto
+export type AdviceBundle = AdviceView & { withSS: AdviceView }
+
+export { ADVICE_SORTS }
+export type { AdvicePiece, AdviceSet, AdviceSort, AdviceView }
 
 /**
  * 口径参数。这几个数都是可讨论的，别在调用点重复写死。
@@ -42,107 +48,6 @@ export const ADVICE_RULES = {
   topN: 8
 } as const
 
-/**
- * 四种排序口径 —— **同一批数据、四种问法**。
- *
- * 都回答「该先刷哪套」，只是各人心里的「该」不一样：想少开几个本就看综合，
- * 想清仓库就看次品多，想让最多人受益就看覆盖人数，想最快见效就看提升弹性。
- *
- * 名次全部在后端算好（见 `AdviceView.orders`），前端只按名字重画 ——
- * 比较逻辑留在这一层，页面上连一个 `<` 都不用写。加第五种就在这里加一个词。
- */
-export const ADVICE_SORTS = ['balance', 'junk', 'owners', 'boost'] as const
-export type AdviceSort = typeof ADVICE_SORTS[number]
-
-/** 一件圣遗物在建议里的样子 */
-export interface AdvicePiece {
-  avatarId: number | null
-  /** 角色名（跟 locale 走） */
-  name: string
-  pos: number
-  posName: string
-  /** 原始分（0~70，排序用） */
-  mark: number
-  /** 内核格式化好的串（1 位小数，页面直接用） */
-  markText: string
-  markClass: string
-  /** 这个角色身上属于该套装的件数：2 = 只吃 2 件套效果，4/5 = 想凑 4 件套 */
-  setCount: number
-  /**
-   * 这一行要给哪些部位画框（1~5）。装的是**本人身上凑够 2 件的套装**占的格子，包括本套。
-   *
-   * 散件（那套在他身上只有 1 件、吃不到套装效果）不在里面 —— 于是 4+1 与 2+2+1
-   * 都是四个框 + 一个散件空位。页面只拿到这张卡的件，看不到身上另外那套，所以位置由这里给。
-   */
-  framePos: number[]
-  /** 初始 3 / 4 词条（null = 这件认不出来，页面不画角标） */
-  initSubs: number | null
-  /**
-   * 拼凑件：这套是本人的「主套」但没穿满 5 件，缺的部位补一个 0 分的占位。
-   * 它和真件一样占一个格子、进成色条、进缺口（42 − 0），但：
-   *   · `markText` 固定 `---`（页面只画部位图 + 这个符号，不显示分数）
-   *   · `initSubs` 恒为 null —— 没有词条这回事，不能混进「初始三词条占比」
-   */
-  missing?: boolean
-}
-
-export interface AdviceSet {
-  nameZh: string
-  name: string
-  icon: string | null
-  /** 三档明细：bad = D/C/B，mid = A/S，good = SS。SSS 及以上不入任何一档 */
-  bad: AdvicePiece[]
-  mid: AdvicePiece[]
-  good: AdvicePiece[]
-  count: { bad: number; mid: number; good: number; total: number; owners: number }
-  /** ① 稀烂程度：Σ(42 − 单件分)，只算 SSS 以下的件。越烂越大，和件数天然相关 */
-  gap: number
-  /**
-   * ③ 均值落差：这套覆盖的角色，各自「自己的五件均值 − 自己最差件」的平均。
-   * 衡量的是「这帮人身上还有多少能靠换一件补回来」。
-   *
-   * ⚠️ 不用「套装内所有件的均值 − 套装最差件」：那个数会被件数带偏 ——
-   * 15 件的套天然比 3 件的套极差大（样本量效应），等于偷偷奖励大套。
-   */
-  drop: number
-  /**
-   * ④ 初始三词条占比：统计范围内的件里，初始只有 3 条副词条的白几成。
-   * 初始三词条比四词条少一次 roll（第 4 级那档被用来解锁第 4 条），本身天花板就低，
-   * 所以「这套全是三词条」= 池子废得更彻底 = 更该刷。
-   *
-   * ⚠️ 用占比不用件数：件数会跟 gap 重复计一次「池子大」，占比才只回答「有多烂」。
-   */
-  rough: number
-  /** 加权汇总得分（0~1）：四项各除以账号内最大值，再按 `weight` 相加 */
-  score: number
-  /** 这套在账号里出现过的最高星级 */
-  star: number
-  /** 有 5 星版本才刷得出来。false（如教官、战狂）只能换别的套装，排在最后 */
-  farmable: boolean
-}
-
-export interface AdviceView {
-  minLevel: number
-  /** 这份口径算不算 SS 件。页面上的「含 SS 件」开关就是切这个 */
-  includeSS: boolean
-  /**
-   * 四种排序各一份名次（套装 `nameZh`，**都已截到 `topN`**）。
-   *
-   * 页面顶上的排序切换就是换一条序列，`sets` 本身不动 —— 四份名次共用同一批对象，
-   * 所以多给三种排序几乎不涨字节（多出来的只有名字字符串）。
-   */
-  orders: Record<AdviceSort, string[]>
-  /** 全量套装（按「综合权衡」排好）。页面按 `orders` 里的名字来这里取 */
-  sets: AdviceSet[]
-}
-
-/**
- * 一份视图里带两种口径：`sets` 是**不含 SS** 的（页面默认口径），`withSS` 是含的。
- *
- * 两个都算一遍、一起下发，是因为口径只差「SS 件算不算」一个布尔，
- * 而算它需要的 avatars 就在手边 —— 让前端为一个开关再打一次整包请求不值当。
- */
-export type AdviceBundle = AdviceView & { withSS: AdviceView }
 
 /** 档位字母 → 三档。SSS 及以上不进任何一档：那已经不用刷了，算进「SS」只会虚高。 */
 const TIER_BY_CLASS: Record<string, 'bad' | 'mid' | 'good'> = {

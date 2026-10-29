@@ -10,8 +10,8 @@
  * 这里**不出现状态码**，也不碰任何业务编排；纯「给定一个领域模型 / miao 结果，怎么显示」。
  */
 import { ArtisMark, Format, i18n, Artifact as MiaoArtifact } from '../index.ts'
-import { ArtifactDbo } from '../dbo/artifact.ts'
-import { isIntegerStatKey } from '../dbo/stat.ts'
+import { ArtifactDbo } from '../repository/dbo/artifact.ts'
+import { isIntegerStatKey } from '../common/stat.ts'
 import { num } from '../common/util.ts'
 
 /* miao 自己的词条中文标题（含 `pyro → 火伤加成` 这类元素名，由 Format.eachElem 生成）。
@@ -62,7 +62,7 @@ export function statLabel (key: string, locale: string): string {
  *      显成 5.2%，而游戏按十进制四舍五入是 5.3%。enka 的 statValue 是**已乘 100 的十进制**（5.8、46.6），
  *      没有这个噪声 → 有 enka 值时直接 decRound 到 1 位；没有时才回去舍内核的 float32 裸数字。
  * ⚠️ 别把带千分位的串直接喂给 Format.comma —— 它内部是 `(num*1).toFixed(fix)`，Number('1,015.8') 是 NaN。
- *    先剥逗号再进。（「哪些词条是整数口径」的判据在 domain/stat.ts 的 isIntegerStatKey）
+ *    先剥逗号再进。（「哪些词条是整数口径」的判据在 common/stat.ts 的 isIntegerStatKey）
  */
 /* 十进制四舍五入前「推一把」的量，为什么需要见 decRound */
 const ROUND_NUDGE = 1e-9

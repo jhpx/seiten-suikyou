@@ -9,9 +9,8 @@
  * ⚠️ payloadHash（原始响应指纹）不是玩家属性，是「这一次抓取」的元信息，所以只在这儿**存着**，
  *    怎么算交给上游层（domain 不碰 node:crypto）。
  */
-import { num, str } from '../common/util.ts'
+import { num, str } from '../../common/util.ts'
 import type { CharacterDbo } from './character.ts'
-import type { EnkaPlayerInfo } from './enka.ts'
 
 export class AccountDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）。数字 number|null，字符串缺了就是 null。 */
@@ -45,19 +44,5 @@ export class AccountDbo {
     this.payloadHash = str(payloadHash) // 原始响应指纹：判断「内容有没有变」
     this.fetchedAt = str(fetchedAt)
     this.characters = characters
-  }
-
-  /* enka 的 playerInfo → Account（不含 characters 与 payloadHash ——
-     前者由调用方按 avatarInfoList 挂上，后者是上游层算的指纹）。 */
-  static ofEnka (info: EnkaPlayerInfo, uid: number): AccountDbo {
-    return new AccountDbo({
-      uid,
-      nickname: info.nickname,
-      level: info.level,
-      worldLevel: info.worldLevel,
-      signature: info.signature,
-      avatarIcon: info.profilePicture?.avatarID,
-      nameCard: info.nameCardId
-    })
   }
 }

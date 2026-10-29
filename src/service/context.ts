@@ -9,14 +9,13 @@
  */
 import type { MiddlewareHandler } from 'hono'
 
-import type { AccountSummary } from './account.service.ts'
-import type { DamageResult, SimCatalog, SimRequest, SimResult } from './character.service.ts'
+import type { AccountSummary, AccountView } from './dto/account.dto.ts'
+import type { DamageResult } from './dto/damage.dto.ts'
+import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
 import type { IngestResult } from '../gateway/enka/enka-account.ts'
-import { buildAccountView } from './account.service.ts'
 import { weightFilterOptions } from './character.service.ts'
 
-/** 一整包账号视图（类型从视图层推，控制器不另抄一份形状） */
-export type AccountView = ReturnType<typeof buildAccountView>
+export type { AccountView, AccountSummary }
 
 /* 模拟接口的入参 / 出参类型也一并从这里出去：控制器只认这份契约，
    直接 import service/character.service.ts 会被 arch 断言逮住（rest 不许引 service 实现）。 */

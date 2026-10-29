@@ -10,9 +10,9 @@
 import { createHash } from 'node:crypto'
 
 import { num } from '../../common/util.ts'
-import { AccountDbo } from '../../dbo/account.ts'
-import { CharacterDbo } from '../../dbo/character.ts'
-import type { EnkaPayload } from '../../dbo/enka.ts'
+import type { AccountDbo } from '../../repository/dbo/account.ts'
+import type { EnkaPayload } from './enka-shape.ts'
+import { accountFromEnka, characterFromEnka } from './enka-dbo.ts'
 
 export interface IngestResult {
   account: AccountDbo
@@ -29,14 +29,14 @@ export function ingestPayload (payload: EnkaPayload, { source = 'enka' }: { sour
   if (!uid) throw new Error('响应里找不到 uid')
   const avatars = payload.avatarInfoList || []
 
-  const account = AccountDbo.ofEnka(info, uid)
+  const account = accountFromEnka(info, uid)
   /* 指纹只算「会不会影响评分」的部分（ttl 这类每次都变的不算）。它是「这一次抓取」的元信息、
      不是玩家属性，而且要 node:crypto —— 所以留在这一层算，模型只负责存下来。 */
   account.payloadHash = createHash('sha1')
     .update(JSON.stringify({ info, list: avatars }))
     .digest('hex')
     .slice(0, 16)
-  account.characters = avatars.map(avatar => CharacterDbo.ofEnka(avatar, source))
+  account.characters = avatars.map(avatar => characterFromEnka(avatar, source))
   /* uid 是「这一包响应」的属性、不在单个角色的数据里，所以在这儿统一挂上（写库时它是主键的一部分） */
   for (const character of account.characters) character.uid = uid
 

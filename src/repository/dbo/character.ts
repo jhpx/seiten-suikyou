@@ -11,10 +11,9 @@
  * `skillLevelMap` 是 {天赋id: 等级}，a/e/q 的对应关系由 miao 元数据推、这里不猜；
  * 圣遗物原样交给 Artifact（它自己保证 appendPropIds 保序保重复）。
  */
-import { num } from '../common/util.ts'
+import { num } from '../../common/util.ts'
 import { WeaponDbo } from './weapon.ts'
 import { ArtifactDbo } from './artifact.ts'
-import type { EnkaAvatarInfo } from './enka.ts'
 
 export class CharacterDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）。
@@ -54,28 +53,5 @@ export class CharacterDbo {
     this.artifacts = artifacts
     this.source = source                 // 'enka' | 'mys' | ...（各源 level 基数不同）
     this.fetchedAt = fetchedAt
-  }
-
-  /* 武器与圣遗物各自另有表，Character 只描述自己那一行（三张表怎么拼是 repository 的事） */
-
-  /** enka 的一个 avatarInfo → Character（含武器与圣遗物） */
-  static ofEnka (info: EnkaAvatarInfo, source = 'enka'): CharacterDbo {
-    return new CharacterDbo({
-      avatarId: info.avatarId,
-      level: info.propMap?.['4001']?.val,
-      promote: info.propMap?.['1002']?.val,
-      cons: info.talentIdList ? info.talentIdList.length : 0,
-      fetter: info.fetterInfo?.expLevel,
-      costume: info.costumeId,
-      skillLevelMap: info.skillLevelMap || null,
-      weapon: WeaponDbo.ofEnka(info.equipList),
-      /* 武器（没有 reliquary）、位置认不出的装备，Artifact.ofEnka 返回 null → 滤掉；再按位置排好
-         （1花 2羽 3沙 4杯 5头，库里本来就按 pos 存）。 */
-      artifacts: (info.equipList || [])
-        .map(e => ArtifactDbo.ofEnka(e))
-        .filter((a): a is ArtifactDbo => a !== null)
-        .sort((a, b) => (a.pos ?? 0) - (b.pos ?? 0)),
-      source
-    })
   }
 }

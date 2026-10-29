@@ -11,8 +11,8 @@ import * as repo from '../config/store.ts'
 import { ArtisMark } from '../index.ts'
 import { i18n } from '../index.ts'
 import { toMiaoProfile } from '../gateway/miao/materialize.ts'
-import type { AccountDbo } from '../dbo/account.ts'
-import type { EnkaPayload } from '../dbo/enka.ts'
+import type { AccountDbo } from '../repository/dbo/account.ts'
+import type { EnkaPayload } from '../gateway/enka/enka-shape.ts'
 import { fetchEnka } from '../gateway/enka/enka.ts'
 import type { FetchEnkaOpts } from '../gateway/enka/enka.ts'
 import { ingestPayload } from '../gateway/enka/enka-account.ts'
@@ -22,16 +22,9 @@ import { buildAdvice } from './advice.ts'
 import type { AdviceBundle } from './advice.ts'
 import { shapeCharacter } from './assembler/character.assembler.ts'
 import type { MarkDetail } from './dto/character.dto.ts'
+import type { AccountSummary, AccountView } from './dto/account.dto.ts'
 
-/** 列表页一行（只有昵称等级这类概要，不带角色） */
-export interface AccountSummary {
-  uid: number
-  nickname: string | null
-  level: number | null
-  worldLevel: number | null
-  avatarCount: number
-  fetchedAt: string | null
-}
+export type { AccountSummary, AccountView }
 
 export function listAccounts (db: Db): AccountSummary[] {
   return repo.listUids(db).map(uid => {
@@ -60,7 +53,7 @@ export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetch
   account: AccountDbo | null
   locale?: string
   fetchedAt?: string | null
-}) {
+}): AccountView {
   const loc = i18n.resolveLocale(locale)
   const avatars: Array<ReturnType<typeof shapeCharacter>> = []
   const skipped: Array<number | null> = []
@@ -96,7 +89,7 @@ export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetch
 }
 
 /** 一整包视图（账号 + 角色 + 评分 + 本地化）。库里没有 → null，上层回 404 */
-export function accountView (db: Db, uid: number, locale: string): ReturnType<typeof buildAccountView> | null {
+export function accountView (db: Db, uid: number, locale: string): AccountView | null {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return null
   return buildAccountView({ account, locale, fetchedAt: repo.lastFetch(db, uid)?.fetchedAt || null })

@@ -9,20 +9,7 @@
  * 库里只存 id 与原始值，**不存名字**（名字是多语言的）。
  */
 import { StatDbo } from './stat.ts'
-import type { EnkaEquip } from './enka.ts'
-import { num } from '../common/util.ts'
-
-/* 装备槽位名 → 位置（与上游 EnkaData.js 的 artisIdxMap 一致） */
-const POS_BY_EQUIP_TYPE: Record<string, number> = {
-  EQUIP_BRACER: 1,   // 生之花
-  EQUIP_NECKLACE: 2, // 死之羽
-  EQUIP_SHOES: 3,    // 时之沙
-  EQUIP_RING: 4,     // 空之杯
-  EQUIP_DRESS: 5     // 理之冠
-}
-
-/* 兜底：部件 id 的第 4 位编了槽位，是 miao `Artifact.get()` 里 [4,2,5,1,3][name[3]-1] 的逆映射 */
-const POS_BY_ID_DIGIT: Record<string, number> = { 4: 1, 2: 2, 5: 3, 1: 4, 3: 5 }
+import { num } from '../../common/util.ts'
 
 export class ArtifactDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）*/
@@ -59,32 +46,6 @@ export class ArtifactDbo {
     this.subStats = (subStats || []).map(s => (s instanceof StatDbo ? s : new StatDbo(s.prop, s.value)))
     this.nameHash = num(nameHash)                // 本件名字的官方文案 key
     this.setHash = num(setHash)                  // 套装名文案 key（同套 5 件共用一个）
-  }
-
-  /** enka 的一件装备 → Artifact；不是圣遗物（比如武器）、或位置认不出 → null */
-  static ofEnka (equip: EnkaEquip | null | undefined): ArtifactDbo | null {
-    if (!equip?.reliquary) return null
-    const relq = equip.reliquary
-    const pos = POS_BY_EQUIP_TYPE[equip.flat?.equipType ?? ''] ||
-      POS_BY_ID_DIGIT[String(equip.itemId)[3]] || null
-    if (!pos) return null
-    return new ArtifactDbo({
-      pos,
-      itemId: equip.itemId,
-      levelRaw: relq.level ?? 0,
-      star: equip.flat?.rankLevel ?? 5,
-      mainPropId: relq.mainPropId,
-      appendPropIds: (relq.appendPropIdList || []).map(Number),  // 保序保重复，不能去重/过滤
-      /* enka 的 flat 里带着官方算好的 statValue：显示层直接用它（内核重算有 float 误差） */
-      mainStatValue: equip.flat?.reliquaryMainstat?.statValue,
-      /* flat.reliquarySubstats 是**合并后**的（同一词条多条 roll 合成一条），
-         与 reliquary.appendPropIdList（逐次 roll、保序保重复）不是一回事 —— 两份都要留。 */
-      subStats: (equip.flat?.reliquarySubstats || [])
-        .filter(s => s && s.appendPropId)
-        .map(s => new StatDbo(s.appendPropId as string, s.statValue)),
-      nameHash: equip.flat?.nameTextMapHash,
-      setHash: equip.flat?.setNameTextMapHash
-    })
   }
 
   /** 某个 miao key 的副词条数值（显示用）；没有这一条 → undefined */

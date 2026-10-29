@@ -13,8 +13,7 @@
  * ⚠️ 「装备了但元数据不认识这把」和「压根没装备」是两回事。本值对象只回答前者之外的那半边：
  *    `equipped` = enka 说装了没有；「认不认识」要看出口能不能查到名字（service/character.service.ts）。
  */
-import { num } from '../common/util.ts'
-import type { EnkaEquip } from './enka.ts'
+import { num } from '../../common/util.ts'
 
 export class WeaponDbo {
   /* 字段必须显式声明（TS 不从 constructor 赋值反推）—— 五个字段统统 number|null */
@@ -43,20 +42,4 @@ export class WeaponDbo {
 
   /* 到底装没装 —— 只看 itemId 有没有值（装备着但名字查不到 ≠ 没装：前者 enka 照样给 level/promote/affix） */
   get equipped (): boolean { return this.itemId !== null && this.itemId !== undefined }
-
-  /** enka 的 equipList → Weapon；没装备武器 → none() */
-  static ofEnka (equipList: EnkaEquip[] | null | undefined): WeaponDbo {
-    const w = (equipList || []).find(e => e.flat?.itemType === 'ITEM_WEAPON')
-    if (!w) return WeaponDbo.none()
-    /* enka 的 affixMap 是「额外精炼次数」（精1 存 0 或不存）→ +1 才是 1~5。
-       +1 是**业务语义**不是类型转换，所以留在 ofEnka；类型归一到 constructor 为止。 */
-    const affix = num(Object.values(w.weapon?.affixMap || {})[0])
-    return new WeaponDbo({
-      itemId: w.itemId,
-      nameHash: w.flat?.nameTextMapHash,
-      level: w.weapon?.level,
-      promote: w.weapon?.promoteLevel,
-      affix: (affix ?? 0) + 1
-    })
-  }
 }

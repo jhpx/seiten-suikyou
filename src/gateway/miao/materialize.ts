@@ -8,7 +8,7 @@
  *    显式改名成 `Miao*` 以示区分。
  */
 import { Artis, Artifact as MiaoArtifact, Attr, Character as MiaoCharacter, Weapon as MiaoWeapon } from '../../index.ts'
-import type { CharacterDbo } from '../../dbo/character.ts'
+import type { CharacterDbo } from '../../repository/dbo/character.ts'
 
 /*
  * miao 内核的 profile —— **计算出口的形状**，我方与 miao 之间唯一的约定：
