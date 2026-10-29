@@ -74,8 +74,8 @@ miao 面板下方的「伤害计算」是它**自研**的，没有基于外部�
 
 编排在 `ProfileDmg.calcData()`：加载 calc.js → `DmgAttr.getAttr`（吃 `profile.attr` 打底，
 即 `Attr.calc()` 的产出）→ `getBuffs` → `calcAttr` 逐条目施加 → `getDmgFn` 出 `{ dmg, avg }`。
-本项目的出口是 `src/kernel/damage.ts` 的 `calcDamage()`（归一化 + 单角色炸了不拖垮整页），
-域模型到它的桥在 `materialize.ts`（`MiaoProfile.talent` 就是为它补的 —— 缺了天赋等级，
+本项目的出口是 `src/gateway/miao/damage.ts` 的 `calcDamage()`（归一化 + 单角色炸了不拖垮整页），
+数据库对象到它的桥在 `gateway/miao/materialize.ts` 的 `toMiaoProfile()`（`MiaoProfile.talent` 就是为它补的 —— 缺了天赋等级，
 内核按 1 级算，伤害凭空低一大截）。
 
 **对拍方法论**：数值不与「社区攻略」比，只与原版 miao 逐字一致。`.tmp/dmg-parity/run.ts`
@@ -333,7 +333,7 @@ enka 原始响应
 4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
    所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
 5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
-   所以 `src/kernel/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
+   所以 `src/gateway/miao/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
    库里存的是原始值 + 来源，万一推断错了改这一行就能全量重算，不用重新抓。
 6. **`test/fixtures.ts` 的词条 key 与 miao 规范相反**：它把大/小词条写反了
    （花的主词条写成 `hp`，按 miao 的 `mainIdMap` 小生命是 `hpPlus`、大生命才是 `hp`；
@@ -389,8 +389,8 @@ enka 原始响应
     写成「标题带场景词就不改」会漏掉「默认-绝缘4」。
     ⚠️ 比对权重差异时**「缺失的键」必须与 0 视为等价** —— 直接 `JSON.stringify` 比会把「缺 4 个 0」误判成不一致。
 
-15. **分层方向不许反向**（2026-10-18 定稿）：`server → rest → service → repository → domain` 只能从上往下引；
-    `upstream` / `kernel` / `common` 是横向叶子，不参与这条流水线。几条硬规矩：
+15. **分层方向不许反向**（2026-10-18 定稿，三层半架构）：`rest → service → { repository, gateway }` 只能从上往下引；
+    `gateway/enka` 与 `repository/dbo` 是叶子适配层（只认 dbo / common / 三方），`common` / `config` 是底层叶子，不参与竖向流水线。几条硬规矩：
     控制器只认 `service/context.ts` 这一份能力契约（**不给 db**，否则迟早顺手拼个 SELECT）；
     `rest/` 控制器平铺、不许 `rest/controllers/`；`server/` 只装配（URL 表在 `routes.ts`，
     装配顺序 cors → 路由 → 静态 → 兜底）。全部由 `test/arch.ts` 断言钉住，改结构先跑它。

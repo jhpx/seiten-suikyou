@@ -1,8 +1,8 @@
 /*
- * Artifact —— 一件圣遗物的领域模型
+ * ArtifactDbo —— 一件圣遗物的数据库对象（DBO）
  *
  * 进出都走这个类，内存形状就不再由 DB 列名决定：
- *   enka 装备 ──ofEnka──▶ Artifact ──仓储映射──▶ 一行 ──仓储映射──▶ Artifact
+ *   enka 装备 ──ofEnka──▶ ArtifactDbo ──仓储映射──▶ 一行 ──仓储映射──▶ ArtifactDbo
  *
  * 三条不变量：`appendPropIds` **保序、保重复** —— 内核靠「同一 id 出现几次」算词条数，
  * 而 `subStats` 是 enka **合过**的那一份、只能用于显示；`mainPropId` 是数字 id（14001）；

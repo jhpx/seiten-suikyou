@@ -16,9 +16,9 @@ import { Attr, Character } from '../src/index.ts'
 import { calcDamage } from '../src/gateway/miao/damage.ts'
 import { toMiaoProfile } from '../src/gateway/miao/materialize.ts'
 import { buildProfile, buildArtis, ATTR } from './fixtures.ts'
-/* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
+/* 数据库对象的 Character 与 miao 的同名类不是一回事（见 repository/dbo/character.ts 的头注）——
    这里只要域模型，反手标成 Domain* 以免和上面的 miao Character 混。 */
-import { CharacterDbo as DomainCharacter } from '../src/dbo/character.ts'
+import { CharacterDbo } from '../src/repository/dbo/character.ts'
 
 let failed = 0
 
@@ -116,7 +116,7 @@ eq(candace && candace.entries.map((e) => ({ title: e.title, dmg: num(e.dmg), avg
 console.log('\n=== 6. materialize 桥：域模型 → profile.talent ===')
 /* 天赋等级是伤害计算的必填项（ProfileDmg.talent 读 profile.talent，缺了按 1 级算）。
    域模型存的是 {天赋id: 等级}，materialize 负责换算成 {a/e/q: 等级} —— 这里钉死它。 */
-const domainChar = new DomainCharacter({
+const domainChar = new CharacterDbo({
   uid: '900000001', avatarId: 10000046, level: 90, promote: 6, cons: 0,
   skillLevelMap: { 10461: 9, 10462: 9, 10463: 9 }
 })

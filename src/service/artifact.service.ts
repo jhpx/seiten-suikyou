@@ -7,7 +7,7 @@
  * character.service.ts，就会形成 character → artifact → character 的环。
  * 所以显示脊柱和圣遗物卡**一起**收口在这里，让 character.service.ts 单向引它，环就破了。
  *
- * 这里**不出现状态码**，也不碰任何业务编排；纯「给定一个领域模型 / miao 结果，怎么显示」。
+ * 这里**不出现状态码**，也不碰任何业务编排；纯「给定一个数据库对象（DBO）/ miao 结果，怎么显示」。
  */
 import { ArtisMark, Format, i18n, Artifact as MiaoArtifact } from '../index.ts'
 import { ArtifactDbo } from '../repository/dbo/artifact.ts'
@@ -180,7 +180,7 @@ export function artifactIcon (setNameZh: string | null | undefined, pos: number)
   return setNameZh ? `assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
 }
 
-/** 一件圣遗物：miao 的评分结果 + 领域模型（拿 hash 查名字、拿 enka 的原始数值做显示）。
+/** 一件圣遗物：miao 的评分结果 + 数据库对象（DBO，拿 hash 查名字、拿 enka 的原始数值做显示）。
  *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
 export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: ArtifactDbo | undefined, locale: string, raw: unknown) {
   const posName = slotLabel(pos, locale)

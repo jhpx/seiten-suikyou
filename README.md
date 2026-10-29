@@ -119,7 +119,7 @@ npm run score -- --locale en                 # 换语言输出
 把它和 miao 算出来的 `attr` 逐项比。角色等级/突破、武器、圣遗物主副词条，整条链路一次全验证。
 `test/pipeline.ts` 拿真实响应硬断言它全过（容差：绝对值 ≤0.05 或 相对 ≤0.1%）。
 
-它只服务测试，所以待在 `test/` 而不是 `src/kernel/`，命令行也不再挂 `--check` 这个开关 ——
+它只服务测试，所以待在 `test/` 而不是生产路径（miao 适配在 `gateway/miao/`），命令行也不再挂 `--check` 这个开关 ——
 `npm test` 会自动验。非要用它比一份自己手里的原始响应，就在脚本里 import 那两个函数。
 
 两个已知的口径差异（都不是我们的锅，写进容差里了）：
@@ -241,7 +241,7 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 
 - `char` 必须是**真 `Character` 对象**（规则里读 `char.name` / `char.isGs`）
 - `artis` 必须是**真 `Artis` 实例**（规则里调 `artis.is('绝缘4')`、读 `artis.sets`）
-- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/kernel/materialize.ts` 里就是这么做的）
+- `attr` 是面板属性，由 `Attr.create(profile).calc()` 算出来（`src/gateway/miao/materialize.ts` 的 `toMiaoProfile` 里就是这么做的）
 - `weapon` 只要 `{ name, level, promote, affix }`，**`name` 必须是中文**（内核拿中文名查 `weaponCfg`）
 
 **圣遗物只喂部件名 + 原始 prop id**（`name` / `level` / `star` / `mainId` / `attrIds`），
@@ -264,7 +264,7 @@ npm test
 | `typecheck` | — | `tsc --noEmit`，零构建项目唯一的类型闸门 |
 | `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
 | `args` | 11 | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
-| `arch` | 74 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/domain` 不依赖任何外层、`config/constants.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（server / rest → service → repository → domain 不许反向，`rest` 也不许反向吃 `server`，`upstream` / `kernel` 是叶子）、**三层领域文件对照**（`account` / `character` 在 rest / service / repository 各有一个，后缀 `.rest.ts` / `.service.ts` / `.repo.ts`） |
+| `arch` | 71 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/repository/dbo` 不依赖任何外层（只引 `util` / `stat`）、`config/constants.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（`rest → service → { repository, gateway }` 不许反向，`gateway/enka` 与 `repository/dbo` 是叶子适配层，只认 dbo / common / 三方）、**三层领域文件对照**（`account` / `character` 在 rest / service / repository 各有一个，后缀 `.rest.ts` / `.service.ts` / `.repo.ts`） |
 | `enka` | — | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
 | `pipeline` | 153 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
 | `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
@@ -303,13 +303,12 @@ npm test
 seiten-suikyou/
 ├── src/
 │   ├── index.ts              # 内核出口：注册元数据 + 原样导出评分/伤害模块 + 以 i18n 名义导出多语言门面
-│   ├── domain/               # 领域模型：Account → Character（+1 武器 +5 圣遗物），表名=类名
 │   ├── config/               # 存储基建：数据库全局读写（不含任何领域知识）
 │   │   ├── constants.ts      #   全局默认值：默认语言 / 库文件 / 端口 / 监听地址 / 上游源 / 超时 / 限流额度
 │   │   ├── schema.ts         #   表结构权威定义（drizzle sqliteTable，没有 schema.sql / 迁移目录）
 │   │   ├── db.ts             #   连接（node:sqlite + drizzle）+ 现算 DDL 建表 / 结构代次校验
-│   │   └── store.ts          #   仓储门面：行 ↔ 领域模型、聚合组装、一次抓取的事务边界
-│   ├── repository/           # 一张表一行：只认行类型，不认领域对象
+│   │   └── store.ts          #   仓储门面：行 ↔ 数据库对象、聚合组装、一次抓取的事务边界
+│   ├── repository/           # 一张表一行：只认行类型，不认领域对象；dbo/ 数据库对象（原 domain）
 │   │   ├── account.repo.ts   #   account 表 + fetch_log 抓取流水（键都是 uid）
 │   │   └── character.repo.ts #   character / weapon / artifact 三张表 + 跨表文案 key 清单
 │   ├── service/              # 用例编排 + 视图组装 —— 不懂 HTTP
@@ -321,12 +320,15 @@ seiten-suikyou/
 │   │   ├── character.rest.ts #   角色：伤害
 │   │   ├── meta.ts           #   系统：语言表 / 界面文案 / 探活（非领域资源，不加层后缀）
 │   │   └── reply.ts          #   响应原语：ok() / fail() / noData()
-│   ├── upstream/             # 对外部数据源（enka / microgg）
-│   │   ├── enka.ts           #   按 uid 取原始响应（多源并行、谁先成功用谁，HTTP 码翻译成人话）
-│   │   └── enka-account.ts   #   enka 原始响应 → 账号 + 名下角色（挑字段、算指纹、带文案 key，不解析属性）
-│   ├── kernel/               # 对 miao 评分内核
-│   │   ├── materialize.ts    #   领域模型 → miao profile（id → 中文名/对象 + 算面板）
-│   │   └── damage.ts         #   miao profile → 伤害计算的出口 calcDamage()
+│   ├── gateway/              # 外部系统隔离（原 kernel + upstream）
+│   │   ├── miao/             #   对 miao 评分内核：materialize / damage / simulate
+│   │   │   ├── materialize.ts #     dbo → miao profile（toMiaoProfile）
+│   │   │   └── damage.ts     #     miao profile → 伤害计算出口 calcDamage()
+│   │   └── enka/             #   对外部数据源（enka / microgg）
+│   │       ├── enka.fetch.ts #     按 uid 取原始响应（多源并行）
+│   │       ├── enka.convertor.ts # 原始响应 → dbo（xxxFromEnka，不解析属性）
+│   │       ├── enka.service.ts   # ingestPayload：校验 + 转换 + payload_hash
+│   │       └── enka.dto.ts   #   enka 响应形状 + IngestResult
 │   ├── common/               # 字典与纯函数（谁都引，不引业务）
 │   │   ├── i18n.ts           #   多语言门面：认语言 + 把下面两张表统一出口（名字 / 界面文字）
 │   │   ├── names.ts          #   官方文案：hash/id → 游戏文案（读 vendor/i18n/names.json）

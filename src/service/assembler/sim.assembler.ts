@@ -31,7 +31,7 @@ function mainStatName (key: string, locale: string): string {
   return statLabel(key, locale)
 }
 
-/** 把「人工配装」翻成领域模型，让 shapeCharacter 走同一条成型路径 */
+/** 把「人工配装」翻成数据库对象（DBO），让 shapeCharacter 走同一条成型路径 */
 function simCharacterOf (ch: CharacterDbo, profile: MiaoProfile, draft: SimDraft): CharacterDbo {
   const artifacts = (ch.artifacts || []).map(a => {
     const spec = (draft.artifacts || []).find(s => s.pos === a.pos)

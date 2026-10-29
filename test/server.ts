@@ -18,9 +18,9 @@ import { startServer } from '../src/server/index.ts'
 import { ArtifactSet } from '../src/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
-import { ingestPayload } from '../src/gateway/enka/enka-account.ts'
+import { ingestPayload } from '../src/gateway/enka/enka.service.ts'
 import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/advice.ts'
-import type { EnkaPayload } from '../src/dbo/enka.ts'
+import type { EnkaPayload } from '../src/gateway/enka/enka.dto.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REAL = JSON.parse(fs.readFileSync(path.join(HERE, 'data', 'enka-real.json'), 'utf8'))
@@ -956,7 +956,7 @@ console.log('\n=== 13. 模拟比对目录 ===')
   eq(bad.map((s: any) => s.key), [], '每个(套装,部位)组合都能取到部件名')
   ok(cat.sets.some((s: any) => s.positions.length < 5), '目录里确实有「只有部分部位」的套装（祭X之人）')
 
-  /* 套装最高星级：上游 miao 的数据里没有这个字段，是我们手写的一张表（domain/artifact.ts）。
+  /* 套装最高星级：上游 miao 的数据里没有这个字段，是我们手写的一张表（repository/dbo/artifact.ts）。
      它决定下拉里标 5★/4★/3★，也决定等级上限（4★ 满级 +16、3★ +12）。 */
   ok(cat.sets.every((s: any) => s.star >= 3 && s.star <= 5), '每个套装都带最高星级（3~5）')
   {

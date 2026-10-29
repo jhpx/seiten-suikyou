@@ -21,20 +21,21 @@ import { account as accountT, artifact as artifactT, character as characterT, we
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
-import { ingestPayload } from '../src/gateway/enka/enka-account.ts'
+import { ingestPayload } from '../src/gateway/enka/enka.service.ts'
 import { toMiaoProfile } from '../src/gateway/miao/materialize.ts'
 import type { MiaoProfile } from '../src/gateway/miao/materialize.ts'
 import { shapeCharacter } from '../src/service/assembler/character.assembler.ts'
 import type { AttrRow, MarkDetail } from '../src/service/dto/character.dto.ts'
-import { ArtifactDbo } from '../src/dbo/artifact.ts'
-import { WeaponDbo } from '../src/dbo/weapon.ts'
-import { AccountDbo } from '../src/dbo/account.ts'
-/* 领域层的 Character 与 miao 的同名类不是一回事（见 domain/character.ts 的头注）——
+import { ArtifactDbo } from '../src/repository/dbo/artifact.ts'
+import { WeaponDbo } from '../src/repository/dbo/weapon.ts'
+import { AccountDbo } from '../src/repository/dbo/account.ts'
+/* 数据库对象的 Character 与 miao 的同名类不是一回事（见 repository/dbo/character.ts 的头注）——
    本文件两个都要用，所以把**我们的**那个按仓库惯例（materialize.ts 用 Miao* 前缀）
    反过来标成 Domain*，`Character` 依旧指 miao 的图鉴类。 */
-import { CharacterDbo as DomainCharacter } from '../src/dbo/character.ts'
-import type { EnkaEquip, EnkaPayload } from '../src/dbo/enka.ts'
-import { StatDbo, enkaPropKey, ENKA_PROP_TO_KEY } from '../src/dbo/stat.ts'
+import { CharacterDbo } from '../src/repository/dbo/character.ts'
+import type { EnkaEquip, EnkaPayload } from '../src/gateway/enka/enka.dto.ts'
+import { StatDbo } from '../src/repository/dbo/stat.ts'
+import { enkaPropKey, ENKA_PROP_TO_KEY } from '../src/common/stat.ts'
 import { diffPanels } from './panel-check.ts'
 
 let failed = 0
@@ -92,7 +93,7 @@ if (!weaponId) throw new Error('找不到 5★ 长柄武器 id，夹具造不出
 /* 刻意用原始 prop id，属性值只给 enka 真会给的那两样：
    flat.reliquaryMainstat.statValue（主词条数值）与 flat.reliquarySubstats（合并后的副词条） */
 
-/* miao key → enka 字符串 prop id（与 src/domain/stat.ts 一致，测试里独立写一份防实现走偏） */
+/* miao key → enka 字符串 prop id（与 src/common/stat.ts 的 STAT_TYPES 一致，测试里独立写一份防实现走偏） */
 const ENKA_PROP: Record<string, string> = {
   hp: 'FIGHT_PROP_HP_PERCENT', hpPlus: 'FIGHT_PROP_HP',
   atk: 'FIGHT_PROP_ATTACK_PERCENT', atkPlus: 'FIGHT_PROP_ATTACK',
@@ -232,7 +233,7 @@ ok(fakeArtifact(4, 3).quality() === 3,
 
 /* ---------------- 4. ingest ---------------- */
 
-console.log('\n=== 2. ingest：enka 响应 → 领域模型 ===')
+console.log('\n=== 2. ingest：enka 响应 → 数据库对象（DBO） ===')
 const ingested = ingestPayload(payload, { source: 'enka' })
 const directCharacter = ingested.account.characters[0]
 /* 后面到处拿它查库。解析对不对由下面那条断言守着，这里只做「必然非空」的收窄。 */
@@ -329,9 +330,9 @@ ok(viaDbCharacter.weapon.nameHash === directCharacter.weapon.nameHash, '武器�
 /* ---------------- 6. 两条路算出的分必须一样 ---------------- */
 
 console.log('\n=== 4. 过库 vs 不过库，分数必须一致 ===')
-/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 service/dto/character.dto.ts 里声明过
+/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 dto/character.dto.ts 里声明过
    （MarkDetail），这里断言的就是那几个字段，所以直接拿来用。 */
-const scoreOf = (row: DomainCharacter): MarkDetail | null => {
+const scoreOf = (row: CharacterDbo): MarkDetail | null => {
   const p = toMiaoProfile(row)
   return p ? ArtisMark.getMarkDetail(p, true) as MarkDetail : null
 }
@@ -915,7 +916,7 @@ console.log('\n=== 13. 圣遗物显示用 enka 原始数值（不走内核重算
      行为都在原型上，构造出来的东西与原来逐字段相同）。
      ⚠️ 不能「展开成一个纯对象」直接喂下去：那样 TS 是对的（纯对象只是缺了原型上的方法），
      而且出口哪天开始调方法就会当场炸 —— 构造回模型才是造夹具的正路。 */
-  const noEnka = new DomainCharacter({
+  const noEnka = new CharacterDbo({
     ...row,
     artifacts: row.artifacts.map(a => new ArtifactDbo({ ...a, mainStatValue: null, subStats: [] }))
   })

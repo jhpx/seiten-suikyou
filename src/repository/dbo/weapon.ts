@@ -37,7 +37,7 @@ export class WeaponDbo {
   }
 
   /* 「没装备武器」的那一个 —— 全 null，别拿 0 充数（0 级 / 精 0 都不是合法状态）。
-     出口要显示默认值时自己 `?? 1`（见 kernel/materialize.ts）。 */
+     出口要显示默认值时自己 `?? 1`（见 gateway/miao/materialize.ts）。 */
   static none (): WeaponDbo { return new WeaponDbo() }
 
   /* 到底装没装 —— 只看 itemId 有没有值（装备着但名字查不到 ≠ 没装：前者 enka 照样给 level/promote/affix） */

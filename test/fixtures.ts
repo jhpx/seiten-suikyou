@@ -4,7 +4,7 @@
  */
 import { Artis, Character } from '../src/index.ts'
 
-/** 测试用的一件圣遗物 —— 喂 miao 内核的形状（不是领域模型的 Artifact） */
+/** 测试用的一件圣遗物 —— 喂 miao 内核的形状（不是数据库对象 ArtifactDbo） */
 export interface ArtisFixture {
   name: string
   set: string

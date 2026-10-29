@@ -1,10 +1,10 @@
 /*
- * materialize —— 把领域模型（一个 Character）组装成 miao 内核能吃的 profile
+ * materialize —— 把数据库对象（一个 CharacterDbo）组装成 miao 内核能吃的 profile
  *
  * 这是「计算出口」，方向是 id → 中文名：库里存的是与语言无关的数字 id，而内核拿**中文名当键**查表
  * （`usefulAttr[char.name]` / `weaponCfg['护摩之杖']`）。
  *
- * ⚠️ 入参是我们自己的领域模型 Character，不是 miao 的同名类 —— 所以这里把 miao 的两个同名类
+ * ⚠️ 入参是我们自己的数据库对象 CharacterDbo，不是 miao 的同名类 —— 所以这里把 miao 的两个同名类
  *    显式改名成 `Miao*` 以示区分。
  */
 import { Artis, Artifact as MiaoArtifact, Attr, Character as MiaoCharacter, Weapon as MiaoWeapon } from '../../index.ts'
@@ -63,7 +63,7 @@ export function deriveTalent (char: any, skillLevelMap: Record<string, number> |
   return out
 }
 
-/** 一个角色（领域模型）→ miao profile；角色不被 miao 认识时返回 null */
+/** 一个角色（数据库对象）→ miao profile；角色不被 miao 认识时返回 null */
 export function toMiaoProfile (character: CharacterDbo): MiaoProfile | null {
   const char = MiaoCharacter.get(character.avatarId)
   if (!char) return null

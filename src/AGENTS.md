@@ -21,12 +21,10 @@
 |---|---|
 | `server/` | 应用创建与启动、路由表、限流、静态托管及错误处理 |
 | `rest/` | HTTP 控制器；控制器按领域平铺，另有 `meta.ts`、`reply.ts` 等通用入口 |
-| `service/` | 用例与业务编排；`context.ts` 定义控制器可使用的能力契约 |
+| `service/` | 用例与业务编排；`context.ts` 定义控制器可使用的能力契约；`dto/` 传输类型、`assembler/` 视图组装 |
 | `config/` | 数据库连接、表结构定义、默认值及存储门面 |
-| `repository/` | 按领域组织的持久化访问 |
-| `domain/` | 领域模型与不依赖基础设施的领域概念 |
-| `upstream/` | 外部数据源抓取与原始响应转换 |
-| `kernel/` | 领域数据与 miao 内核之间的适配、伤害计算出口 |
+| `repository/` | 按领域组织的持久化访问；`dbo/` 数据库对象（原 domain，贫血、零依赖孤岛） |
+| `gateway/` | 外部系统隔离：`miao/` 引擎适配（materialize / damage / simulate）、`enka/` 数据源（抓取与原始响应 → dbo） |
 | `common/` | i18n 门面、文案表和通用纯函数 |
 | `cli/` | 命令行入口及参数处理 |
 
@@ -34,7 +32,7 @@
 
 - 依赖方向应保持清晰，避免低层模块反向依赖高层应用或 HTTP 层。
 - 当前控制器通过 `service/context.ts` 提供的能力访问业务用例，原则上不直接导入 repository 或具体 service 实现。若要改变此边界，先检查 `test/arch.ts` 并说明理由。
-- `domain/` 应保持轻量，避免依赖 HTTP、数据库或上游 SDK 等基础设施。
+- `repository/dbo/` 只描述「是什么」，不依赖任何外层（server / rest / service / gateway / config / repository 行读写 / 三方包）；只引同目录与 `common/util.ts`、`common/stat.ts`（词条词汇表）。
 - `common/util.ts` 当前约定为零依赖纯函数模块；修改其依赖关系前，先确认是否会造成领域层依赖倒置。
 - 不要只为匹配目录表而移动文件或增加抽象。新代码应放在最符合其变化原因和依赖方向的位置。
 
@@ -63,7 +61,7 @@
 
 - `vendor/i18n/names.json` 是生成的官方名称数据；`src/common/ui.ts` 是手写的界面文案。两者用途不同，不要互相替代。
 - 当前依赖方向为 `common/i18n` 读取 `names` 和 `ui`；`names` 与 `ui` 不应互相依赖。修改该结构时，检查 `test/arch.ts` 的依赖断言。
-- `domain/` 不应依赖官方文案表；领域模型应表达领域含义，而不是依赖显示语言。
+- `repository/dbo/` 不应依赖官方文案表 `common/names.ts`（它要读 vendor 文案表，会把 IO 拽进数据库对象层）；词条词汇表在 `common/stat.ts`，dbo 可引它。
 - 词条数值显示统一走 `service/artifact.service.ts` 中现有的 `attrValueText(...)` 逻辑（圣遗物与词条的「显示口径」已抽到该叶子模块，`character.service.ts` 单向引它），以保持不同数据源之间的显示口径。不要绕过它直接使用 `Format.pct`，除非已确认新场景的语义不同并补充测试。
 - 前端静态文案通过 `/api/meta` 提供。需要增加或修改界面文案时，检查 `src/common/ui.ts` 和接口返回，不要在前端重复硬编码。
 
@@ -72,7 +70,7 @@
 - `SOURCES` 当前包含 microgg 与 Enka，抓取应并行执行。若调整并发策略，需说明原因并测试错误传播和超时行为。
 - 两个数据源对 424 等状态码的含义可能不同；处理结果时应按各来源语义判断，不能仅凭状态码统一判错。当前策略是任一来源成功即可使用，全部失败后再返回错误。
 - miao 内核位于 `vendor/miao/`，由同步流程生成。不要在同步后直接修改生成物；确需修补时，先检查 `tools/sync_miao.py` 的 `PATCHES` 和同步流程。
-- 伤害计算的现有出口为 `kernel/damage.ts` 的 `calcDamage(profile)`。修改时检查缺失天赋等级的默认处理，并运行伤害相关测试。
+- 伤害计算的现有出口为 `gateway/miao/damage.ts` 的 `calcDamage(profile)`（异步，返回 `MiaoDamage | null`）。修改时检查缺失天赋等级的默认处理，并运行伤害相关测试。
 - 同步上游数据时，注意旅行者等角色数据可能存在于较深目录；不要只根据浅层文件列表判断素材是否完整。
 - 上游数据和评分内核的改动必须以测试结果验证，不要凭主观判断改写数据或计算逻辑。
 
@@ -80,7 +78,7 @@
 
 - 不在 `rest/` 中启动服务、托管静态文件或直接引入 `@hono/node-server`；这些职责属于 `server/`。
 - 不让控制器绕过 `service/context.ts` 直接访问 repository 或具体 service 实现，除非用户明确批准调整该架构边界。
-- 不随意恢复已废弃的目录（例如 `adapter/`、`i18n/`、`shared/`、`view/`、`dao/`、`dbo/`）。若确有新需求需要类似模块，应先解释其职责及与现有目录的区别。
+- 不随意恢复已废弃的目录（例如 `adapter/`、`i18n/`、`shared/`、`view/`、`dao/`）。`dbo/` 现在已正式作为数据库对象目录落在 `repository/dbo/`，不是废弃目录。若确有新需求需要类似模块，应先解释其职责及与现有目录的区别。
 - `config/constants.ts` 保持为默认值层，不依赖其他业务模块。
 - 不用 `drizzle-kit` 替代运行时的 `config/schema.ts`。若需要引入新的 schema 工具或迁移机制，先说明对部署、旧库和运行时依赖的影响。
 - 未经用户同意，不向 `package.json` 添加依赖或脚本。若任务明确需要新增依赖或脚本，先给出必要性、维护成本和替代方案。
@@ -129,5 +127,5 @@ node test/verify.ts
 - 分层或依赖问题：检查 `test/arch.ts` 和相关目录的现有实现。
 - 接口、中间件或跨域问题：检查 `server/routes.ts`、`server/index.ts` 与 `test/server.ts`。
 - 数据结构问题：检查 `config/schema.ts`、`config/db.ts`、`config/store.ts` 和 `test/pipeline.ts`。
-- 评分差异：检查 `kernel/`、`vendor/miao/` 的同步补丁和 `test/verify.ts`。
+- 评分差异：检查 `gateway/miao/`、`vendor/miao/` 的同步补丁和 `test/verify.ts`。
 - 多语言问题：检查 `src/common/ui.ts`、`vendor/i18n/names.json` 和 `test/i18n.ts`。

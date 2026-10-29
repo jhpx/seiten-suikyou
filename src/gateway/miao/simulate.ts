@@ -1,7 +1,7 @@
 /*
  * simulate —— 「人工配装 → miao profile」+ 可选装备目录
  *
- * 与 materialize 的分工：materialize 走**真实抓取**的领域模型（enka 的 append_prop_ids 编码）；
+ * 与 materialize 的分工：materialize 走**真实抓取**的数据库对象（DBO，enka 的 append_prop_ids 编码）；
  * 本模块走**用户手填**的配置（词条直接给最终数值，不经过 id 编码）。
  * 两者产出的都是同一个 MiaoProfile，下游（Attr 面板 / ArtisMark 评分 / ProfileDmg 伤害）完全共用
  * —— 所以左右两栏的数值口径必然一致。
