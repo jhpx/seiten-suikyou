@@ -1,25 +1,18 @@
 /*
- * enka-account —— 把 enka 的原始响应翻译成「账号 + 名下角色」
+ * enka 服务 —— 抓取用例的「外部数据加工」一段：把整包响应收拢成一次抓取的产出（IngestResult）。
  *
- * 纯翻译：不进库、不联网、不知道 HTTP。只做三件事：挑字段、算一次抓取的指纹、组装成一个 Account。
- * 「用例」部分（并发去重、落库、失败留痕）在 service/account.service.ts 的 createIngestService。
+ * 为什么叫 service：它编排了三件事（校验 payload → 调 convertor 逐个转 dbo → 算抓取指纹），
+ * 输出是「这次抓取得到了什么」，不是单纯的一对一格式转换。
+ * 但它**不碰**「并发去重 / 落库 / 失败留痕」—— 那是 service/account.service.ts 的 createIngestService。
  *
- * 它**不解析属性**：mainPropId / appendPropIdList 原样存库，id → 属性 交给 miao 内核 ——
- * 内核靠「同一个 id 出现几次」算词条数，提前解析会把这信息丢掉。
+ * 与 enka.convertor.ts 对照：那边是单点一对一（一个形状 → 一个 dbo）；这里是多对一组装 + 校验。
+ * 与 enka.fetch.ts 对照：那边只管把 JSON 拿回来，不管怎么加工。
  */
 import { createHash } from 'node:crypto'
 
 import { num } from '../../common/util.ts'
-import type { AccountDbo } from '../../repository/dbo/account.ts'
-import type { EnkaPayload } from './enka-shape.ts'
-import { accountFromEnka, characterFromEnka } from './enka-dbo.ts'
-
-export interface IngestResult {
-  account: AccountDbo
-  characterCount: number
-  ttl: number | null
-  source: string
-}
+import type { EnkaPayload, IngestResult } from './enka.dto.ts'
+import { accountFromEnka, characterFromEnka } from './enka.convertor.ts'
 
 /** 整包响应（enka /api/uid/{uid} 的原始 JSON）→ 一个账号（含名下角色） */
 export function ingestPayload (payload: EnkaPayload, { source = 'enka' }: { source?: string } = {}): IngestResult {

@@ -1,12 +1,14 @@
 /*
- * enka 响应的**形状**（类型契约）—— 只声明「我方读哪些字段」，抓取逻辑在 src/upstream/enka.ts，两码事。
+ * enka 响应的**形状**（DTO / 类型契约）—— 只声明「我方读哪些字段」。
  *
- * 住在领域层：模型自己带着 `ofEnka` 工厂、直接读这些字段，类型只能跟模型放在一起。
+ * 这是外部系统的格式，最易变（enka 改字段就跟着变），所以单独成文件、不掺任何逻辑。
+ * 谁读它：enka.fetch.ts（抓回来的就是它）、enka.convertor.ts（按字段翻成 dbo）。
  *
  * ⚠️ 字段**全是可选的**：enka 是外部数据，什么都可能缺、数字也可能是字符串。这里的类型只承诺
  *    「我们读的名字对不对」，值域一律交给 num() / str() 在 constructor 里归一 ——
  *    哪天 enka 改了字段名，在这里报的编译错误就是提醒。
  */
+import type { AccountDbo } from '../../repository/dbo/account.ts'
 
 /** equipList 里的一项（武器或圣遗物各读各的） */
 export interface EnkaEquip {
@@ -68,4 +70,14 @@ export interface EnkaPayload {
   ttl?: number
   playerInfo?: EnkaPlayerInfo
   avatarInfoList?: EnkaAvatarInfo[]
+}
+
+/* ───────────────────────── 我方产出的 DTO（不是 enka 的格式，是「抓取一次的结果」） ───────────────────────── */
+
+/** 一次抓取的产出：账号聚合 + 统计 + 上游 TTL + 来源 */
+export interface IngestResult {
+  account: AccountDbo
+  characterCount: number
+  ttl: number | null
+  source: string
 }

@@ -12,7 +12,7 @@ import type { MiddlewareHandler } from 'hono'
 import type { AccountSummary, AccountView } from './dto/account.dto.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
 import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
-import type { IngestResult } from '../gateway/enka/enka-account.ts'
+import type { IngestResult } from '../gateway/enka/enka.dto.ts'
 import { weightFilterOptions } from './character.service.ts'
 
 export type { AccountView, AccountSummary }

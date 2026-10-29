@@ -1,7 +1,7 @@
 /*
  * 圣遗物与词条「显示口径」叶子 —— 角色面板与圣遗物卡共用的显示原语 + 单件圣遗物卡片。
  *
- * 为什么单独成一个叶子（只引 gateway / domain / common，不回头引任何 service）：
+ * 为什么单独成一个叶子（只引 gateway / dbo / common，不回头引任何 service）：
  * 圣遗物卡（artifactOf）依赖 statLabel / KEY_TITLE 这套「显示脊柱」，而 character.service.ts
  * 的 shapeCharacter 又反过来依赖 artifactOf —— 若把圣遗物卡搬走、却把显示脊柱留在
  * character.service.ts，就会形成 character → artifact → character 的环。

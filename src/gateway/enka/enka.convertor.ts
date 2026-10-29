@@ -1,11 +1,11 @@
 /*
- * enka-dbo —— 把 enka 的原始响应（playerInfo / avatarInfoList / equipList）翻译成 dbo 对象。
+ * enka 转换器 —— 一对一：一个 enka 形状（playerInfo / avatarInfo / equip）→ 一个 dbo 对象。
  *
- * 与 enka.ts（抓取传输）对照：那边只管「把 JSON 拿回来」，这里管「把 enka 的字段形状翻成
- * 我们的数据库对象」。ofEnka 从 dbo 类里挪到这里 —— 它本质是「外部契约 → 内部对象」的翻译，
- * 属于 gateway/enka 的职责，不该塞在纯数据壳（dbo 类）里。
+ * 与 enka.service.ts 对照：那边把整棵 payload 树组装成一个 Account（多对一），
+ * 这里只做单点格式转换（一对一）。与 enka.fetch.ts 对照：那边只管把 JSON 拿回来。
  *
- * dbo 类因此只保留：字段映射 + 纯取值（quality / subStatTotals / equipped / none），零外部依赖。
+ * ⚠️ 转出来的 dbo 只保留：字段映射 + 纯取值（quality / subStatTotals / equipped / none），
+ *    不解析属性 —— mainPropId / appendPropIdList 原样留给 miao 内核按 id 解析。
  */
 import { num } from '../../common/util.ts'
 import { AccountDbo } from '../../repository/dbo/account.ts'
@@ -13,7 +13,7 @@ import { CharacterDbo } from '../../repository/dbo/character.ts'
 import { WeaponDbo } from '../../repository/dbo/weapon.ts'
 import { ArtifactDbo } from '../../repository/dbo/artifact.ts'
 import { StatDbo } from '../../repository/dbo/stat.ts'
-import type { EnkaAvatarInfo, EnkaEquip, EnkaPlayerInfo } from './enka-shape.ts'
+import type { EnkaAvatarInfo, EnkaEquip, EnkaPlayerInfo } from './enka.dto.ts'
 
 /* 装备槽位名 → 位置（与上游 EnkaData.js 的 artisIdxMap 一致） */
 const POS_BY_EQUIP_TYPE: Record<string, number> = {

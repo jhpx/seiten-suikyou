@@ -1,5 +1,5 @@
 /*
- * 按 uid 从上游取原始数据 —— 只负责「把 JSON 拿回来」，字段怎么翻译是 enka-account.ts 的事。
+ * 按 uid 从上游取原始数据 —— 只负责「把 JSON 拿回来」，字段怎么翻成 dbo 是 enka.convertor.ts 的事。
  *
  * 一组源，**同时打，谁先成功用谁**（hedged request）：上游在国内不稳，两条线的耗时曲线叠不起来，
  * 并行的总耗时是 min(两源) —— 代价是每次打扰两个上游，量由限流挡着。
@@ -15,7 +15,7 @@
  */
 
 /* 本文件的返回值就是「enka 原始响应」= 领域层那份形状契约（纯类型，剥类型后不留运行时依赖） */
-import type { EnkaPayload } from './enka-shape.ts'
+import type { EnkaPayload } from './enka.dto.ts'
 import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../../config/constants.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。
