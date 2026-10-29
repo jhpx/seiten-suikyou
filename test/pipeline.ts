@@ -24,8 +24,8 @@ import { sql } from 'drizzle-orm'
 import { ingestPayload } from '../src/gateway/enka/enka-account.ts'
 import { toMiaoProfile } from '../src/gateway/miao/materialize.ts'
 import type { MiaoProfile } from '../src/gateway/miao/materialize.ts'
-import { shapeCharacter } from '../src/service/character.service.ts'
-import type { AttrRow, MarkDetail } from '../src/service/character.service.ts'
+import { shapeCharacter } from '../src/service/assembler/character.assembler.ts'
+import type { AttrRow, MarkDetail } from '../src/service/dto/character.dto.ts'
 import { ArtifactDbo } from '../src/dbo/artifact.ts'
 import { WeaponDbo } from '../src/dbo/weapon.ts'
 import { AccountDbo } from '../src/dbo/account.ts'
@@ -329,7 +329,7 @@ ok(viaDbCharacter.weapon.nameHash === directCharacter.weapon.nameHash, '武器�
 /* ---------------- 6. 两条路算出的分必须一样 ---------------- */
 
 console.log('\n=== 4. 过库 vs 不过库，分数必须一致 ===')
-/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 service/character.service.ts 里声明过
+/* 内核打分的整包结果（ArtisMark.getMarkDetail）—— 形状在 service/dto/character.dto.ts 里声明过
    （MarkDetail），这里断言的就是那几个字段，所以直接拿来用。 */
 const scoreOf = (row: DomainCharacter): MarkDetail | null => {
   const p = toMiaoProfile(row)
@@ -495,7 +495,7 @@ console.log('\n=== 10. 默认兜底在表现层可见 ===')
 const { usefulAttr } = (await import('../vendor/miao/resources/meta-gs/artifact/artis-mark.js')) as {
   usefulAttr: Record<string, Record<string, number>>
 }
-const { classTitleOf } = await import('../src/service/character.service.ts')
+const { classTitleOf } = await import('../src/service/assembler/character.assembler.ts')
 
 /*
  * 内核 ArtisMarkCfg.getCfg 的结果（vendored JS）—— 这里声明我们真正读的字段。
@@ -691,7 +691,7 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
  * ⚠️ 名字必须逐个断言：三个 key 都存在 ≠ 三个名字不同（合并成一个照样「都在」）。 */
 console.log('\n=== 11. 面板属性表：三种加成只按权重表出行 ===')
 
-const { attrTableOf } = await import('../src/service/character.service.ts')
+const { attrTableOf } = await import('../src/service/assembler/character.assembler.ts')
 const panelOfFake = (attr: Record<string, number>, w: Record<string, number> = {}, elem = ''): AttrRow[] =>
   attrTableOf({ attr, base: {} }, 'chs', w, elem)
 const DMG3 = ['dmg', 'phy', 'heal']

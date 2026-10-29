@@ -4,6 +4,8 @@
 [`DESIGN.md`](DESIGN.md)（为什么内嵌 miao）与 [`DESIGN-DATA-MODEL.md`](DESIGN-DATA-MODEL.md)
 （数据层论证）。本篇是**重构**的施工图 + 进度记录。
 
+> 状态：**已完成**。五步重构全部落地，`npm test` 全绿、评分与 miao 逐字一致。
+
 ---
 
 ## 一、诊断：乱在哪
@@ -63,8 +65,8 @@ assembler 是两者的合流点（miao 计算 + i18n 翻译）。领域规则在
 | 1 | kernel → gateway/miao | ✅ 完成 |
 | 2 | upstream → gateway/enka | ✅ 完成 |
 | 3 | domain → dbo（目录 + 类名加 Dbo 后缀） | ✅ 完成 |
-| 4 | 建 service/dto + service/assembler，拆编排/组装 | ⏳ 待做 |
-| 5 | 读接口粒度对齐（loadCharacter 替代整包 find） | ⏳ 待做 |
+| 4 | 建 service/dto + service/assembler，拆编排/组装 | ✅ 完成 |
+| 5 | 读接口粒度对齐（loadCharacter 替代整包 find） | ✅ 完成 |
 
 每一步都跑 `npm test`（typecheck → smoke → arch → enka → pipeline → i18n → server → cli →
 regression → verify）验证，评分与 miao 逐字一致（verify diff 为空）才算过。
@@ -74,25 +76,28 @@ regression → verify）验证，评分与 miao 逐字一致（verify diff 为�
 
 ---
 
-## 四、待做的第 4、5 步（service 层内聚拆分）
+## 四、第 4、5 步的实际落地（service 层内聚拆分）
 
 ### 第 4 步：dto 与 assembler
 
-`character.service.ts`（792 行）按"变化原因"拆：
+`character.service.ts`（原 792 行）按"变化原因"拆成三块：
 
-| 内容 | 去向 |
-|---|---|
-| `AttrRow`/`MarkDetail`/`DamageRow`/`DamageView`/`SimRequest`/`SimResult`/`SimView`/`SimCatalog` 等类型 | `service/dto/character.dto.ts` |
-| `shapeCharacter`/`attrTableOf`/`panelOf`/`classTitleOf`/`charImgs`/`damageOf`/`simCharacterOf` + 私有辅助 | `service/assembler/character.assembler.ts` |
-| `characterDamage`/`characterSim`/`simCatalogOf`/`weightFilterOptions`（编排用例） | 留在 `character.service.ts` |
+| 内容 | 去向 | 行数 |
+|---|---|---|
+| 编排用例（`characterDamage`/`characterSim`/`simCatalogOf`/`weightFilterOptions`） | `character.service.ts` | 80 行 |
+| 组装逻辑（`shapeCharacter`/`attrTableOf`/`classTitleOf`/`charImgs`/`damageOf`/`damageToView`/`simCharacterOf`/`simViewOf`/`simCatalogToDto` 等） | `assembler/character.assembler.ts` | 440 行 |
+| 传输类型（`CharacterDto`/`AttrRow`/`MarkDetail`/`DamageView`/`SimView`/`SimCatalog` 等） | `dto/character.dto.ts` | 157 行 |
 
-`shapeCharacter` 返回类型从 `ReturnType` 改成显式 `CharacterDto`。`damageOf` 和 `characterSim`
-里重复的伤害组装（`dmg.entries.map(...)`）抽成 `DamageAssembler.toDTO(dmg)` 消除重复。
+关键点：
+- `shapeCharacter` 返回类型从 `ReturnType` 改成显式 `CharacterDto`
+- `damageOf` 和 `characterSim` 里重复的伤害组装抽成 `damageToView(dmg)`，消除重复
+- `gateway/miao/damage.ts` 的 `DamageResult`/`DamageEntry` 改名 `MiaoDamage`/`MiaoDamageEntry`，
+  避免和 dto 的用例判别联合 `DamageResult` 重名（一个指"引擎原始伤害"，一个指"用例结果"）
 
 ### 第 5 步：读接口粒度对齐
 
-`characterDamage`/`characterSim`/`simCatalogOf` 改调 `repo.loadCharacter(db, uid, avatarId)`
-（或 `loadAccountWithCharacters(db, uid, [avatarId])`），不再整包加载后内存 find。
+`characterDamage`/`characterSim`/`simCatalogOf` 改调 `repo.loadCharacter(db, uid, avatarId)`，
+不再整包加载后内存 find。
 
 ---
 

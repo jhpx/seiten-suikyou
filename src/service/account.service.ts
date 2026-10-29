@@ -20,8 +20,8 @@ import type { IngestResult } from '../gateway/enka/enka-account.ts'
 import { errMessage, fmtTime } from '../common/util.ts'
 import { buildAdvice } from './advice.ts'
 import type { AdviceBundle } from './advice.ts'
-import { shapeCharacter } from './character.service.ts'
-import type { MarkDetail } from './character.service.ts'
+import { shapeCharacter } from './assembler/character.assembler.ts'
+import type { MarkDetail } from './dto/character.dto.ts'
 
 /** 列表页一行（只有昵称等级这类概要，不带角色） */
 export interface AccountSummary {

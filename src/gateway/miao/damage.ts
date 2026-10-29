@@ -13,7 +13,7 @@ import { ProfileDmg } from '../../index.ts'
 import type { MiaoProfile } from './materialize.ts'
 
 /** 一条伤害 —— calcData 返回里的 ret[i] */
-export interface DamageEntry {
+export interface MiaoDamageEntry {
   title: string
   /** 暴击伤害。反应类伤害（蒸发 / 扩散 / …）不吃暴击，只有 avg */
   dmg: number | null
@@ -23,8 +23,9 @@ export interface DamageEntry {
   unit: string
 }
 
-export interface DamageResult {
-  entries: DamageEntry[]
+/** miao 引擎的原始伤害结果 —— 归一化后的 calcData 出口，不碰渲染 */
+export interface MiaoDamage {
+  entries: MiaoDamageEntry[]
   /** 默认条目当前生效的 buff 列表（内核 msg，标题里已内联好数值） */
   buffs: string[]
   /** 角色 calc.js 的署名（miao 社区贡献者，比如「冰翼」） */
@@ -42,7 +43,7 @@ export interface DamageResult {
  *
  * enemyLv 默认 103 —— 与上游一致（103 级小宝，面板伤害对比的基准敌人）。
  */
-export async function calcDamage (profile: MiaoProfile, opts: { enemyLv?: number } = {}): Promise<DamageResult | null> {
+export async function calcDamage (profile: MiaoProfile, opts: { enemyLv?: number } = {}): Promise<MiaoDamage | null> {
   let ret: any
   try {
     const dmg = new ProfileDmg(profile as any, 'gs')

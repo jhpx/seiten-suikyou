@@ -9,10 +9,10 @@
  */
 import { i18n } from '../index.ts'
 import { slotLabel } from './artifact.service.ts'
-import type { shapeCharacter } from './character.service.ts'
+import type { CharacterDto } from './dto/character.dto.ts'
 
 /** shapeCharacter 的产物 —— 建议层不重算评分，直接吃页面已经成型的那份 */
-export type AvatarView = ReturnType<typeof shapeCharacter>
+export type AvatarView = CharacterDto
 
 /**
  * 口径参数。这几个数都是可讨论的，别在调用点重复写死。
