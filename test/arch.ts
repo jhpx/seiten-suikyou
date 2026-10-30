@@ -357,22 +357,24 @@ ok(fs.existsSync(path.join(SRC, 'cli')), 'src/cli/ 与 src/server/ 并列（命�
 for (const side of ['gateway', 'common']) {
   ok(fs.existsSync(path.join(SRC, side)), `src/${side}/ 是横向件目录之一`)
 }
-/* 三层按**领域**对照 —— 同一个领域在 rest / service / repository 各有一个文件，后缀写明层。
-   非领域件用固定名字、不加层后缀：rest 的系统资源 meta.ts 与响应原语 reply.ts、
-   service 的能力契约 context.ts；repository 一个都不许有（一行一表也得归到某个领域名下）。
-   加新领域时三处一起加 —— 这条断言会逼你这么做，而不是只往一层丢个新文件。 */
+/* 三层按**领域**对照 —— 业务领域在 rest / service / repository 各有一个实现文件，后缀写明层。
+   后缀标记「这是这一层的真正实现」：rest 的后缀 = 真正的 HTTP 控制器（meta 是系统领域，只在
+   这一层有控制器，没有 service / repo 对应）；service 后缀 = 用例实现；repository 后缀 = 一张表一行。
+   非领域件用固定名字、不加后缀：rest 的响应原语 reply.ts、service 的能力契约 context.ts；
+   repository 一个都不许有（一行一表也得归到某个领域名下）。
+   加新业务领域时三层一起加 —— 这条断言会逼你这么做，而不是只往一层丢个新文件。 */
 const DOMAINS = ['account', 'character']
-const LAYERS: Array<{ dir: string, suffix: string, plain: string[] }> = [
-  { dir: 'rest', suffix: '.rest.ts', plain: ['meta.ts', 'reply.ts'] },
-  { dir: 'service', suffix: '.service.ts', plain: ['context.ts', 'advice.ts', 'artifact.service.ts', 'simulator.service.ts'] },
-  { dir: 'repository', suffix: '.repo.ts', plain: [] }
+const LAYERS: Array<{ dir: string, suffix: string, domains: string[], plain: string[] }> = [
+  { dir: 'rest', suffix: '.rest.ts', domains: [...DOMAINS, 'meta'], plain: ['reply.ts'] },
+  { dir: 'service', suffix: '.service.ts', domains: DOMAINS, plain: ['context.ts', 'advice.ts', 'artifact.service.ts', 'simulator.service.ts'] },
+  { dir: 'repository', suffix: '.repo.ts', domains: DOMAINS, plain: [] }
 ]
-for (const { dir, suffix, plain } of LAYERS) {
+for (const { dir, suffix, domains, plain } of LAYERS) {
   const actual = fs.readdirSync(path.join(SRC, dir), { withFileTypes: true })
     .filter(e => e.isFile() && e.name.endsWith('.ts')).map(e => e.name).sort()
-  const expected = [...DOMAINS.map(d => d + suffix), ...plain].sort()
+  const expected = [...domains.map(d => d + suffix), ...plain].sort()
   ok(actual.join(' ') === expected.join(' '),
-    `${dir}/ = 领域文件（${DOMAINS.map(d => d + suffix).join(' / ')}）+ 固定非领域件（现存的：${actual.join(' / ')}）`)
+    `${dir}/ = 实现文件（${domains.map(d => d + suffix).join(' / ')}）+ 固定非领域件（现存的：${actual.join(' / ')}）`)
 }
 
 /* 老位置别再复活：adapter / i18n / shared / view 已经各有归宿。

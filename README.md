@@ -318,7 +318,7 @@ seiten-suikyou/
 │   ├── rest/                 # 控制器：一个资源一个文件，只做 HTTP 关切（取参 / 判 404 / 拼响应）
 │   │   ├── account.rest.ts   #   账号：列表 / 详情 / 刷新
 │   │   ├── character.rest.ts #   角色：伤害
-│   │   ├── meta.ts           #   系统：语言表 / 界面文案 / 探活（非领域资源，不加层后缀）
+│   │   ├── meta.rest.ts      #   系统：语言表 / 界面文案 / 探活
 │   │   └── reply.ts          #   响应原语：ok() / fail() / noData()
 │   ├── gateway/              # 外部系统隔离（原 kernel + upstream）
 │   │   ├── miao/             #   对 miao 评分内核：materialize / damage / simulate

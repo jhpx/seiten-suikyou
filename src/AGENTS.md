@@ -20,7 +20,7 @@
 | 目录 | 当前职责 |
 |---|---|
 | `server/` | 应用创建与启动、路由表、限流、静态托管及错误处理 |
-| `rest/` | HTTP 控制器；控制器按领域平铺，另有 `meta.ts`、`reply.ts` 等通用入口 |
+| `rest/` | HTTP 控制器；控制器按资源平铺（`account` / `character` / `meta`，均 `.rest.ts`），`reply.ts` 为响应原语共用件 |
 | `service/` | 用例与业务编排；`context.ts` 定义控制器可使用的能力契约；`dto/` 传输类型、`assembler/` 视图组装 |
 | `config/` | 数据库连接、表结构定义、默认值及存储门面 |
 | `repository/` | 按领域组织的持久化访问；`dbo/` 数据库对象（原 domain，贫血、零依赖孤岛） |

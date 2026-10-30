@@ -6,7 +6,7 @@
  *
  * 目录速查：
  *   server/      装配（createApp / startServer / CLI 入口）+ URL 表（routes）+ 限流
- *   rest/        控制器：一个资源一个文件（account / character，.rest.ts 后缀）+ meta.ts / reply.ts 系统与共用件
+ *   rest/        控制器：一个资源一个文件（account / character / meta，.rest.ts 后缀）+ reply.ts 响应原语
  *   service/     用例编排 + 组装器 + 传输 dto：account / character / simulator（.service.ts）+ dto/ + assembler/ + context.ts 契约
  *   config/      存储基建：constants（全局默认值）+ schema / db / store（表定义、连接、聚合读写）
  *   repository/  一张表一行（.repo.ts）+ dbo/ 数据库对象（Account / Character / Weapon / Artifact / Stat）
