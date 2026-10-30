@@ -28,7 +28,7 @@
     "server": "node --disable-warning=ExperimentalWarning src/server/index.ts",
     "score": "node --disable-warning=ExperimentalWarning src/cli/score.ts",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node test/smoke.ts && node test/args.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/damage.ts && node test/verify.ts",
+    "test": "npm run typecheck && node test/smoke.ts && node test/args.ts && node test/arch.ts && node test/enka.ts && node --disable-warning=ExperimentalWarning test/pipeline.ts && node test/i18n.ts && node --disable-warning=ExperimentalWarning test/server.ts && node --disable-warning=ExperimentalWarning test/scenario.ts && node --disable-warning=ExperimentalWarning test/cli.ts && node test/regression.ts && node test/damage.ts && node test/verify.ts",
     "sync": "python tools/sync.py",
     "sync:check": "python tools/sync.py --check"
   },

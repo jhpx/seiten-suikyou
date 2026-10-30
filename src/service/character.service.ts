@@ -14,6 +14,7 @@ import * as repo from '../config/store.ts'
 import { statLabel } from './artifact.service.ts'
 import { damageOf } from './assembler/damage.assembler.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
+import { getScenarios } from '../gateway/miao/scenario.ts'
 
 /** 伤害用例：一个角色 → 伤害表 */
 export async function characterDamage (db: Db, uid: number, avatarId: number): Promise<DamageResult> {
@@ -44,4 +45,59 @@ export function notFound (db: Db, uid: number, avatarId: number): { kind: 'no_da
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
   return { kind: 'no_character' }
+}
+
+/* ───────────────────────── 评分场景（用户可选 miao 内置场景） ───────────────────────── */
+
+export interface ScenarioOption {
+  /** 场景名（与 src/gateway/miao/scenarios.json 对齐；选它时用这个名字回写库） */
+  name: string
+  /** 触发条件的人类可读描述（「纯火」「血牛」「无 artis.js，固定取默认表权重」…） */
+  cond: string
+  /** 是不是角色唯一/兜底的那套（基础表） */
+  isBase: boolean
+}
+
+export type ScenarioList =
+  | { kind: 'ok'; scenarios: ScenarioOption[]; current: string | null }
+  | { kind: 'no_data' }
+  | { kind: 'no_character' }
+
+/** 列这个角色能用的全部 miao 评分场景 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
+export function listScenarios (db: Db, uid: number, avatarId: number): ScenarioList {
+  const account = repo.loadAccountWithCharacters(db, uid)
+  if (!account) return { kind: 'no_data' }
+  const character = loadOneCharacter(db, uid, avatarId)
+  if (!character) return { kind: 'no_character' }
+  const list = getScenarios(avatarId) || []
+  return {
+    kind: 'ok',
+    scenarios: list.map(s => ({ name: s.name, cond: s.cond, isBase: s.isBase })),
+    current: repo.getScenario(db, uid, avatarId)
+  }
+}
+
+export type SelectScenarioResult =
+  | { kind: 'ok' }
+  | { kind: 'no_data' }
+  | { kind: 'no_character' }
+  | { kind: 'bad_scenario' }
+
+/**
+ * 选 / 清一个评分场景。scenario 为 null = 退回 miao 自动选（删偏好行）。
+ * 名字必须在角色可用场景里，否则回 bad_scenario（防止写进一个不存在的场景名）。
+ */
+export function selectScenario (db: Db, uid: number, avatarId: number, scenario: string | null): SelectScenarioResult {
+  const account = repo.loadAccountWithCharacters(db, uid)
+  if (!account) return { kind: 'no_data' }
+  const character = loadOneCharacter(db, uid, avatarId)
+  if (!character) return { kind: 'no_character' }
+  if (scenario === null) {
+    repo.setScenario(db, uid, avatarId, null)
+    return { kind: 'ok' }
+  }
+  const list = getScenarios(avatarId) || []
+  if (!list.some(s => s.name === scenario)) return { kind: 'bad_scenario' }
+  repo.setScenario(db, uid, avatarId, scenario)
+  return { kind: 'ok' }
 }

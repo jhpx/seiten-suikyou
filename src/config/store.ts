@@ -14,7 +14,7 @@ import * as accountBo from '../repository/account.repo.ts'
 import * as characterBo from '../repository/character.repo.ts'
 import type { AccountRow } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
-import { account as accountT, artifact as artifactT, character as characterT, weapon as weaponT } from './schema.ts'
+import { account as accountT, artifact as artifactT, character as characterT, characterScenario as characterScenarioT, weapon as weaponT } from './schema.ts'
 import { AccountDbo } from '../repository/dbo/account.ts'
 import { CharacterDbo } from '../repository/dbo/character.ts'
 import { WeaponDbo } from '../repository/dbo/weapon.ts'
@@ -218,4 +218,16 @@ export function lastFetch (db: Conn, uid: number): FetchLogRow | null {
 /** 库里用到的官方文案 key 清单（跨三张表去重，见 repository/character.repo.ts） */
 export function listTextKeys (db: Conn): characterBo.TextKeys {
   return characterBo.collectTextKeys(db)
+}
+
+/* ─────────────── 评分场景偏好 ─────────────── */
+
+/** 读角色当前选中的评分场景名；没选过 → null（= 用 miao 自动选） */
+export function getScenario (db: Conn, uid: number, avatarId: number): string | null {
+  return characterBo.getScenario(db, uid, avatarId)
+}
+
+/** 设 / 清选中场景（scenario 为 null = 退回 miao 自动选） */
+export function setScenario (db: Conn, uid: number, avatarId: number, scenario: string | null): void {
+  characterBo.setScenario(db, uid, avatarId, scenario)
 }

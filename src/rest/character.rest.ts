@@ -61,3 +61,45 @@ export const simulate = (ctx: ApiContext): Handler => async (c) => {
   if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
   return ok(c, result.view)
 }
+
+/** 评分场景列表：这个角色有哪些 miao 内置场景，当前选的是哪个 */
+export const scenarios = (ctx: ApiContext): Handler => (c) => {
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
+  const avatarId = num(c, 'avatarId')
+  const result = ctx.characters.scenarios(uid, avatarId)
+  if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
+  if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
+  return ok(c, { scenarios: result.scenarios, current: result.current })
+}
+
+/**
+ * 选 / 清一个评分场景。请求体 { scenario: string | null }：
+ *   scenario 为某个场景名 → 用那套权重算分；为 null → 退回 miao 自动选。
+ * 缺字段 / 类型不对当 400（请求写错，不是服务出错）。
+ */
+export const selectScenario = (ctx: ApiContext): Handler => async (c) => {
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
+  const avatarId = num(c, 'avatarId')
+
+  let body: unknown
+  try {
+    body = await c.req.json()
+  } catch {
+    return fail(c, 400, 'bad_request', '请求体不是合法的 JSON')
+  }
+  if (!body || typeof body !== 'object' || !('scenario' in body)) {
+    return fail(c, 400, 'bad_request', '请求体缺少 scenario 字段')
+  }
+  const scenario = (body as { scenario: unknown }).scenario
+  if (scenario !== null && typeof scenario !== 'string') {
+    return fail(c, 400, 'bad_request', 'scenario 必须是字符串或 null')
+  }
+
+  const result = ctx.characters.selectScenario(uid, avatarId, scenario as string | null)
+  if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
+  if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
+  if (result.kind === 'bad_scenario') return fail(c, 404, 'bad_scenario', `角色 ${avatarId} 没有这个评分场景`)
+  return ok(c, { current: scenario as string | null })
+}

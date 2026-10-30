@@ -13,7 +13,7 @@ import type { AccountSummary, AccountView } from './dto/account.dto.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
 import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
 import type { IngestResult } from '../gateway/enka/enka.dto.ts'
-import { weightFilterOptions } from './character.service.ts'
+import { weightFilterOptions, type ScenarioList, type SelectScenarioResult } from './character.service.ts'
 
 export type { AccountView, AccountSummary }
 
@@ -45,6 +45,10 @@ export interface ApiContext {
     simCatalog: (uid: number, avatarId: number, locale: string) => SimCatalog | null
     /** 按改后的配装重算面板与伤害；返回的面板/词条名按 locale 给 */
     simulate: (uid: number, avatarId: number, req: SimRequest, locale: string) => Promise<SimResult>
+    /** 这个角色可用的 miao 评分场景 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
+    scenarios: (uid: number, avatarId: number) => ScenarioList
+    /** 选 / 清一个评分场景（scenario 为 null = 退回 miao 自动选）；判别同上 + 场景名不存在 */
+    selectScenario: (uid: number, avatarId: number, scenario: string | null) => SelectScenarioResult
   }
   /** 抓一次并落库（并发同 uid 会合并） */
   ingest: (uid: number) => Promise<IngestResult>

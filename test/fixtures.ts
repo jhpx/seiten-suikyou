@@ -48,16 +48,22 @@ export function buildProfile (
 ) {
   const char = Character.get(charName)
   if (!char) throw new Error(`角色不存在: ${charName}`)
+  const wLevel = weapon.level ?? 90
   return {
     isProfile: true,
     isGs: true,
     game: 'gs',
+    uid: null,
     id: char.id,
     elem: char.elem,
     char,
-    weapon,
-    attr,
+    level: 90,
+    promote: 6,
+    fetter: 10,
+    costume: 0,
     cons,
+    weapon: { name: weapon.name, level: wLevel, promote: 6, affix: weapon.affix },
+    attr,
     artis: buildArtis(artisList)
   }
 }

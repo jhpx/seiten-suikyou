@@ -11,6 +11,7 @@ import * as repo from '../config/store.ts'
 import { ArtisMark } from '../index.ts'
 import { i18n } from '../index.ts'
 import { toMiaoProfile } from '../gateway/miao/materialize.ts'
+import { scoreWithWeights, findScenarioWeights } from '../gateway/miao/scenario.ts'
 import type { AccountDbo } from '../repository/dbo/account.ts'
 import type { EnkaPayload } from '../gateway/enka/enka.dto.ts'
 import { fetchEnka } from '../gateway/enka/enka.fetch.ts'
@@ -49,18 +50,27 @@ export function countAccounts (db: Db): number {
 /** 一整包 → 视图对象（页面/接口的最终形状），内部把 materialize + 打分 + 本地化串起来。
  *  不认识的角色（miao 元数据里没有该 avatarId）收进 `skipped` 而不是整包失败 —— 新角色先于 miao 更新是常态。
  *  fetchedAt 是 UID 级（= 上次同步 enka，通常取 fetch_log 最新一条）；角色各自的在 shapeCharacter 里出。 */
-export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetchedAt = null }: {
+export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetchedAt = null, scenarioByAvatar = {} }: {
   account: AccountDbo | null
   locale?: string
   fetchedAt?: string | null
+  /** 每个头像选中的评分场景名（按 avatarId 索引）；没出现的角色 = 用 miao 自动选 */
+  scenarioByAvatar?: Record<number, string | null>
 }): AccountView {
   const loc = i18n.resolveLocale(locale)
   const avatars: Array<ReturnType<typeof shapeCharacter>> = []
   const skipped: Array<number | null> = []
   for (const ch of account?.characters || []) {
+    const avatarId = ch.avatarId!
     const profile = toMiaoProfile(ch)
-    if (!profile) { skipped.push(ch.avatarId); continue }
-    avatars.push(shapeCharacter(ch, profile, ArtisMark.getMarkDetail(profile, true) as MarkDetail, loc))
+    if (!profile) { skipped.push(avatarId); continue }
+    /* 这个角色若存了用户选的场景，就用那套权重算分（覆盖 miao 自动选）；否则走 miao 默认 */
+    const sel = scenarioByAvatar[avatarId] ?? null
+    const weights = sel ? findScenarioWeights(avatarId, sel) : null
+    const mark = weights
+      ? scoreWithWeights(profile, weights, sel) as MarkDetail
+      : ArtisMark.getMarkDetail(profile, true) as MarkDetail
+    avatars.push(shapeCharacter(ch, profile, mark, loc))
   }
   return {
     locale: loc,
@@ -92,7 +102,18 @@ export function buildAccountView ({ account, locale = i18n.DEFAULT_LOCALE, fetch
 export function accountView (db: Db, uid: number, locale: string): AccountView | null {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return null
-  return buildAccountView({ account, locale, fetchedAt: repo.lastFetch(db, uid)?.fetchedAt || null })
+  /* 这个账号名下每个角色选了哪个评分场景，一次性读出来塞进视图 —— 评分时按角色取，不每个角色打一次库 */
+  const scenarioByAvatar: Record<number, string | null> = {}
+  for (const ch of account.characters || []) {
+    const avatarId = ch.avatarId!
+    scenarioByAvatar[avatarId] = repo.getScenario(db, uid, avatarId)
+  }
+  return buildAccountView({
+    account,
+    locale,
+    fetchedAt: repo.lastFetch(db, uid)?.fetchedAt || null,
+    scenarioByAvatar
+  })
 }
 
 /* ───────────────────────── 抓取用例（refresh 路由） ───────────────────────── */

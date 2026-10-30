@@ -1314,18 +1314,23 @@ ${RENDER_JS}
 /* 入口                                                                */
 /* ------------------------------------------------------------------ */
 
-async function main (): Promise<void> {
+/** 扫全部角色目录、跑符号执行+运行时探测、按元素→星级→上线顺序排序，返回带场景的整张表。
+ *  文档表与场景 JSON 共用这一份，保证两者口径永远一致。 */
+async function buildAllChars (): Promise<CharRow[]> {
   const dirs = readdirSync(CHAR_DIR, { withFileTypes: true })
     .filter(d => d.isDirectory() && existsSync(join(CHAR_DIR, d.name, 'data.json')))
     .map(d => d.name)
   const chars: CharRow[] = []
   for (const d of dirs) chars.push(await buildChar(d))
-
-  // 排序：元素 → 星级降序 → 上线顺序（角色 id）
   chars.sort((a, b) =>
     ELEM_ORDER.indexOf(a.elem) - ELEM_ORDER.indexOf(b.elem) ||
     b.star - a.star ||
     a.id - b.id)
+  return chars
+}
+
+async function main (): Promise<void> {
+  const chars = await buildAllChars()
 
   const genTime = new Date().toLocaleString('zh-CN', { hour12: false })
   const src = gitInfo()
@@ -1376,6 +1381,21 @@ ${FACTOR_ORDER.map(f => `<span class="chip" data-d="${f}">${f}</span>`).join('')
 </details>`
   writeFileSync(join(DOCS_DIR, '原神圣遗物评分场景总表.html'), pageHtml(
     '原神圣遗物评分场景总表', sceneSub, sceneBars, sceneThead, sceneData, sceneTip), 'utf-8')
+
+  /* ---------------- 场景 JSON（供后端运行时 serve，与文档表同源） ----------------
+   * 键 = 角色 avatar_id（= miao data.json 的 id），值是该角色的全部评分场景。
+   * weights 是 artis.js 的**原始 attrWeight**（未叠加护摩/绝缘4/西风这类武器套装适配——
+   * 那些要看具体配装，运行期按真实 build 现算）。后端 scoreWithWeights 拿到它后再叠适配，
+   * 所以这份 JSON 只存「场景本身长啥样」。 */
+  const scenarioMap: Record<string, Array<{ name: string; cond: string; weights: number[]; isBase: boolean; deps: string }>> = {}
+  for (const c of chars) {
+    scenarioMap[String(c.id)] = c.scenarios.map(s => ({
+      name: s.name, cond: s.cond, weights: s.weights, isBase: s.isBase, deps: s.deps
+    }))
+  }
+  const scenarioJson = { keys: KEYS, scenarios: scenarioMap }
+  writeFileSync(join(ROOT, 'src', 'gateway', 'miao', 'scenarios.json'), JSON.stringify(scenarioJson), 'utf-8')
+  console.log(`场景 JSON：${Object.keys(scenarioMap).length} 个角色已写入 src/gateway/miao/scenarios.json`)
 
   /* ---------------- 校验报告 ---------------- */
   console.log(`角色 ${chars.length} 个，场景 ${sceneCount} 行，多套权重角色 ${multiCount} 个`)
