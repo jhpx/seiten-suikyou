@@ -1,11 +1,11 @@
 # miao 内核同步报告
 
-- 同步时间：2026-10-23 19:07:09
+- 同步时间：2026-10-31 00:37:39
 - 上游来源：`E:/Workspace-Private/workspace-javascript/miao-plugin`（miao-plugin v2.3.3）
-- 搬运文件：658 个 / 4100.7 KB
+- 搬运文件：658 个 / 4102.4 KB
 - 处置方式：**原样搬运 649 个**　|　定点改写 9 个　|　本地生成 2 个
 - 增量基准：最后一个动过 `vendor/miao` 的 git 提交
-- 相对上一版（提交 `c3f7435`）：新增 0 个　|　移除 0 个　|　内容变化 1 个　|　未动 659 个
+- 相对上一版（提交 `8e069e8`）：新增 0 个　|　移除 0 个　|　内容变化 4 个　|　未动 656 个
 
 搬运范围：components（6）、models（26）、resources（625）、tools（1）
 
@@ -58,12 +58,12 @@
 
 ## 二、相对上一版差在哪
 
-基准是提交 `c3f7435`（2026-10-20 19:48:11 +0800）—— 也就是上一版同步的产物。
+基准是提交 `8e069e8`（2026-10-23 19:13:14 +0800）—— 也就是上一版同步的产物。
 
 差异由 git 给出：`git diff` 负责已跟踪文件的变化，`git status` 补上未跟踪的新文件
 （同步新搬进来的目录在 `git diff` 里是看不见的）。`VENDOR.md` 每次重写，一律排除。
 
-- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **1** 个　- 未动 **659** 个
+- 新增 **0** 个　- 移除 **0** 个　- 内容变化 **4** 个　- 未动 **656** 个
 
 ### 新增（0 个）
 
@@ -73,13 +73,18 @@
 
 （无）
 
-### 内容变化（1 个）
+### 内容变化（4 个）
 
-- **圣遗物数据**（1 个）—— 部位与套装数据、副词条基准、评分权重表（`artis-mark.js`）
+- **评分算法**（1 个）—— `Artis` / `ArtisAttr` / `ArtisMark` / `ArtisMarkCfg` / `ArtisSet` —— 评分内核本体
+- **角色数据**（2 个）—— 每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）＋ `calc.js`（该角色的伤害计算脚本，旅行者按元素分开放 `旅行者/<元素>/`）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）
+- **武器数据**（1 个）—— 每把武器一个目录的详情 `data.json`（按单手剑/弓/法器/双手剑/长柄武器 5 类分目录）＋ 每类的 `calc.js`（武器特效数值换算）＋ 4 个索引文件
 
 <details><summary>逐个文件（数量多的做省略，完整清单见 git diff）</summary>
 
-- `resources/meta-gs/artifact/artis-mark.js`
+- `models/artis/ArtisSet.js`
+- `resources/meta-gs/character/瓦列里/data.json`
+- `resources/meta-gs/character/米提亚/data.json`
+- `resources/meta-gs/weapon/catalyst/秘星典谕/data.json`
 
 </details>
 

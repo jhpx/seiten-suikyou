@@ -1,6 +1,6 @@
 # 多语言文案同步报告
 
-- 同步时间：2026-10-23T19:10:05
+- 同步时间：2026-10-31T00:37:42
 - 上游来源：`gitlab.com/Dimbreath/AnimeGameData`（`master（最近提交 2026-06-29，游戏 6.6.0）`）
 - 词条来源：`cdn.jsdelivr.net/gh/EnkaNetwork/API-docs@master/store/loc.json`
 - 语言：简体中文、繁體中文、English、日本語、한국어
