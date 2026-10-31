@@ -204,21 +204,23 @@
 默认 view 由 miao **自动挑**一套；这个接口把全部可选规则列出来，前端据此给用户一个下拉框——
 「当你觉得某个角色评分不对时，挑一个跟你实际玩法一致的规则」。
 
-**成功响应（200）：**
+**成功响应（200）：**（以 `?locale=en` 为例）
 ```jsonc
 {
   "ok": true,
   "data": {
     "rubrics": [
-      { "name": "基础", "cond": "无 artis.js，固定取默认表权重", "isBase": true },
-      { "name": "纯辅", "cond": "行秋-纯辅", "isBase": false }
+      { "name": "通用", "label": "Furina-General", "cond": "未命中上述任一分支", "isBase": true },
+      { "name": "板砖纯辅", "label": "Furina-Key Support", "cond": "武器 = 圣显之钥 且 充能 ≥ 220", "isBase": false }
     ],
-    "current": "纯辅"          // 当前选中的规则名；null = 用 miao 自动选（随配装变）
+    "current": "板砖纯辅"      // 当前选中的规则名；null = 用 miao 自动选（随配装变）
   }
 }
 ```
 - `current` 为 `null` 表示「未选」，view 里该角色按 miao 自动选算分。
-- `name` 是唯一标识，选规则时原样回传。
+- `name` 是唯一标识（miao 的中文规则名），**各语言都一样**，选规则时原样回传。
+- `label` 是**给人看的**「角色名-规则名」，**跟着 `?locale=` 变**：角色名走官方文案表，规则名走我们自己的意译表（`src/common/rubric-names.ts`）。
+- `cond` 是触发条件的中文说明，**目前只有中文**（页面上不显示，只作数据/文档用途）。
 
 **错误码：**
 - `404 no_data` — 库里没有该 uid。
@@ -258,7 +260,7 @@
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
 | `weapon` | `{ state:'none'|'unknown'|'ok', name, sName, icon(相对路径 assets/...), level, attrs, desc }` |
 | `weapon.attrs` | `[{ key, label, value }]`：`key` 是标准词条 key（`atkBase` / `atk` / `hp` / `mastery` / `cpct` / `cdmg` / `recharge` …），`label` 是已本地化的官方名（基础攻击力 / 攻击力 / 生命值…），`value` 是显示串（`608` / `49.6%`） |
-| `score` | `{ mark:'SSS', markValue:62, markClass:'SSS', isDefaultWeight, isCustomWeight }` |
+| `score` | `{ mark:'SSS', markValue:62, markClass:'SSS', classTitle, rubricLabel, isDefaultWeight, isCustomWeight }`。`classTitle` 是 miao 的中文原文（`芙宁娜-通用`，诊断/对拍用），**页面显示用 `rubricLabel`**（同一件事的当前语言版本，如 `Furina-General`） |
 | `sets` | 圣遗物套装汇总（`[{ name, count, pieces:[pos…] }]`），用于 2+2 合并花 |
 | `artifacts` | 5 件圣遗物明细，每件含 `icon`（相对路径 `assets/...`）、`main`、`attrs[]`、`mark` |
 | `panel` / `attrTable` / `allAttr` / `consList` / `talent` | 明细页面板、属性表、合计、命座、天赋 |

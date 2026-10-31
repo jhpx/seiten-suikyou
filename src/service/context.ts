@@ -45,8 +45,8 @@ export interface ApiContext {
     simCatalog: (uid: number, avatarId: number, locale: string) => SimCatalog | null
     /** 按改后的配装重算面板与伤害；返回的面板/词条名按 locale 给 */
     simulate: (uid: number, avatarId: number, req: SimRequest, locale: string) => Promise<SimResult>
-    /** 这个角色可用的 miao 评分规则 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
-    rubrics: (uid: number, avatarId: number) => RubricList
+    /** 这个角色可用的 miao 评分规则 + 当前选中的那个（名字按 locale 给）；判别「账号没数据 / 没这个角色」 */
+    rubrics: (uid: number, avatarId: number, locale: string) => RubricList
     /** 选 / 清一个评分规则（rubric 为 null = 退回 miao 自动选）；判别同上 + 规则名不存在 */
     selectRubric: (uid: number, avatarId: number, rubric: string | null) => SelectRubricResult
   }

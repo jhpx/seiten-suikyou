@@ -14,6 +14,13 @@ import { t as uiT, all as uiAll } from './ui.ts'
 /* 查表函数（name / avatarName / weaponName / slotName / statName / fromZh / locales …）原样转出：
    调用方一直按 `i18n.xxx` 用。 */
 export * from './names.ts'
+/* 评分规则名（miao 规则名的意译表，见 rubric-names.ts）：跟 uiText 一样先认语言再查表 */
+import { rubricName } from './rubric-names.ts'
+
+/** 规则名 → 当前语言。认不出的词元原样返回（不吞字），所以认得语言这一步交给它自己。 */
+export function rubricText (zh: string, locale: string | null = DEFAULT_LOCALE): string {
+  return rubricName(zh, resolveLocale(locale))
+}
 
 /* 默认语言在 config.ts（部署决策），从 i18n 出去的调用点不改。 */
 export { DEFAULT_LOCALE }

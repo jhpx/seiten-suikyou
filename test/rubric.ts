@@ -111,6 +111,25 @@ const target = (getRubrics(avatarId) || []).find(s => s.name !== miaoAuto)?.name
   eq(r2.error.code, 'no_data', '错误码是 no_data')
 }
 
+/* ⑤ 多语言：规则名（角色名-规则名）跟着 locale 走，条件句保持中文（不在页面上显示） */
+{
+  const zh = await json(`/api/accounts/${UID}/characters/${avatarId}/rubrics?locale=chs`)
+  const en = await json(`/api/accounts/${UID}/characters/${avatarId}/rubrics?locale=en`)
+  const ja = await json(`/api/accounts/${UID}/characters/${avatarId}/rubrics?locale=ja`)
+  const ko = await json(`/api/accounts/${UID}/characters/${avatarId}/rubrics?locale=ko`)
+  /* name 是规范名（落库用），各语言都一样；label 是展示名，必须变 */
+  eq(en.data.rubrics.map((s: any) => s.name), zh.data.rubrics.map((s: any) => s.name), '各语言的 name 不变（落库仍用中文规范名）')
+  ok(en.data.rubrics.every((s: any) => /^[A-Za-z]/.test(s.label)), '英文 label 以英文角色名开头', JSON.stringify(en.data.rubrics[0]?.label))
+  ok(ja.data.rubrics.every((s: any) => !/^[\u4e00-\u9fa5]{2,3}-/.test(s.label)), '日文 label 的角色名前缀也翻了', JSON.stringify(ja.data.rubrics[0]?.label))
+  ok(ko.data.rubrics.every((s: any) => /[가-힣]/.test(s.label)), '韩文 label 含韩文', JSON.stringify(ko.data.rubrics[0]?.label))
+  ok(en.data.rubrics.some((s: any) => s.label !== zh.data.rubrics.find((z: any) => z.name === s.name)?.label), '英文 label 确实和中文不同')
+
+  /* 评分视图里的规则名同样跟着 locale（页面那条「评分规则：xxx」显示的是它） */
+  const viewEn = (await json(`/api/accounts/${UID}?locale=en`)).data.avatars.find((a: any) => a.avatarId === avatarId)
+  ok(/^[A-Za-z]/.test(viewEn.score.rubricLabel), 'score.rubricLabel 在英文下是英文', viewEn.score.rubricLabel)
+  ok(viewEn.score.classTitle === miaoAuto, 'classTitle 仍是 miao 的中文原文（诊断用，不受 locale 影响）')
+}
+
 app.server.close()
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 process.exit(failed > 0 ? 1 : 0)

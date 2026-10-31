@@ -67,7 +67,7 @@ export const rubrics = (ctx: ApiContext): Handler => (c) => {
   const uid = uidParam(c)
   if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   const avatarId = num(c, 'avatarId')
-  const result = ctx.characters.rubrics(uid, avatarId)
+  const result = ctx.characters.rubrics(uid, avatarId, localeOf(c))
   if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
   if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
   return ok(c, { rubrics: result.rubrics, current: result.current })

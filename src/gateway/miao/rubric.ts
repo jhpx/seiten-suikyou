@@ -23,6 +23,8 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ArtisMark, Artifact, Meta, Format, Data } from '../../index.ts'
 import type { MiaoProfile } from './materialize.ts'
+import { avatarName, resolveLocale } from '../../common/names.ts'
+import { rubricName } from '../../common/rubric-names.ts'
 
 /* 武器/套装适配表（与 ArtisMarkCfg.weaponCfg 逐字一致） */
 const WEAPON_CFG: Record<string, { attr: string; abbr?: string; max?: number; min?: number }> = {
@@ -60,6 +62,34 @@ function loadRubrics (): RubricData {
 export function getRubrics (avatarId: number): RubricLite[] | null {
   const { rubrics } = loadRubrics()
   return rubrics[String(avatarId)] ?? null
+}
+
+/**
+ * 展示用的「角色名-规则名」→ 当前语言。
+ *
+ * 为什么放在这儿：规则名（以及它在页面上怎么念）只有这个模块知道，两处都要用 ——
+ *   ① 下拉的选项（character.service.listRubrics）；
+ *   ② 评分卡上「自动匹配到哪条 / 单规则角色的规则名」（assembler 的 score.rubricLabel）。
+ *
+ * title 有两种来源，都得认：
+ *   · miao 自动选时给的 classTitle —— 就是 rubrics.json 里的 label（「芙宁娜-通用」）；
+ *   · 用户选了某条规则时，我们传给 scoreWithWeights 的是**裸规则名**（「输出」）。
+ * 认不出就原样返回（宁可露中文，也别显示空白）。
+ *
+ * 角色名走官方文案表（avatar_id → 5 种语言都有），规则名走 rubric-names.ts 的意译表。
+ */
+export function rubricLabel (avatarId: number, title: string, locale: string): string {
+  const t = (title || '').trim()
+  if (!t) return ''
+  const list = getRubrics(avatarId) || []
+  const hit = list.find(r => r.label === t) || list.find(r => r.name === t)
+  if (!hit) return t
+  /* 语言码先归一：avatarName 内部会认，rubricName 不会 —— 不归一就会出现
+     「角色名是韩文、规则名还是中文」这种半截翻译（kr / ko-KR 这类写法都踩过） */
+  const loc = resolveLocale(locale)
+  const charName = avatarName(avatarId, loc) || ''
+  const ruleName = rubricName(hit.name, loc)
+  return charName ? `${charName}-${ruleName}` : ruleName
 }
 
 /** 按名字取某个规则的权重数组；名字不存在或角色无规则返回 null */

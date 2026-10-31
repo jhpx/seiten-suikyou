@@ -14,7 +14,7 @@ import * as repo from '../config/store.ts'
 import { statLabel } from './artifact.service.ts'
 import { damageOf } from './assembler/damage.assembler.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
-import { getRubrics } from '../gateway/miao/rubric.ts'
+import { getRubrics, rubricLabel } from '../gateway/miao/rubric.ts'
 
 /** 伤害用例：一个角色 → 伤害表 */
 export async function characterDamage (db: Db, uid: number, avatarId: number): Promise<DamageResult> {
@@ -66,7 +66,7 @@ export type RubricList =
   | { kind: 'no_character' }
 
 /** 列这个角色能用的全部 miao 评分规则 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
-export function listRubrics (db: Db, uid: number, avatarId: number): RubricList {
+export function listRubrics (db: Db, uid: number, avatarId: number, locale: string): RubricList {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
   const character = loadOneCharacter(db, uid, avatarId)
@@ -74,7 +74,8 @@ export function listRubrics (db: Db, uid: number, avatarId: number): RubricList 
   const list = getRubrics(avatarId) || []
   return {
     kind: 'ok',
-    rubrics: list.map(s => ({ name: s.name, label: s.label || s.name, cond: s.cond, isBase: s.isBase })),
+    /* label 由 rubricLabel 现拼：角色名走官方文案表、规则名走意译表，跟着 locale 变 */
+    rubrics: list.map(s => ({ name: s.name, label: rubricLabel(avatarId, s.name, locale), cond: s.cond, isBase: s.isBase })),
     current: repo.getRubric(db, uid, avatarId)
   }
 }

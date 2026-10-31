@@ -42,6 +42,8 @@ const TABLE: Record<string, Record<string, string>> = {
     rule: '评分规则', scoredAt: '数据时间',
     rubricAuto: '自动（按配装匹配）',
     rubricAutoMatch: '自动：{name}',
+    /* 单套规则的角色没有下拉，只有这一行静态字；冒号跟着语言走（英文半角、中日韩全角） */
+    ruleLine: '评分规则：{name}',
     /* 明细页下侧的伤害计算（miao 同款「伤害计算」表）。敌人名（'小宝'）与署名（'冰翼'）是
        内核 calc.js 给的中文串、不本地化（同 elemText 的处理）；句子本身按语言给。 */
     dmgSection: '伤害计算', dmgType: '伤害类型', dmgCrit: '暴击伤害', dmgAvg: '期望伤害',
@@ -113,6 +115,7 @@ const TABLE: Record<string, Record<string, string>> = {
     rule: '評分規則', scoredAt: '資料時間',
     rubricAuto: '自動（依配裝匹配）',
     rubricAutoMatch: '自動：{name}',
+    ruleLine: '評分規則：{name}',
     dmgSection: '傷害計算', dmgType: '傷害類型', dmgCrit: '暴擊傷害', dmgAvg: '期望傷害',
     dmgCompare: '傷害對比', dmgCur: '目前', dmgAdj: '調整後', dmgDelta: '變化',
     dmgBuff: 'Buff列表', dmgBuffTip: '部分Buff的觸發條件以及層數可能影響實際傷害結果',
@@ -172,6 +175,7 @@ const TABLE: Record<string, Record<string, string>> = {
     rule: 'Rule', scoredAt: 'Scored at',
     rubricAuto: 'Auto (match build)',
     rubricAutoMatch: 'Auto: {name}',
+    ruleLine: 'Rule: {name}',
     dmgSection: 'Damage', dmgType: 'Damage Type', dmgCrit: 'Critical Hit', dmgAvg: 'Expected',
     dmgCompare: 'Compare', dmgCur: 'Current', dmgAdj: 'Adjusted', dmgDelta: 'Δ',
     dmgBuff: 'Buff List', dmgBuffTip: 'Some buffs depend on trigger conditions and stack counts and may affect actual damage',
@@ -233,6 +237,7 @@ const TABLE: Record<string, Record<string, string>> = {
     rule: '採点ルール', scoredAt: '取得日時',
     rubricAuto: '自動（装備で判定）',
     rubricAutoMatch: '自動：{name}',
+    ruleLine: '採点ルール：{name}',
     dmgSection: 'ダメージ計算', dmgType: 'ダメージ種類', dmgCrit: '会心ダメージ', dmgAvg: '期待値',
     dmgCompare: 'ダメージ比較', dmgCur: '現在', dmgAdj: '調整後', dmgDelta: '差分',
     dmgBuff: 'Buffリスト', dmgBuffTip: '一部のBuffは発動条件や重数により実際のダメージに影響する場合があります',
@@ -292,6 +297,7 @@ const TABLE: Record<string, Record<string, string>> = {
     rule: '채점 규칙', scoredAt: '수집 시각',
     rubricAuto: '자동(장비 기준)',
     rubricAutoMatch: '자동: {name}',
+    ruleLine: '채점 규칙: {name}',
     dmgSection: '피해 계산', dmgType: '피해 유형', dmgCrit: '치명타 피해', dmgAvg: '기대 피해',
     dmgCompare: '피해 비교', dmgCur: '현재', dmgAdj: '조정 후', dmgDelta: '변화',
     dmgBuff: '버프 목록', dmgBuffTip: '일부 버프는 발동 조건과 중첍에 따라 실제 피해에 영향을 줄 수 있습니다',

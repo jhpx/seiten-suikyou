@@ -89,7 +89,7 @@ export function createApp ({
       damage: (uid, avatarId) => characterDamage(db, uid, avatarId),
       simCatalog: (uid, avatarId, locale) => simCatalogOf(db, uid, avatarId, locale),
       simulate: (uid, avatarId, req, locale) => characterSim(db, uid, avatarId, req, locale),
-      rubrics: (uid, avatarId) => listRubrics(db, uid, avatarId),
+      rubrics: (uid, avatarId, locale) => listRubrics(db, uid, avatarId, locale),
       selectRubric: (uid, avatarId, rubric) => selectRubric(db, uid, avatarId, rubric)
     },
     ingest: ingest.fetch

@@ -9,6 +9,7 @@
  */
 import { Format, i18n, Weapon as MiaoWeapon } from '../../index.ts'
 import { deriveTalent } from '../../gateway/miao/materialize.ts'
+import { rubricLabel } from '../../gateway/miao/rubric.ts'
 import type { MiaoProfile } from '../../gateway/miao/materialize.ts'
 import { ArtifactDbo } from '../../repository/dbo/artifact.ts'
 import { isIntegerStatKey } from '../../common/stat.ts'
@@ -156,6 +157,8 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
   const artifactsByPos = new Map((ch.artifacts || []).map(a => [a.pos, a] as const))
   const talent = deriveTalent(char, ch.skillLevelMap || {})
   const cw = result.charWeight || {}
+  /* 规则标题（miao 口径的中文「角色名-规则名」）：classTitle 与 rubricLabel 都用它推 */
+  const title = classTitleOf(result)
 
   const sets = Object.entries(result.sets || {}).map(([name, count]) => ({
     name: i18n.fromZh(name, loc) || name,
@@ -269,7 +272,9 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
       mark: result.mark,
       markValue: result._mark,
       markClass: result.markClass || 'D',
-      classTitle: classTitleOf(result),
+      classTitle: title,
+      /* 页面显示的规则名：classTitle 是 miao 的中文原文，rubricLabel 按当前语言重拼（角色名+规则名） */
+      rubricLabel: rubricLabel(ch.avatarId ?? 0, title, loc),
       isDefaultWeight: !!result.isDefaultWeight,
       isCustomWeight: !!result.isCustomWeight
     },

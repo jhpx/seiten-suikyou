@@ -71,7 +71,10 @@ export interface CharacterDto {
     mark: string | undefined
     markValue: number | undefined
     markClass: string
+    /** miao 给的规则标题（「角色名-规则名」，中文原文；诊断/对拍用） */
     classTitle: string
+    /** 同一件事的**当前语言**版本（「Furina-General」）：页面显示这个，别直接显示 classTitle */
+    rubricLabel: string
     isDefaultWeight: boolean
     isCustomWeight: boolean
   }
