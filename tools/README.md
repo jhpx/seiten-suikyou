@@ -37,7 +37,7 @@ chrome 本体（`chrome-headless-shell`，约 120MB）落在 `.tmp/`，准备方
 
 | 文件 | 一行简介 | 怎么跑 |
 |---|---|---|
-| `gen_artis_table.ts` | 从 `vendor/miao` 的规则实测出评分总表，写进 `docs/`（场景总表 csv + html） | `node tools/gen_artis_table.ts` |
+| `gen_artis_table.ts` | 从 `vendor/miao` 的规则实测出评分总表，写进 `docs/`（规则总表 csv + html） | `node tools/gen_artis_table.ts` |
 | `link_arch.py` | 给两份架构图互插一个跳转按钮 | `python tools/link_arch.py` |
 
 `link_arch.py` 的时序是固定的：**先 archify deliver，再跑它**。deliver 会整份重写 HTML

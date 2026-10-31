@@ -1,13 +1,13 @@
 /*
- * 场景评分引擎保真验证（工具，不进 npm test）。
- * 思路：用 miao 自己造的 profile，跑 getMarkDetail（自动选场景）得到真值；
- * 再对角色的每个场景跑 scoreWithWeights，断言「至少有一个场景逐字等于真值」。
+ * 规则评分引擎保真验证（工具，不进 npm test）。
+ * 思路：用 miao 自己造的 profile，跑 getMarkDetail（自动选规则）得到真值；
+ * 再对角色的每个规则跑 scoreWithWeights，断言「至少有一个规则逐字等于真值」。
  * 若成立 → 引擎只是把"选哪套权重"从 miao 自动选换成了用户指定，数学与 miao 一致。
  * 覆盖三条适配分支：护摩(武器加生命) / 西风(暴击拉满) / 绝缘4(充能齐平)。
  */
 import { ArtisMark } from '../src/index.ts'
 import { buildProfile, type ArtisFixture } from '../test/fixtures.ts'
-import { scoreWithWeights, getScenarios } from '../src/gateway/miao/scenario.ts'
+import { scoreWithWeights, getRubrics } from '../src/gateway/miao/rubric.ts'
 
 const ATTR = { hp: 28000, atk: 1300, def: 800, cpct: 70, cdmg: 220, mastery: 250, recharge: 110, dmg: 46.6, heal: 0, phy: 0 }
 
@@ -20,7 +20,7 @@ function arrEq (a: Record<number, any>, b: Record<number, any>): boolean {
 function check (charName: string, weapon: { name: string; affix: number }, cons: number, attr: Record<string, number>, artisList?: ArtisFixture[]): boolean {
   const p = buildProfile(charName, { ...weapon, level: 90 }, cons, attr, artisList)
   const miao = ArtisMark.getMarkDetail(p, true) as any
-  const list = getScenarios(p.id) || []
+  const list = getRubrics(p.id) || []
   let matched = 0
   let detail = ''
   for (const s of list) {
@@ -34,7 +34,7 @@ function check (charName: string, weapon: { name: string; affix: number }, cons:
     }
   }
   const ok = matched >= 1
-  console.log(`${ok ? 'OK ' : '!! '}${charName}(id=${p.id}) miao=${miao._mark} 场景${list.length}个 命中${matched} ${detail}`)
+  console.log(`${ok ? 'OK ' : '!! '}${charName}(id=${p.id}) miao=${miao._mark} 规则${list.length}个 命中${matched} ${detail}`)
   return ok
 }
 

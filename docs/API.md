@@ -31,7 +31,7 @@
 | 资源名复数 | `/api/accounts`、`/api/accounts/:uid/characters/:avatarId/damage` |
 | 动态段只收数字 | `:uid`、`:avatarId` 写成 `:uid{[0-9]+}`，非数字**匹配不上路由**，直接 `404 not_found`（不会走到业务校验） |
 | 语言走 query | `?locale=chs`，不传或传错退回默认语言 |
-| 请求体 | 绝大多数接口无 body，参数从 URL 取。唯一两个收 JSON body 的是 `POST …/simulator` 与 `POST …/scenario`（结构化对象不适合塞 URL） |
+| 请求体 | 绝大多数接口无 body，参数从 URL 取。唯一两个收 JSON body 的是 `POST …/simulator` 与 `POST …/rubric`（结构化对象不适合塞 URL） |
 
 ### 1.3 语言参数 `locale`
 
@@ -77,8 +77,8 @@
 | GET | `/api/accounts` | 账号列表 |
 | GET | `/api/accounts/:uid` | 一个账号的完整视图 |
 | GET | `/api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算 |
-| GET | `/api/accounts/:uid/characters/:avatarId/scenarios` | 该角色可用的 miao 评分场景 + 当前选中项 |
-| POST | `/api/accounts/:uid/characters/:avatarId/scenario` | 选 / 清一个评分场景（请求体 `{ scenario }`） |
+| GET | `/api/accounts/:uid/characters/:avatarId/rubrics` | 该角色可用的 miao 评分规则 + 当前选中项 |
+| POST | `/api/accounts/:uid/characters/:avatarId/rubric` | 选 / 清一个评分规则（请求体 `{ rubric }`） |
 | POST | `/api/accounts/:uid/refresh` | 从 enka 抓一份新的并入库 |
 
 ### 2.1 `GET /api/meta`
@@ -198,49 +198,49 @@
 **错误码：**
 - `502 fetch_failed` — 上游 enka 失败（未公开 / 查不到 / 太频繁，message 已是人话）。
 
-### 2.7 `GET /api/accounts/:uid/characters/:avatarId/scenarios` —— 评分场景列表
+### 2.7 `GET /api/accounts/:uid/characters/:avatarId/rubrics` —— 评分规则列表
 
 每个角色在 miao 的 `artis.js` 里本来就按「武器 / 命座 / 套装 / 主词条」分了多套权重（如阿蕾奇诺 纯火/基础、迪希雅 血牛/基础）。
-默认 view 由 miao **自动挑**一套；这个接口把全部可选场景列出来，前端据此给用户一个下拉框——
-「当你觉得某个角色评分不对时，挑一个跟你实际玩法一致的场景」。
+默认 view 由 miao **自动挑**一套；这个接口把全部可选规则列出来，前端据此给用户一个下拉框——
+「当你觉得某个角色评分不对时，挑一个跟你实际玩法一致的规则」。
 
 **成功响应（200）：**
 ```jsonc
 {
   "ok": true,
   "data": {
-    "scenarios": [
+    "rubrics": [
       { "name": "基础", "cond": "无 artis.js，固定取默认表权重", "isBase": true },
       { "name": "纯辅", "cond": "行秋-纯辅", "isBase": false }
     ],
-    "current": "纯辅"          // 当前选中的场景名；null = 用 miao 自动选（随配装变）
+    "current": "纯辅"          // 当前选中的规则名；null = 用 miao 自动选（随配装变）
   }
 }
 ```
 - `current` 为 `null` 表示「未选」，view 里该角色按 miao 自动选算分。
-- `name` 是唯一标识，选场景时原样回传。
+- `name` 是唯一标识，选规则时原样回传。
 
 **错误码：**
 - `404 no_data` — 库里没有该 uid。
 - `404 no_character` — uid 下没有该 avatarId。
 
-### 2.8 `POST /api/accounts/:uid/characters/:avatarId/scenario` —— 选 / 清评分场景
+### 2.8 `POST /api/accounts/:uid/characters/:avatarId/rubric` —— 选 / 清评分规则
 
-**请求体（JSON）：** `{ "scenario": "纯辅" }` 选某个场景；`{ "scenario": null }` 清回 miao 自动选。
-`scenario` 必须是 2.7 列表里某个 `name`，否则判 `bad_scenario`。
+**请求体（JSON）：** `{ "rubric": "纯辅" }` 选某个规则；`{ "rubric": null }` 清回 miao 自动选。
+`rubric` 必须是 2.7 列表里某个 `name`，否则判 `bad_rubric`。
 
 **成功响应（200）：**
 ```jsonc
 { "ok": true, "data": { "current": "纯辅" } }   // 回显选中结果（null 表示已清除）
 ```
-选中后，下一次拉 `/api/accounts/:uid`（整包视图）时，该角色的 `score.classTitle` 变成场景名、
+选中后，下一次拉 `/api/accounts/:uid`（整包视图）时，该角色的 `score.classTitle` 变成规则名、
 `score.markValue` 按那套权重重算——**叠加 miao 的武器 / 套装适配**（护摩加生命、绝缘4 充能齐平、西风系暴击拉满），
-与 miao 在该 build 下自动选该场景**逐字一致**。
+与 miao 在该 build 下自动选该规则**逐字一致**。
 
 **错误码：**
-- `400 bad_request` — 缺 `scenario` 字段，或 `scenario` 不是字符串 / null。
+- `400 bad_request` — 缺 `rubric` 字段，或 `rubric` 不是字符串 / null。
 - `404 no_data` / `404 no_character` — 同 2.7。
-- `404 bad_scenario` — `scenario` 不在该角色可用场景里。
+- `404 bad_rubric` — `rubric` 不在该角色可用规则里。
 
 ---
 
@@ -359,7 +359,7 @@
 |---|---|---|
 | `no_data` | 404 | 库里没有该 uid（需先 refresh） |
 | `no_character` | 404 | uid 下没有该 avatarId |
-| `bad_scenario` | 404 | 选了一个该角色不存在的评分场景名 |
+| `bad_rubric` | 404 | 选了一个该角色不存在的评分规则名 |
 | `not_found` | 404 | 没有这个接口（路径/方法对不上，含动态段不是数字） |
 | `asset_type` / `asset_missing` / `asset_escape` | 404 / 404 / 403 | 素材相关（扩展名不支持 / 不存在 / 目录穿越） |
 | `rate_limited` | 429 | 触发限流，看 `Retry-After` |

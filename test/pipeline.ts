@@ -340,7 +340,7 @@ const viaDb = scoreOf(viaDbCharacter)
 const direct = scoreOf(directCharacter)
 ok(!!viaDb, '能算出分（角色被 miao 认识、圣遗物解析成功）')
 ok(viaDb?.mark === direct?.mark, `过库得分 ${viaDb?.mark} == 直接得分 ${direct?.mark}`)
-ok(viaDb?.classTitle === direct?.classTitle, `场景一致：${viaDb?.classTitle}`)
+ok(viaDb?.classTitle === direct?.classTitle, `规则一致：${viaDb?.classTitle}`)
 /* `artis` 在 MarkDetail 里是可选的（内核 withDetail=false 时整块没有）——
    这里传的是 true，所以它必然在；写成 `?.` 是照类型走，不是「可能没有」。 */
 ok(viaDb?.artis?.['1']?.main?.key === 'hpPlus',
@@ -619,11 +619,11 @@ for (const name of knownChars.filter((n) => !hasOwnRule(n))) {
 ok(passthroughChecked > 0, '对照组里至少验到了 3 个「原样透传」的角色',
   `实际验到 ${passthroughChecked} 个`)
 ok(classTitleOf({ classTitle: '胡桃-护摩', isDefaultWeight: false }) === '胡桃-护摩',
-  '场景词保留：护摩 不被改写')
+  '规则词保留：护摩 不被改写')
 ok(classTitleOf({ classTitle: '胡桃-绝缘4', isDefaultWeight: false }) === '胡桃-绝缘4',
-  '场景词保留：绝缘4 不被改写')
+  '规则词保留：绝缘4 不被改写')
 ok(classTitleOf({ classTitle: '妮莎-通用', isDefaultWeight: true }) === '默认-通用',
-  '只换前缀、后半段场景词不动（妮莎-通用 → 默认-通用）')
+  '只换前缀、后半段规则词不动（妮莎-通用 → 默认-通用）')
 ok(classTitleOf({ classTitle: '', isDefaultWeight: true }) === '',
   '空标题原样返回，不硬造出「默认」')
 ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默认',
@@ -637,14 +637,14 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
     '默认分支照抄权重表 → 前缀保持角色缩写（七七那 68 个）')
   ok(classTitleOf({ classTitle: '妮莎-通用', isDefaultWeight: true }) === '默认-通用',
     '权重表里没这个角色 → 前缀「默认」')
-  /* 特判分支标题已自带场景名，再加「自定义」是重复信息 —— 内核侧就不该标 */
+  /* 特判分支标题已自带规则名，再加「自定义」是重复信息 —— 内核侧就不该标 */
   ok(classTitleOf({ classTitle: '可莉-纯火', isCustomWeight: true }) === '可莉-纯火',
-    '标题已带场景名时不改前缀（classTitleOf 层是防御性兜底）')
-  /* ⚠️ 兜底 + 场景词：两个标记回答不同问题，不能因为标题带了场景就吞掉「默认」 */
+    '标题已带规则名时不改前缀（classTitleOf 层是防御性兜底）')
+  /* ⚠️ 兜底 + 规则词：两个标记回答不同问题，不能因为标题带了规则就吞掉「默认」 */
   ok(classTitleOf({ classTitle: '假角色-绝缘4', isDefaultWeight: true }) === '默认-绝缘4',
-    '兜底角色命中绝缘4 → 「默认-绝缘4」（不因标题已有场景词就漏掉「默认」）')
+    '兜底角色命中绝缘4 → 「默认-绝缘4」（不因标题已有规则词就漏掉「默认」）')
   ok(classTitleOf({ classTitle: '假角色-绝缘4', isCustomWeight: true }) === '假角色-绝缘4',
-    '非兜底 + 标题带场景词 → 前缀不动')
+    '非兜底 + 标题带规则词 → 前缀不动')
 }
 
 /* 真实角色：内核标记与页面标题必须一致（用真元数据跑，不用构造对象） */
@@ -670,7 +670,7 @@ ok(classTitleOf({ classTitle: '无连字符', isDefaultWeight: true }) === '默�
       `${n}：两个标记都为 false（默认分支照抄权重表）`)
     ok(classTitleOf(c) === c?.classTitle, `${n}：标题原样透传（${c?.classTitle}）`)
   }
-  /* 特判分支：内核就不该标 isCustomWeight（标题已自带场景名） */
+  /* 特判分支：内核就不该标 isCustomWeight（标题已自带规则名） */
   const kleeChar = Character.get('可莉') || null
   const klee = kleeChar
     ? asCfg(ArtisMarkCfg.getCfg({

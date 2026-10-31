@@ -20,7 +20,7 @@ import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import * as schema from './schema.ts'
 
 /** 当前结构代次。改了 schema.ts 就 +1，老库会被挡在 openDb 门口（没有迁移可补）。 */
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 export function openDb (file = ':memory:') {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true })

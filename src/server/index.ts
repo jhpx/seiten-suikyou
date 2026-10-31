@@ -31,7 +31,7 @@ import { i18n } from '../index.ts'
 import { openDb } from '../config/db.ts'
 import { accountView, countAccounts, createIngestService, listAccounts } from '../service/account.service.ts'
 import type { FetchImpl } from '../service/account.service.ts'
-import { characterDamage, weightFilterOptions, listScenarios, selectScenario } from '../service/character.service.ts'
+import { characterDamage, weightFilterOptions, listRubrics, selectRubric } from '../service/character.service.ts'
 import { characterSim, simCatalogOf } from '../service/simulator.service.ts'
 import { argValue, errMessage, parseArgs } from '../common/util.ts'
 import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../config/constants.ts'
@@ -89,8 +89,8 @@ export function createApp ({
       damage: (uid, avatarId) => characterDamage(db, uid, avatarId),
       simCatalog: (uid, avatarId, locale) => simCatalogOf(db, uid, avatarId, locale),
       simulate: (uid, avatarId, req, locale) => characterSim(db, uid, avatarId, req, locale),
-      scenarios: (uid, avatarId) => listScenarios(db, uid, avatarId),
-      selectScenario: (uid, avatarId, scenario) => selectScenario(db, uid, avatarId, scenario)
+      rubrics: (uid, avatarId) => listRubrics(db, uid, avatarId),
+      selectRubric: (uid, avatarId, rubric) => selectRubric(db, uid, avatarId, rubric)
     },
     ingest: ingest.fetch
   }

@@ -278,7 +278,7 @@ miao 拿中文名查表（`usefulAttr[char.name]`、`weaponCfg[wn]`），
 
 | # | 问题 | 影响 | 现状 |
 |---|---|---|---|
-| 1 | 面板 `attr` 从哪来 | 「核爆」类场景规则是否触发 | ✅ 已定：调 `Attr.create().calc()` 自己算，并用 `fightPropMap` 对拍验证（§1.3、§6） |
+| 1 | 面板 `attr` 从哪来 | 「核爆」类规则是否触发 | ✅ 已定：调 `Attr.create().calc()` 自己算，并用 `fightPropMap` 对拍验证（§1.3、§6） |
 | 2 | enka 的 level 基数 | 主词条数值整体差一档 | ✅ 已定：1 基（满级 21），真实数据锚点 62.2% 通过 |
 | 3 | DB 选型 | 部署形态 | ✅ 已定：SQLite（`node:sqlite`，零原生模块）。schema 两边通用，将来换 Postgres 不用改模型 |
 | 4 | 响应里有没有 TextMapHash | i18n 主键选型 | ✅ 已确认有，见 §5.1 |

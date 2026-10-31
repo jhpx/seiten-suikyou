@@ -31,7 +31,7 @@ function same (actual: unknown, expected: unknown, label: string): void {
 console.log('=== 1. 基础评分（胡桃 / 护摩之杖 / 0命）===')
 const p = buildProfile('胡桃', { name: '护摩之杖', affix: 1, level: 90 }, 0, ATTR)
 const r = ArtisMark.getMarkDetail(p, true) as MarkResult
-console.log('场景:', r.classTitle)
+console.log('规则:', r.classTitle)
 console.log('总分:', r.mark, '| 档位:', r.markClass)
 console.log('各件:', Object.entries(r.artis).map(([i, a]) => `${i}号:${a.mark}(${a.markClass})`).join('  '))
 console.log('套装:', JSON.stringify(r.sets))
@@ -39,7 +39,7 @@ console.log('权重:', JSON.stringify(r.charWeight))
 console.log('\n3号位（精通沙）详情:')
 console.log(JSON.stringify(r.artis['3'], null, 2))
 
-same(r.classTitle, '胡桃-护摩', '场景名')
+same(r.classTitle, '胡桃-护摩', '规则名')
 same(r.mark, '191.3', '总分')
 same(r.markClass, 'SS', '总档位')
 same(
@@ -58,13 +58,13 @@ const cases: Array<[string, { name: string; affix: number; level?: number }, num
   ['护摩之杖 / 0命 / 常规面板', { name: '护摩之杖', affix: 1 }, 0, ATTR, ['胡桃-护摩', '191.3', 'SS']],
   ['西风长枪 / 0命 / 常规面板', { name: '西风长枪', affix: 5 }, 0, ATTR, ['胡桃-通用', '195.8', 'SS']],
   ['护摩之杖 / 6命 / 常规面板', { name: '护摩之杖', affix: 1 }, 6, ATTR, ['胡桃-护摩', '191.3', 'SS']],
-  /* 核爆面板：上游删了胡桃的 artis.js 之后，低暴击高爆伤不再切场景，
-     带护摩就还是护摩场景（下面这条钉住的就是「不再切」这件事）。 */
+  /* 核爆面板：上游删了胡桃的 artis.js 之后，低暴击高爆伤不再切规则，
+     带护摩就还是护摩规则（下面这条钉住的就是「不再切」这件事）。 */
   ['护摩之杖 / 0命 / 核爆面板(低暴击高暴伤)', { name: '护摩之杖', affix: 1 }, 0, { ...ATTR, cpct: 10, cdmg: 300 }, ['胡桃-护摩', '191.3', 'SS']]
 ]
 for (const [label, weapon, cons, attr, expected] of cases) {
   const rr = ArtisMark.getMarkDetail(buildProfile('胡桃', weapon, cons, attr), false) as MarkResult
-  console.log(`${label}\n  场景=${rr.classTitle}  总分=${rr.mark}  档位=${rr.markClass}`)
+  console.log(`${label}\n  规则=${rr.classTitle}  总分=${rr.mark}  档位=${rr.markClass}`)
   same([rr.classTitle, rr.mark, rr.markClass], expected, `动态分支 ${label}`)
 }
 
@@ -81,7 +81,7 @@ const crossExpected: Record<string, string[]> = {
 }
 for (const name of Object.keys(crossExpected)) {
   const rr = ArtisMark.getMarkDetail(buildProfile(name, { name: '', affix: 1 }, 0, ATTR), false) as MarkResult
-  console.log(`${name}: 场景=${rr.classTitle} 总分=${rr.mark} 档位=${rr.markClass}`)
+  console.log(`${name}: 规则=${rr.classTitle} 总分=${rr.mark} 档位=${rr.markClass}`)
   same([rr.classTitle, rr.mark, rr.markClass], crossExpected[name], `跨角色 ${name}`)
 }
 

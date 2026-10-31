@@ -9,7 +9,7 @@
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import type { Conn } from '../config/db.ts'
-import { artifact, character, characterScenario, weapon } from '../config/schema.ts'
+import { artifact, character, characterRubric, weapon } from '../config/schema.ts'
 
 export type CharacterRow = typeof character.$inferSelect
 export type NewCharacterRow = typeof character.$inferInsert
@@ -101,24 +101,24 @@ export function collectTextKeys (db: Conn): TextKeys {
   return { hash: [...hash], avatars }
 }
 
-/* ─────────────── 评分场景偏好（用户为每个角色选的 miao 场景） ─────────────── */
+/* ─────────────── 评分规则偏好（用户为每个角色选的 miao 规则） ─────────────── */
 
-/** 读这个角色当前选中的场景名；没选过 → null（= 用 miao 自动选） */
-export function getScenario (db: Conn, uid: number, avatarId: number): string | null {
-  const rows = db.select({ scenario: characterScenario.scenario })
-    .from(characterScenario)
-    .where(and(eq(characterScenario.uid, uid), eq(characterScenario.avatarId, avatarId))).all()
-  return rows[0]?.scenario ?? null
+/** 读这个角色当前选中的规则名；没选过 → null（= 用 miao 自动选） */
+export function getRubric (db: Conn, uid: number, avatarId: number): string | null {
+  const rows = db.select({ rubric: characterRubric.rubric })
+    .from(characterRubric)
+    .where(and(eq(characterRubric.uid, uid), eq(characterRubric.avatarId, avatarId))).all()
+  return rows[0]?.rubric ?? null
 }
 
 /**
- * 设 / 清选中场景。scenario 为 null = 退回 miao 自动选（把偏好行删掉，不留空串行）。
+ * 设 / 清选中规则。rubric 为 null = 退回 miao 自动选（把偏好行删掉，不留空串行）。
  * 用「先删后插」而不是 upsert：清选项时直接删行，语义更干净。
  */
-export function setScenario (db: Conn, uid: number, avatarId: number, scenario: string | null): void {
-  db.delete(characterScenario)
-    .where(and(eq(characterScenario.uid, uid), eq(characterScenario.avatarId, avatarId))).run()
-  if (scenario) {
-    db.insert(characterScenario).values({ uid, avatarId, scenario }).run()
+export function setRubric (db: Conn, uid: number, avatarId: number, rubric: string | null): void {
+  db.delete(characterRubric)
+    .where(and(eq(characterRubric.uid, uid), eq(characterRubric.avatarId, avatarId))).run()
+  if (rubric) {
+    db.insert(characterRubric).values({ uid, avatarId, rubric }).run()
   }
 }

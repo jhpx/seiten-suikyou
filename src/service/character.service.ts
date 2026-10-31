@@ -14,7 +14,7 @@ import * as repo from '../config/store.ts'
 import { statLabel } from './artifact.service.ts'
 import { damageOf } from './assembler/damage.assembler.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
-import { getScenarios } from '../gateway/miao/scenario.ts'
+import { getRubrics } from '../gateway/miao/rubric.ts'
 
 /** 伤害用例：一个角色 → 伤害表 */
 export async function characterDamage (db: Db, uid: number, avatarId: number): Promise<DamageResult> {
@@ -47,57 +47,59 @@ export function notFound (db: Db, uid: number, avatarId: number): { kind: 'no_da
   return { kind: 'no_character' }
 }
 
-/* ───────────────────────── 评分场景（用户可选 miao 内置场景） ───────────────────────── */
+/* ───────────────────────── 评分规则（用户可选 miao 内置规则） ───────────────────────── */
 
-export interface ScenarioOption {
-  /** 场景名（与 src/gateway/miao/scenarios.json 对齐；选它时用这个名字回写库） */
+export interface RubricOption {
+  /** 规则名（与 src/gateway/miao/rubrics.json 对齐；选它时用这个名字回写库） */
   name: string
+  /** 展示用全名（「角色名-规则名」，与 classTitle 同形）；下拉显示这个，提交仍用 name */
+  label: string
   /** 触发条件的人类可读描述（「纯火」「血牛」「无 artis.js，固定取默认表权重」…） */
   cond: string
   /** 是不是角色唯一/兜底的那套（基础表） */
   isBase: boolean
 }
 
-export type ScenarioList =
-  | { kind: 'ok'; scenarios: ScenarioOption[]; current: string | null }
+export type RubricList =
+  | { kind: 'ok'; rubrics: RubricOption[]; current: string | null }
   | { kind: 'no_data' }
   | { kind: 'no_character' }
 
-/** 列这个角色能用的全部 miao 评分场景 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
-export function listScenarios (db: Db, uid: number, avatarId: number): ScenarioList {
+/** 列这个角色能用的全部 miao 评分规则 + 当前选中的那个；判别「账号没数据 / 没这个角色」 */
+export function listRubrics (db: Db, uid: number, avatarId: number): RubricList {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
   const character = loadOneCharacter(db, uid, avatarId)
   if (!character) return { kind: 'no_character' }
-  const list = getScenarios(avatarId) || []
+  const list = getRubrics(avatarId) || []
   return {
     kind: 'ok',
-    scenarios: list.map(s => ({ name: s.name, cond: s.cond, isBase: s.isBase })),
-    current: repo.getScenario(db, uid, avatarId)
+    rubrics: list.map(s => ({ name: s.name, label: s.label || s.name, cond: s.cond, isBase: s.isBase })),
+    current: repo.getRubric(db, uid, avatarId)
   }
 }
 
-export type SelectScenarioResult =
+export type SelectRubricResult =
   | { kind: 'ok' }
   | { kind: 'no_data' }
   | { kind: 'no_character' }
-  | { kind: 'bad_scenario' }
+  | { kind: 'bad_rubric' }
 
 /**
- * 选 / 清一个评分场景。scenario 为 null = 退回 miao 自动选（删偏好行）。
- * 名字必须在角色可用场景里，否则回 bad_scenario（防止写进一个不存在的场景名）。
+ * 选 / 清一个评分规则。rubric 为 null = 退回 miao 自动选（删偏好行）。
+ * 名字必须在角色可用规则里，否则回 bad_rubric（防止写进一个不存在的规则名）。
  */
-export function selectScenario (db: Db, uid: number, avatarId: number, scenario: string | null): SelectScenarioResult {
+export function selectRubric (db: Db, uid: number, avatarId: number, rubric: string | null): SelectRubricResult {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
   const character = loadOneCharacter(db, uid, avatarId)
   if (!character) return { kind: 'no_character' }
-  if (scenario === null) {
-    repo.setScenario(db, uid, avatarId, null)
+  if (rubric === null) {
+    repo.setRubric(db, uid, avatarId, null)
     return { kind: 'ok' }
   }
-  const list = getScenarios(avatarId) || []
-  if (!list.some(s => s.name === scenario)) return { kind: 'bad_scenario' }
-  repo.setScenario(db, uid, avatarId, scenario)
+  const list = getRubrics(avatarId) || []
+  if (!list.some(s => s.name === rubric)) return { kind: 'bad_rubric' }
+  repo.setRubric(db, uid, avatarId, rubric)
   return { kind: 'ok' }
 }

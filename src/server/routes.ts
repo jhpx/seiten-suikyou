@@ -43,10 +43,10 @@ export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   app.post('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/simulator',
     guard('read'), character.simulate(ctx))
 
-  /* —— 评分场景：让用户选一个 miao 内置场景（而不是永远用 miao 自动选那套） ——
+  /* —— 评分规则：让用户选一个 miao 内置规则（而不是永远用 miao 自动选那套） ——
      列表跟刷新同口径用只读限流；选中只写本地偏好库、不联网，也走只读档（没有 fetch 档合适）。 */
-  app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/scenarios',
-    guard('read'), character.scenarios(ctx))
-  app.post('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/scenario',
-    guard('read'), character.selectScenario(ctx))
+  app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/rubrics',
+    guard('read'), character.rubrics(ctx))
+  app.post('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/rubric',
+    guard('read'), character.selectRubric(ctx))
 }

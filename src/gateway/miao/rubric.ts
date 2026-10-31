@@ -1,22 +1,22 @@
 /*
- * 场景评分 —— 让用户「选一个 miao 内置的评分场景」来给角色算分，而不是永远用 miao 自动选那套。
+ * 规则评分 —— 让用户「选一个 miao 内置的评分规则」来给角色算分，而不是永远用 miao 自动选那套。
  *
  * 为什么需要它：miao 的 `ArtisMark.getMarkDetail(profile)` 内部由 `char.getArtisCfg()` 读角色的
- * **实际配装**（武器/命座/套装/主词条/面板）自动挑一套 attrWeight，没有「用指定场景算分」的公开 API。
- * 但每个角色在 `artis.js` 里本来就按这些条件分了好多套权重（阿蕾奇诺 纯火/基础、迪希雅 血牛/基础…），
- * `tools/gen_artis_table.ts` 已经把这些场景（名字+条件+权重）抽出来存进 `src/gateway/miao/scenarios.json`（生成物，跟本模块同目录）。
+ * **实际配装**（武器/命座/套装/主词条/面板）自动挑一套 attrWeight，没有「用指定规则算分」的公开 API。
+ * 但每个角色在 `artis.js` 里本来就按这些条件分了好多套权重（阿蕾奇诺 纯火/通用、迪希雅 血牛/通用…），
+ * `tools/gen_artis_table.ts` 已经把这些规则（名字+条件+权重）抽出来存进 `src/gateway/miao/rubrics.json`（生成物，跟本模块同目录）。
  *
  * 本模块的做法：**逐件圣遗物的 mark 数学 100% 复用 miao 的 `ArtisMark.getMark`**（不动），
  * 只把「选哪套权重」从 miao 自动选换成「用户指定」。具体：
- *   ① 从 scenarios.json 取出选定场景的原始 attrWeight；
+ *   ① 从 rubrics.json 取出选定规则的原始 attrWeight；
  *   ② 叠一层 miao 的「武器/套装适配」（护摩加生命、绝缘4 充能齐平、西风系暴击拉满——
- *      移植自 ArtisMarkCfg.getCharArtisCfg 的 def() 块，按真实 build 现算，因为用户选的是场景、
+ *      移植自 ArtisMarkCfg.getCharArtisCfg 的 def() 块，按真实 build 现算，因为用户选的是规则、
  *      不是配装）；
  *   ③ 用这套权重重建 charCfg（移植自 ArtisMarkCfg.getCfg 的 attrs 构建，纯函数）；
  *   ④ 跑和 `getMarkDetail` 同款的 mark 循环，输出 MarkDetail 形状。
  *
- * 这样评分与 miao 逐字一致——只有「场景选择」这一个输入被换掉。gen_artis_table 的校验报告里
- * `scoreWithWeights(profile, 某场景.weights)` 必须等于 miao 在该 build 下自动选该场景时的结果。
+ * 这样评分与 miao 逐字一致——只有「规则选择」这一个输入被换掉。gen_artis_table 的校验报告里
+ * `scoreWithWeights(profile, 某规则.weights)` 必须等于 miao 在该 build 下自动选该规则时的结果。
  */
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -32,46 +32,48 @@ const WEAPON_CFG: Record<string, { attr: string; abbr?: string; max?: number; mi
   护摩之杖: { attr: 'hp', abbr: '护摩', max: 18, min: 10 }
 }
 
-/* scenarios.json 的位置：与本模块同目录（生成物，由 tools/gen_artis_table.ts 产出；不是 vendor 的上游镜像） */
-const SCENARIOS_PATH = join(dirname(fileURLToPath(import.meta.url)), 'scenarios.json')
+/* rubrics.json 的位置：与本模块同目录（生成物，由 tools/gen_artis_table.ts 产出；不是 vendor 的上游镜像） */
+const RUBRICS_PATH = join(dirname(fileURLToPath(import.meta.url)), 'rubrics.json')
 
-export interface ScenarioLite {
+export interface RubricLite {
   name: string
+  /** 展示用全名（「角色名-规则名」，与 miao 的 classTitle 同形）；提交仍用 name */
+  label: string
   cond: string
   weights: number[]
   isBase: boolean
   deps: string
 }
 
-interface ScenarioData {
+interface RubricData {
   keys: string[]
-  scenarios: Record<string, ScenarioLite[]>
+  rubrics: Record<string, RubricLite[]>
 }
 
-let cache: ScenarioData | null = null
-function loadScenarios (): ScenarioData {
-  if (!cache) cache = JSON.parse(readFileSync(SCENARIOS_PATH, 'utf-8')) as ScenarioData
+let cache: RubricData | null = null
+function loadRubrics (): RubricData {
+  if (!cache) cache = JSON.parse(readFileSync(RUBRICS_PATH, 'utf-8')) as RubricData
   return cache
 }
 
-/** 一个角色（按 avatar_id）的全部评分场景；无 artis.js / 查不到返回 null */
-export function getScenarios (avatarId: number): ScenarioLite[] | null {
-  const { scenarios } = loadScenarios()
-  return scenarios[String(avatarId)] ?? null
+/** 一个角色（按 avatar_id）的全部评分规则；无 artis.js / 查不到返回 null */
+export function getRubrics (avatarId: number): RubricLite[] | null {
+  const { rubrics } = loadRubrics()
+  return rubrics[String(avatarId)] ?? null
 }
 
-/** 按名字取某个场景的权重数组；名字不存在或角色无场景返回 null */
-export function findScenarioWeights (avatarId: number, name: string | null | undefined): number[] | null {
+/** 按名字取某个规则的权重数组；名字不存在或角色无规则返回 null */
+export function findRubricWeights (avatarId: number, name: string | null | undefined): number[] | null {
   if (!name) return null
-  const list = getScenarios(avatarId)
+  const list = getRubrics(avatarId)
   if (!list) return null
   const hit = list.find(s => s.name === name)
   return hit ? hit.weights : null
 }
 
-/* 把场景的权重数组（按 keys 顺序）转成 miao 的 attrWeight 对象 */
+/* 把规则的权重数组（按 keys 顺序）转成 miao 的 attrWeight 对象 */
 function weightsToObj (weights: number[]): Record<string, number> {
-  const { keys } = loadScenarios()
+  const { keys } = loadRubrics()
   const o: Record<string, number> = {}
   keys.forEach((k, i) => { o[k] = weights[i] || 0 })
   return o
@@ -79,7 +81,7 @@ function weightsToObj (weights: number[]): Record<string, number> {
 
 /*
  * 武器/套装适配（移植自 ArtisMarkCfg.getCharArtisCfg 的 def() 块）。
- * 入参是场景的原始权重，按角色的**真实 build** 现叠一层：护摩/绿剑/薙草/绝缘4/西风。
+ * 入参是规则的原始权重，按角色的**真实 build** 现叠一层：护摩/绿剑/薙草/绝缘4/西风。
  * 返回叠好适配的权重对象。
  */
 function applyAdaptation (raw: Record<string, number>, profile: MiaoProfile): Record<string, number> {
@@ -145,11 +147,11 @@ function buildCharCfg (weight: Record<string, number>, profile: MiaoProfile, tit
 }
 
 /*
- * 核心出口：用指定场景的权重给一个角色算分。
+ * 核心出口：用指定规则的权重给一个角色算分。
  * 返回与 `ArtisMark.getMarkDetail(profile, true)` 同款的 MarkDetail 形状，供 shapeCharacter 直接消费。
- * 不传场景（weights 为 null）时调用方应回退到 miao 自动选。
+ * 不传规则（weights 为 null）时调用方应回退到 miao 自动选。
  *
- * title 是场景名（用户选了某个 miao 场景时传进来）：它直接成为 classTitle（页面据此显示
+ * title 是规则名（用户选了某个 miao 规则时传进来）：它直接成为 classTitle（页面据此显示
  * 「你选了哪套权重」），并把 isCustomWeight 置真 —— 即便这套权重和 miao 自动选出来的一模一样，
  * 也是用户**主动选的**，不再是 miao 默认。
  */

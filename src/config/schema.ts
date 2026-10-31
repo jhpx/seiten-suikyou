@@ -95,14 +95,14 @@ export const fetchLog = sqliteTable('fetch_log', {
   note: text('note')
 })
 
-/* 用户为每个「账号 + 角色」选的评分场景偏好；scenario 为 null = 用 miao 自动选（默认）。
-   场景名来自 src/gateway/miao/scenarios.json（按 avatarId 取），这里只存名字串 + 数字 id。
+/* 用户为每个「账号 + 角色」选的评分规则偏好；rubric 为 null = 用 miao 自动选（默认）。
+   规则名来自 src/gateway/miao/rubrics.json（按 avatarId 取），这里只存名字串 + 数字 id。
    跟 character 表同键 (uid, avatarId)，但故意不挂外键 —— 角色删了留下的孤立偏好无害，
    且少一层建表顺序依赖。 */
-export const characterScenario = sqliteTable('character_scenario', {
+export const characterRubric = sqliteTable('character_rubric', {
   uid: integer('uid').notNull(),
   avatarId: integer('avatar_id').notNull(),
-  scenario: text('scenario')            // 选中的场景名；null = miao 自动选
+  rubric: text('rubric')            // 选中的规则名；null = miao 自动选
 }, (t) => [
   primaryKey({ columns: [t.uid, t.avatarId] })
 ])

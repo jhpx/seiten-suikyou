@@ -2,13 +2,13 @@
  * 圣遗物评分总表生成器
  *
  * 从 vendor/miao 的规则实测出一张表，写到 docs/ 下：
- *   原神圣遗物评分场景总表：每个角色每个评分分支一行（触发条件 + 权重 + 依赖因子 + 触发样例）
+ *   原神圣遗物评分规则总表：每个角色每个评分分支一行（触发条件 + 权重 + 依赖因子 + 触发样例）
  *   没有自定义规则的角色的兜底权重也占一行，所以这张表覆盖全部角色，不需要另开一张「每角色一行」的表。
  *
  * 怎么做的（两条线互相校验，不靠猜）：
  *   - 静态线：把 artis.js 解析成一棵 if 树，符号执行每条路径，还原出「触发条件」文字；
  *   - 动态线：用桩对象（def / rule / artis.is）实际执行规则函数，网格+随机采样探出每个分支的真实权重；
- *   - 两边按（场景名, 权重）配对，配不上的进警告，最后统一打印校验报告。
+ *   - 两边按（规则名, 权重）配对，配不上的进警告，最后统一打印校验报告。
  *
  * 表里的权重是「规则原始权重」（artis.js 手写值 / usefulAttr 默认表原值），
  * 不含评分时内核才施加的武器套装适配（护摩之杖加生命、绝缘4 充能齐平、西风系暴击率拉满等）——
@@ -56,7 +56,7 @@ const WEAPON_SPECIALS = ['磐岩结绿', '猎人之径', '薙草之稻光', '护
 const usefulAttr = artisMark.usefulAttr as Record<string, Partial<Record<AttrKey, number>>>
 /** 内核同款兜底：默认表查不到的角色用这套（ArtisMarkCfg.getCharArtisCfg） */
 const FALLBACK_WEIGHT: Partial<Record<AttrKey, number>> = { atk: 75, cpct: 100, cdmg: 100, dmg: 100, phy: 100 }
-const FALLBACK_TEXT = '通用兜底 {atk:75, cpct:100, cdmg:100, dmg:100, phy:100}'
+const FALLBACK_TEXT = '未知兜底 {atk:75, cpct:100, cdmg:100, dmg:100, phy:100}'
 
 /** 把任意权重对象补齐成 10 键，缺的当 0（内核 lodash.extend 也是这个语义） */
 function norm (w: Partial<Record<AttrKey, number>> | undefined): Record<AttrKey, number> {
@@ -226,7 +226,7 @@ function parseSwitch (inner: string): { cases: { elem: string | null; body: Stmt
 }
 
 /* ------------------------------------------------------------------ */
-/* 符号执行：if 树 → 每条路径的产出（场景名 + 权重 + 条件）               */
+/* 符号执行：if 树 → 每条路径的产出（规则名 + 权重 + 条件）               */
 /* ------------------------------------------------------------------ */
 
 type Decision = { text: string; taken: boolean; nested: boolean; ctrl: boolean }
@@ -550,7 +550,7 @@ function witnessFor (leaf: Leaf, baseElem: string): Profile {
   return p
 }
 
-/** 单维扫描 + 随机联合采样 + 定向补测，探出规则函数能产出的全部（场景名, 权重） */
+/** 单维扫描 + 随机联合采样 + 定向补测，探出规则函数能产出的全部（规则名, 权重） */
 function probe (ruleFn: (env: Record<string, unknown>) => { title: string; attrWeight: Partial<Record<AttrKey, number>> } | undefined,
   charName: string, abbr: string, meta: { elem: string }, leaves: Leaf[]): Map<string, Outcome> {
   const def = (attrWeight: Partial<Record<AttrKey, number>>, title: string[] = []): { title: string; attrWeight: Partial<Record<AttrKey, number>> } =>
@@ -812,7 +812,7 @@ function leafCondText (leaf: Leaf): string {
   if (!parts.length) return ''
   return wrapAnd(simplifyAnd(parts))
 }
-/** 条件原子压成短标签，用来给同名场景加后缀：命座 = 6 → 6命，武器 = 鹤鸣余音 → 鹤鸣余音 */
+/** 条件原子压成短标签，用来给同名规则加后缀：命座 = 6 → 6命，武器 = 鹤鸣余音 → 鹤鸣余音 */
 function shortAtom (atom: string): string {
   const c = /^命座 ([=≠≥≤><]) (\d+)$/.exec(atom)
   if (c) {
@@ -830,8 +830,8 @@ function shortAtom (atom: string): string {
 }
 
 /**
- * 这条场景的命座取值范围（命座是 0~6 有限域，逐条路径枚举再求并集——
- * 一条场景可能由多条路径凑成，比如闲云「高配」是 0命带专武 或 1命以上不带专武）。
+ * 这条规则的命座取值范围（命座是 0~6 有限域，逐条路径枚举再求并集——
+ * 一条规则可能由多条路径凑成，比如闲云「高配」是 0命带专武 或 1命以上不带专武）。
  * 和命座无关就返回空。
  */
 function consRange (s: Scenario): number[] {
@@ -887,7 +887,7 @@ function dropFreeCons (sets: string[][]): boolean {
 }
 
 /**
- * 同一个场景可能由多条路径产出（权重碰巧一样），条件是这些路径的并集。
+ * 同一个规则可能由多条路径产出（权重碰巧一样），条件是这些路径的并集。
  * 先删「无所谓」的命座约束，再按析取吸收化简：(A 且 B) 或 A = A ——
  * 原子集是别人超集的那条，条件更严，被更松的吃掉。
  */
@@ -990,13 +990,13 @@ async function buildChar (dirName: string): Promise<CharRow> {
   }
 
   if (!row.hasRule) {
-    // 没有自定义规则：默认表或通用兜底，一行了事
+    // 没有自定义规则：默认表（表里查得到）或未知（miao 还没收录的新角色），一行了事
     const w = row.inTable ? norm(usefulAttr[meta.name]) : norm(FALLBACK_WEIGHT)
     row.scenarios = [{
-      name: row.inTable ? '默认表' : '通用兜底',
+      name: row.inTable ? '通用' : '未知',
       cond: row.inTable
         ? '无 artis.js，固定取默认表权重'
-        : '无 artis.js 且默认表无此角色，取通用兜底',
+        : '无 artis.js 且默认表无此角色（多为 miao 未收录的新角色），用未知角色兜底权重',
       source: row.inTable ? '默认表 usefulAttr[角色] 原值' : FALLBACK_TEXT,
       weights: KEYS.map(k => w[k]), deps: '', sample: '无特殊配置', isBase: true, leaves: []
     }]
@@ -1057,13 +1057,14 @@ async function buildChar (dirName: string): Promise<CharRow> {
     const matched = byKey.get(key) ?? []
     const leaf = matched[0]
     const isBase = !leaf || leaf.kind === 'def-fallback'
-    // 场景名统一剥掉开头的「角色名-」/「角色简称-」：旁边就是角色列，再重复一遍是噪声
+    // 规则名统一剥掉开头的「角色名-」/「角色简称-」：旁边就是角色列，再重复一遍是噪声
     // （内核返回的标题本来就带前缀：def() 加 abbr-，rule() 是作者写全的）
     let name = o.title
     for (const pre of [meta.name + '-', abbr + '-']) {
       if (name.startsWith(pre) && name.length > pre.length) { name = name.slice(pre.length); break }
     }
-    if (isBase) name = '基础'
+    // 兜底分支的名别硬改成「基础」：miao 自己的 classTitle 就叫「通用」（def() 没给标题时），
+    // 强行换个词会让下拉里的名字和评分规则标题对不上。这里就沿用 o.title 剥前缀的结果。
     // 条件文字：命中路径的正条件；兜底行写唯一特判分支的反面（信息量比「未命中」大），
     // 多个分支时反面求交集太绕，就统一说未命中
     let cond: string
@@ -1075,7 +1076,7 @@ async function buildChar (dirName: string): Promise<CharRow> {
         cond = taken.length ? wrapOr(taken.map(d => renderExpr(d.text, true))) : '未命中上述任一分支'
       } else cond = '未命中上述任一分支'
     } else {
-      // 多条路径同一个场景：条件取并集，再按析取吸收化简
+      // 多条路径同一个规则：条件取并集，再按析取吸收化简
       const sets = matched.map(leafAtoms).filter(a => a.length)
       cond = sets.length ? orTexts(sets) : ''
     }
@@ -1151,7 +1152,7 @@ async function buildChar (dirName: string): Promise<CharRow> {
     }
   }
 
-  // 场景排序：按中文名（和旧表一致），兜底行沉底
+  // 规则排序：按中文名（和旧表一致），兜底行沉底
   scenarios.sort((a, b) => (a.isBase !== b.isBase ? (a.isBase ? 1 : -1) : a.name.localeCompare(b.name, 'zh')))
   row.scenarios = scenarios
   return row
@@ -1246,7 +1247,7 @@ function render(){
     return true;
   });
   if(sortFn)list=list.slice().sort((a,b)=>sortFn(a,b)*st.dir);
-  cnt.textContent='共 '+list.length+' 个场景';
+  cnt.textContent='共 '+list.length+' 个规则';
   bd.innerHTML=list.map((r,i)=>{
     let h='<tr class="'+(i%2?'alt':'')+'"><td class="sn">'+r.n+'</td><td><span class="el e-'+r.e+'">'+(r.e||'-')+'</span></td><td>'+(r.s||'-')+'</td>';
     h+='<td class="tt">'+r.t+'</td><td class="cd">'+(r.c||'-')+'</td>';
@@ -1314,8 +1315,8 @@ ${RENDER_JS}
 /* 入口                                                                */
 /* ------------------------------------------------------------------ */
 
-/** 扫全部角色目录、跑符号执行+运行时探测、按元素→星级→上线顺序排序，返回带场景的整张表。
- *  文档表与场景 JSON 共用这一份，保证两者口径永远一致。 */
+/** 扫全部角色目录、跑符号执行+运行时探测、按元素→星级→上线顺序排序，返回带规则的整张表。
+ *  文档表与规则 JSON 共用这一份，保证两者口径永远一致。 */
 async function buildAllChars (): Promise<CharRow[]> {
   const dirs = readdirSync(CHAR_DIR, { withFileTypes: true })
     .filter(d => d.isDirectory() && existsSync(join(CHAR_DIR, d.name, 'data.json')))
@@ -1336,8 +1337,8 @@ async function main (): Promise<void> {
   const src = gitInfo()
   const srcNote = src ? `数据来源：<b>vendor/miao</b>（miao-plugin 同步于 ${src}）` : '数据来源：<b>vendor/miao</b>'
 
-  /* ---------------- 场景总表 ---------------- */
-  const sceneCsv = ['角色,元素,星级,场景,触发条件,权重来源,' + KEYS.map(k => KEY_CN[k]).join(',') + ',依赖因子,触发样例\n']
+  /* ---------------- 规则总表 ---------------- */
+  const sceneCsv = ['角色,元素,星级,规则,触发条件,权重来源,' + KEYS.map(k => KEY_CN[k]).join(',') + ',依赖因子,触发样例\n']
   const sceneData: Record<string, unknown>[] = []
   let sceneCount = 0
   for (const c of chars) {
@@ -1347,11 +1348,11 @@ async function main (): Promise<void> {
       sceneData.push({ n: c.name, e: c.elem, s: c.star, t: s.name, c: s.cond, w: shortSrc(s.source), v: s.weights, d: s.deps, b: s.isBase ? 1 : 0, m: c.scenarios.length > 1 ? 1 : 0 })
     }
   }
-  writeFileSync(join(DOCS_DIR, '原神圣遗物评分场景总表.csv'), '\uFEFF' + sceneCsv.join(''), 'utf-8')
+  writeFileSync(join(DOCS_DIR, '原神圣遗物评分规则总表.csv'), '\uFEFF' + sceneCsv.join(''), 'utf-8')
 
   const multiCount = chars.filter(c => c.scenarios.length > 1).length
   const sceneBars = `<div class="bar">
-<input type="text" id="q" placeholder="搜索角色 / 场景名 / 条件">
+<input type="text" id="q" placeholder="搜索角色 / 规则名 / 条件">
 <span class="chip on" data-e="">全部元素</span>
 ${ELEM_ORDER.map(e => `<span class="chip" data-e="${e}">${e}</span>`).join('')}
 <label class="ck"><input type="checkbox" id="mul">仅看多套权重角色</label>
@@ -1362,45 +1363,45 @@ ${ELEM_ORDER.map(e => `<span class="chip" data-e="${e}">${e}</span>`).join('')}
 ${FACTOR_ORDER.map(f => `<span class="chip" data-d="${f}">${f}</span>`).join('')}
 <span class="chip" data-d="">无（静态）</span>
 <span style="width:14px"></span>
-<span class="chip on" data-t="">全部场景</span><span class="chip" data-t="b">仅分支场景</span><span class="chip" data-t="base">仅兜底场景</span>
+<span class="chip on" data-t="">全部规则</span><span class="chip" data-t="b">仅分支规则</span><span class="chip" data-t="base">仅兜底规则</span>
 </div>`
-  const sceneThead = `<th class="sn" data-k="n">角色</th><th data-k="e">元素</th><th data-k="s">星</th><th class="tt" data-k="t">场景</th><th class="cd">触发条件</th><th class="ws" data-k="w">权重来源</th>`
+  const sceneThead = `<th class="sn" data-k="n">角色</th><th data-k="e">元素</th><th data-k="s">星</th><th class="tt" data-k="t">规则</th><th class="cd">触发条件</th><th class="ws" data-k="w">权重来源</th>`
     + KEYS.map(k => `<th data-k="${k}">${KEY_CN[k]}</th>`).join('')
     + `<th data-k="d">依赖</th>`
-  const sceneSub = `每个角色的<b>每个评分分支</b>一行，共 <b>${sceneCount}</b> 个场景 / <b>${chars.length}</b> 个角色，其中 <b>${multiCount}</b> 个角色存在多套权重。条件由源码 <code>if</code> 分支还原，权重由脚本实际执行规则函数测得。生成时间：${genTime}。${srcNote}。`
+  const sceneSub = `每个角色的<b>每个评分分支</b>一行，共 <b>${sceneCount}</b> 个规则 / <b>${chars.length}</b> 个角色，其中 <b>${multiCount}</b> 个角色存在多套权重。条件由源码 <code>if</code> 分支还原，权重由脚本实际执行规则函数测得。生成时间：${genTime}。${srcNote}。`
   const sceneTip = `<div class="tip">
 <b>说明</b>：① 权重是规则原始值（artis.js 手写 / usefulAttr 默认表原值），不含评分时内核施加的武器套装适配（护摩之杖加生命、绝缘4 充能齐平、西风系暴击率拉满等），那些要看具体配装；② 「未命中上述任一分支」即兜底行；③ 依赖因子：面板=读面板属性或圣遗物主词条，武器=读武器，命座=读命座，套装=读圣遗物套装，元素=按元素切换规则（旅行者）；④ 触发样例见 CSV，是相对基准面板的差异项，基准面板=生命30000/攻击2000/防御800/暴击5/暴伤50/精通0/充能200/命座0/无武器/无套装/3号位防御/4号位元素伤害/5号位生命；⑤ 默认排序 元素→星级→上线顺序，点表头可改。
 </div>
 <details><summary>列定义与生成方式</summary>
 <div class="tip">
-场景：分支名（自定义规则命中特判时）或 基础/默认表/通用兜底（未命中任何特判）。角色名前缀（<code>钟离-武神</code> → <code>武神</code>）已剥掉，旁边就是角色列。<br>
-<b>场景名带括号后缀的</b>（如 <code>高命（6命）</code>、<code>高配（充能40）</code>）：artis.js 里的标题是写死的字符串，命座或武器不同时返回的是<b>同一个名字、不同权重</b>，直接列出来会像重复行。后缀是本表加的区分标记——能按命座切开就标命座区间，切不开就标那套权重与众不同的读数。<br>
+规则：分支名（自定义规则命中特判时）或 通用（未命中任何特判）。角色名前缀（<code>钟离-武神</code> → <code>武神</code>）已剥掉，旁边就是角色列。<br>
+<b>规则名带括号后缀的</b>（如 <code>高命（6命）</code>、<code>高配（充能40）</code>）：artis.js 里的标题是写死的字符串，命座或武器不同时返回的是<b>同一个名字、不同权重</b>，直接列出来会像重复行。后缀是本表加的区分标记——能按命座切开就标命座区间，切不开就标那套权重与众不同的读数。<br>
 触发条件：由 artis.js 的 if 树符号执行还原，「或」表示多条等价路径。<b>兜底行</b>指所有特判都没命中时走的路径，条件是那些特判条件的反面。权重来源：分支内权重=artis.js 显式给出；默认表原值=兜底时直接取 usefulAttr；内置基准=artis.js 手写了一整套兜底权重、不查默认表。<br>
-生成器：tools/gen_artis_table.ts。静态解析 if 树还原条件文字，动态执行规则函数实测权重，两边按（场景名, 权重）配对校验；本页由该脚本生成，请勿手改。
+生成器：tools/gen_artis_table.ts。静态解析 if 树还原条件文字，动态执行规则函数实测权重，两边按（规则名, 权重）配对校验；本页由该脚本生成，请勿手改。
 </div>
 </details>`
-  writeFileSync(join(DOCS_DIR, '原神圣遗物评分场景总表.html'), pageHtml(
-    '原神圣遗物评分场景总表', sceneSub, sceneBars, sceneThead, sceneData, sceneTip), 'utf-8')
+  writeFileSync(join(DOCS_DIR, '原神圣遗物评分规则总表.html'), pageHtml(
+    '原神圣遗物评分规则总表', sceneSub, sceneBars, sceneThead, sceneData, sceneTip), 'utf-8')
 
-  /* ---------------- 场景 JSON（供后端运行时 serve，与文档表同源） ----------------
-   * 键 = 角色 avatar_id（= miao data.json 的 id），值是该角色的全部评分场景。
+  /* ---------------- 规则 JSON（供后端运行时 serve，与文档表同源） ----------------
+   * 键 = 角色 avatar_id（= miao data.json 的 id），值是该角色的全部评分规则。
    * weights 是 artis.js 的**原始 attrWeight**（未叠加护摩/绝缘4/西风这类武器套装适配——
    * 那些要看具体配装，运行期按真实 build 现算）。后端 scoreWithWeights 拿到它后再叠适配，
-   * 所以这份 JSON 只存「场景本身长啥样」。 */
+   * 所以这份 JSON 只存「规则本身长啥样」。 */
   const scenarioMap: Record<string, Array<{ name: string; cond: string; weights: number[]; isBase: boolean; deps: string }>> = {}
   for (const c of chars) {
     scenarioMap[String(c.id)] = c.scenarios.map(s => ({
-      name: s.name, cond: s.cond, weights: s.weights, isBase: s.isBase, deps: s.deps
+      name: s.name, label: `${c.abbr}-${s.name}`, cond: s.cond, weights: s.weights, isBase: s.isBase, deps: s.deps
     }))
   }
-  const scenarioJson = { keys: KEYS, scenarios: scenarioMap }
-  writeFileSync(join(ROOT, 'src', 'gateway', 'miao', 'scenarios.json'), JSON.stringify(scenarioJson), 'utf-8')
-  console.log(`场景 JSON：${Object.keys(scenarioMap).length} 个角色已写入 src/gateway/miao/scenarios.json`)
+  const rubricJson = { keys: KEYS, rubrics: scenarioMap }
+  writeFileSync(join(ROOT, 'src', 'gateway', 'miao', 'rubrics.json'), JSON.stringify(rubricJson), 'utf-8')
+  console.log(`规则 JSON：${Object.keys(scenarioMap).length} 个角色已写入 src/gateway/miao/rubrics.json`)
 
   /* ---------------- 校验报告 ---------------- */
-  console.log(`角色 ${chars.length} 个，场景 ${sceneCount} 行，多套权重角色 ${multiCount} 个`)
+  console.log(`角色 ${chars.length} 个，规则 ${sceneCount} 行，多套权重角色 ${multiCount} 个`)
   const bad = chars.filter(c => c.scenarios.some(s => s.source === '（未能从源码还原）'))
-  if (bad.length) console.log(`!! ${bad.length} 个角色存在无法还原的场景`)
+  if (bad.length) console.log(`!! ${bad.length} 个角色存在无法还原的规则`)
   if (warnings.length) {
     console.log(`!! ${warnings.length} 条警告:`)
     for (const w of warnings) console.log('   ' + w)
@@ -1416,14 +1417,14 @@ ${FACTOR_ORDER.map(f => `<span class="chip" data-d="${f}">${f}</span>`).join('')
     console.log(`${ok ? 'OK ' : '!! '}抽查 ${name}/${scene}: ${got}${ok ? '' : ' 期望 ' + expect.join(',')}`)
   }
   spot('阿蕾奇诺', '纯火', [0, 85, 0, 100, 100, 0, 100, 0, 30, 0])
-  spot('阿蕾奇诺', '基础', [0, 75, 0, 100, 100, 75, 100, 0, 30, 0])
+  spot('阿蕾奇诺', '通用', [0, 75, 0, 100, 100, 75, 100, 0, 30, 0])
   spot('迪希雅', '血牛', [100, 30, 0, 41, 41, 0, 0, 0, 30, 0])
-  spot('迪希雅', '基础', [75, 75, 0, 100, 100, 0, 100, 0, 75, 0])
+  spot('迪希雅', '通用', [75, 75, 0, 100, 100, 0, 100, 0, 75, 0])
   spot('班尼特', '输出', [100, 100, 0, 100, 100, 0, 100, 0, 75, 100])
   spot('芙宁娜', '板砖纯辅', [100, 0, 0, 0, 0, 0, 0, 0, 100, 95])
-  spot('芙宁娜', '基础', [100, 0, 0, 100, 100, 0, 95, 0, 100, 95])
+  spot('芙宁娜', '通用', [100, 0, 0, 100, 100, 0, 95, 0, 100, 95])
   spot('哥伦比娅', '专武', [100, 0, 0, 100, 100, 75, 0, 0, 85, 0])
-  spot('胡桃', '默认表', [80, 50, 0, 100, 100, 75, 100, 0, 0, 0])
+  spot('胡桃', '通用', [80, 50, 0, 100, 100, 75, 100, 0, 0, 0])
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

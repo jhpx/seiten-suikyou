@@ -150,7 +150,7 @@ try {
   console.log('\n=== 6. --locale 真的透传到输出 ===')
   {
     /* 期望值直接问 i18n 表，别在测试里手写译名 —— 表更新了测试不用跟着改。
-       注意：`classTitle`（场景名，如「迪卢克-通用」）是 miao 自己的中文串，
+       注意：`classTitle`（规则名，如「迪卢克-通用」）是 miao 自己的中文串，
        目前没有别的语言，所以 en/ja 输出里**仍会出现中文字符**，这是已知项、不是回归。 */
     const dilucEn = i18n.avatarName(10000016, 'en')
     const en = cli('--offline', '--uid', String(UID), '--db', DB, '--locale', 'en')

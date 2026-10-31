@@ -14,7 +14,7 @@ import * as accountBo from '../repository/account.repo.ts'
 import * as characterBo from '../repository/character.repo.ts'
 import type { AccountRow } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
-import { account as accountT, artifact as artifactT, character as characterT, characterScenario as characterScenarioT, weapon as weaponT } from './schema.ts'
+import { account as accountT, artifact as artifactT, character as characterT, characterRubric as characterRubricT, weapon as weaponT } from './schema.ts'
 import { AccountDbo } from '../repository/dbo/account.ts'
 import { CharacterDbo } from '../repository/dbo/character.ts'
 import { WeaponDbo } from '../repository/dbo/weapon.ts'
@@ -220,14 +220,14 @@ export function listTextKeys (db: Conn): characterBo.TextKeys {
   return characterBo.collectTextKeys(db)
 }
 
-/* ─────────────── 评分场景偏好 ─────────────── */
+/* ─────────────── 评分规则偏好 ─────────────── */
 
-/** 读角色当前选中的评分场景名；没选过 → null（= 用 miao 自动选） */
-export function getScenario (db: Conn, uid: number, avatarId: number): string | null {
-  return characterBo.getScenario(db, uid, avatarId)
+/** 读角色当前选中的评分规则名；没选过 → null（= 用 miao 自动选） */
+export function getRubric (db: Conn, uid: number, avatarId: number): string | null {
+  return characterBo.getRubric(db, uid, avatarId)
 }
 
-/** 设 / 清选中场景（scenario 为 null = 退回 miao 自动选） */
-export function setScenario (db: Conn, uid: number, avatarId: number, scenario: string | null): void {
-  characterBo.setScenario(db, uid, avatarId, scenario)
+/** 设 / 清选中规则（rubric 为 null = 退回 miao 自动选） */
+export function setRubric (db: Conn, uid: number, avatarId: number, rubric: string | null): void {
+  characterBo.setRubric(db, uid, avatarId, rubric)
 }
