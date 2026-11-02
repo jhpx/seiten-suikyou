@@ -38,7 +38,7 @@ const USAGE = `
   --save-raw <dir>   把原始响应另存一份到该目录
   --locale <code>    输出语言，默认 chs（chs/cht/en/ja/ko，或 zh-cn / zh-tw / jp / kr 这类别名）
   --json             额外输出结构化结果（给以后的前端/接口用）
-  --keys             列出库里用到过的官方文案 key（做多语言时照着要）
+  --keys             列出库里用到过的官方文案 key（核对文案表够不够用）
   --list             列出库里已有哪些 uid
   -h, --help         显示这段
 `.trim()
@@ -139,7 +139,7 @@ async function main () {
     const { hash, avatars } = repo.listTextKeys(db)
     console.log(`库里用到的官方文案 key：${hash.length} 个`)
     console.log(hash.slice().sort((a, b) => a - b).join('\n'))
-    console.log(`\n角色（enka 不给角色名 hash，这 ${avatars.length} 个得另外配 avatarId → 文案的映射）：`)
+    console.log(`\n角色（enka 不给角色名 hash，这 ${avatars.length} 个走 avatarId → 文案的映射）：`)
     console.log(avatars.join('\n'))
     return 0
   }

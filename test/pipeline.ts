@@ -429,7 +429,7 @@ const defCols = (t: SQLiteTable): string[] => getTableConfig(t).columns.map(c =>
 
 console.log('\n=== 8. 文案 key 清单（将来接多语言翻译表照着要）===')
 const keys = repo.listTextKeys(db)
-ok(keys.hash.length === 7, `库里用到 7 个 key：5 个部件名 + 1 个套装名 + 1 个武器名（实际 ${keys.hash.length}）`,
+ok(keys.hash.length === 7, `库里用到 7 个 key：5 个部件名 + 1 个套装 hash（只留档，显示已改走 setId）+ 1 个武器名（实际 ${keys.hash.length}）`,
   `实际 ${keys.hash.length}: ${keys.hash.slice().sort((a, b) => a - b).join(',')}`)
 ok(keys.avatars.includes(10000046) && keys.avatars.includes(10000003),
   '角色单独列出来（enka 不给角色名 hash，得另配映射）')

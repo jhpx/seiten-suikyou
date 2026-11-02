@@ -85,7 +85,7 @@ export function rubricLabel (avatarId: number, title: string, locale: string): s
   const hit = list.find(r => r.label === t) || list.find(r => r.name === t)
   if (!hit) return t
   /* 语言码先归一：avatarName 内部会认，rubricName 不会 —— 不归一就会出现
-     「角色名是韩文、规则名还是中文」这种半截翻译（kr / ko-KR 这类写法都踩过） */
+     「角色名是韩文、规则名还是中文」这种半截翻译（kr / ko-KR 这类写法都得认） */
   const loc = resolveLocale(locale)
   const charName = avatarName(avatarId, loc) || ''
   const ruleName = rubricName(hit.name, loc)

@@ -20,7 +20,7 @@ import { num } from '../common/util.ts'
 export const KEY_TITLE = ArtisMark.getKeyTitleMap('gs') as Record<string, string>
 
 /*
- * 标题覆盖表 —— 两类条目，都只在这里写、不进 vendor/i18n/names.json（那是同步脚本的生成物，
+ * 标题覆盖表 —— 两类条目，都只在这里写、不进 vendor/i18n/（那是同步脚本的生成物，
  * 改了会被覆盖）：
  *
  *   ① 跟游戏官方叫法不一致的：`dmg` 在 miao 的 i18n 表里是「伤害增加」/“DMG Bonus”（它自己
@@ -180,13 +180,29 @@ export function artifactIcon (setNameZh: string | null | undefined, pos: number)
   return setNameZh ? `assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
 }
 
-/** 一件圣遗物：miao 的评分结果 + 数据库对象（DBO，拿 hash 查名字、拿 enka 的原始数值做显示）。
+/** 一件圣遗物的**套装身份** = enka 的 setId（千岩 15017）。
+ *
+ *  为什么不是 enka 玩家接口给的 `setHash`：那个 `setNameTextMapHash`（千岩 1337665995）
+ *  在 enka 的 locs.json 里**查不到名字**，怎么都翻不出「千岩牢固」。setId 才能
+ *  （setId → Sets[setId].Name → locs → 名称）。所以名字认 setId，hash 只留档。
+ *
+ *  两个来源：真实件用 itemId 推（enka `relics.json` 的 itemId → SetId，全表 4245 条）；
+ *  人工/模拟件换过套装、itemId 还是原件那一个，构造时就把 setId 直接写好了。 */
+export function setIdOf (artifact: ArtifactDbo | null | undefined): number | null {
+  if (!artifact) return null
+  return artifact.setId ?? i18n.setIdOfItem(artifact.itemId)
+}
+
+/** 一件圣遗物：miao 的评分结果 + 数据库对象（DBO，拿 set 身份查名字、拿 enka 的原始数值做显示）。
  *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
 export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: ArtifactDbo | undefined, locale: string, raw: unknown) {
   const posName = slotLabel(pos, locale)
   if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
 
-  const setNameZh = marked.set || ''
+  // 套装名只认 setId→官方名，绝不退回 miao 显示名：官方真缺名（本地 vendor/i18n 落后游戏版本）就显示「未知套装」。
+  // 图标目录按官方中文名排（assets/meta-gs/artifact/imgs/<套装名>/<部位>.webp）。
+  const setId = setIdOf(artifact)
+  const setNameZh = (setId === null ? null : i18n.setName(setId, 'zh')) || ''
   /* 初始副词条条数：3 = 初始三词条、4 = 初始四词条（见 Artifact.quality）。
      只认这两个值 —— 别的一律当「不知道」：夹具里 roll 条数与等级不自洽会算出负数/2，
      老数据缺 appendPropIds 会算出 0。页面就不画角标，建议层也不算它。 */
@@ -212,8 +228,9 @@ export function artifactOf (pos: number, marked: MarkedArtifact | undefined, art
     empty: false,
     name: (artifact?.nameHash && i18n.name(artifact.nameHash, locale)) || marked.name,
     nameZh: marked.name,
-    setName: (artifact?.setHash && i18n.setNameByHash(artifact.setHash, locale)) || setNameZh,
+    setName: (setId === null ? null : i18n.setName(setId, locale)) || i18n.uiText('unknownSet', locale),
     setNameZh,
+    setId,
     level: marked.level,
     star: artifact?.star ?? 5,
     /* 初始 3 / 4 词条，不知道该件时 null（页面不画角标） */

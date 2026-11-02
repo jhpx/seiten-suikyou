@@ -38,10 +38,12 @@ function simCharacterOf (ch: CharacterDbo, profile: MiaoProfile, draft: SimDraft
     if (!spec) return a
     const name = artifactNameOf(spec.set, spec.pos)
     if (!name) return a
-    const setHash = i18n.hashOfZh(spec.set)
     return new ArtifactDbo({
       pos: a.pos,
+      /* itemId 还是原件那一个（换套装不改部位），所以套装身份不能靠它推 —— 直接给 setId。
+         草稿里回传的是中文套装名，靠 enka 那张 setId ↔ 套装名 的表换回去。 */
       itemId: a.itemId,
+      setId: i18n.setIdOfZh(spec.set),
       levelRaw: spec.level,
       star: spec.star,
       mainPropId: 0,
@@ -49,7 +51,8 @@ function simCharacterOf (ch: CharacterDbo, profile: MiaoProfile, draft: SimDraft
       mainStatValue: null,
       subStats: [],
       nameHash: i18n.hashOfZh(name),
-      setHash
+      /* 人工件没有 enka 的 setNameTextMapHash —— 那个字段只留档，不参与显示 */
+      setHash: null
     })
   })
 

@@ -81,7 +81,7 @@ try {
     const r = cli('--file', FIXTURE, '--db', DB)
     first = r
     ok(r.code === 0, '退出码 0', `code=${r.code} err=${r.err.trim()}`)
-    /* 这两条就是当年漏掉的那个 bug 的守卫：崩了会吞掉后面的输出、退出码却还是 0 */
+    /* 这两条防的是「崩了会吞掉后面的输出、退出码却还是 0」 */
     ok(!r.out.includes('[出错]'), '输出里没有 [出错]')
     ok(r.out.includes('汇总（按总分降序'), '打印了汇总段（崩在这儿的话这行不会出现）')
     for (const n of CHARS) ok(r.out.includes(n), `输出里有「${n}」`)
@@ -150,8 +150,8 @@ try {
   console.log('\n=== 6. --locale 真的透传到输出 ===')
   {
     /* 期望值直接问 i18n 表，别在测试里手写译名 —— 表更新了测试不用跟着改。
-       注意：`classTitle`（规则名，如「迪卢克-通用」）是 miao 自己的中文串，
-       目前没有别的语言，所以 en/ja 输出里**仍会出现中文字符**，这是已知项、不是回归。 */
+       注意：`classTitle`（规则名，如「迪卢克-通用」）是 miao 自己的中文串，靠
+       `src/common/rubric-names.ts` 意译；表没覆盖到的仍会退回中文，这是已知项、不是回归。 */
     const dilucEn = i18n.avatarName(10000016, 'en')
     const en = cli('--offline', '--uid', String(UID), '--db', DB, '--locale', 'en')
     ok(en.code === 0, 'en 退出码 0')

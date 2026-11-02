@@ -103,7 +103,7 @@ export function createApp ({
 
      白名单里写 `*` 是「谁都行」：这里必须转成字符串 `'*'` 再交给 hono。
      因为 hono 收到**数组**时只做字面量比对（`includes(origin)`），`['*']` 对任何真实
-     Origin 都匹配不上，等于没开跨域 —— 这个坑实测过，别改回去。 */
+     Origin 都匹配不上，等于没开跨域。 */
   if (corsOrigins.length) {
     const anyOrigin = corsOrigins.includes('*')
     app.use('*', cors({

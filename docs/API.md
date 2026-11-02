@@ -258,11 +258,11 @@
 | `elem` / `elemText` / `elemBg` / `elemIcon` | 元素 key / 元素名 / 元素底图 / 元素图标（响应里的相对路径 `assets/...`） |
 | `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`） |
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
-| `weapon` | `{ state:'none'|'unknown'|'ok', name, sName, icon(相对路径 assets/...), level, attrs, desc }` |
+| `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |
 | `weapon.attrs` | `[{ key, label, value }]`：`key` 是标准词条 key（`atkBase` / `atk` / `hp` / `mastery` / `cpct` / `cdmg` / `recharge` …），`label` 是已本地化的官方名（基础攻击力 / 攻击力 / 生命值…），`value` 是显示串（`608` / `49.6%`） |
-| `score` | `{ mark:'SSS', markValue:62, markClass:'SSS', classTitle, rubricLabel, isDefaultWeight, isCustomWeight }`。`classTitle` 是 miao 的中文原文（`芙宁娜-通用`，诊断/对拍用），**页面显示用 `rubricLabel`**（同一件事的当前语言版本，如 `Furina-General`） |
-| `sets` | 圣遗物套装汇总（`[{ name, count, pieces:[pos…] }]`），用于 2+2 合并花 |
-| `artifacts` | 5 件圣遗物明细，每件含 `icon`（相对路径 `assets/...`）、`main`、`attrs[]`、`mark` |
+| `score` | `{ mark:'204.8', markValue:204.81, markClass:'SS', classTitle, rubricLabel, isDefaultWeight, isCustomWeight }`。`mark` 是分数文本（可直接显示）、`markClass` 是档位；`classTitle` 是 miao 的中文原文（`芙宁娜-通用`，诊断/对拍用），**页面显示用 `rubricLabel`**（同一件事的当前语言版本，如 `Furina-General`） |
+| `sets` | 圣遗物套装汇总（`[{ setId, name, nameZh, count, icon }]`）。按 `setId` 归属统计，同一套不会裂成两组；**单件也收**（`count: 1`，卡片上要显示），筛选时客户端只认 `count >= 2` —— 1 件不激活套装效果，算不上「穿这套」。`icon` 是花部位图（相对路径 `assets/...`） |
+| `artifacts` | 5 件圣遗物明细，每件含 `pos` / `posName` / `empty` / `name` / `nameZh` / `setId` / `setName` / `level` / `star` / `icon`（相对路径 `assets/...`）/ `main` / `subs` / `mark` |
 | `panel` / `attrTable` / `allAttr` / `consList` / `talent` | 明细页面板、属性表、合计、命座、天赋 |
 
 > 图片字段都是**相对路径** `assets/...`，由浏览器按当前页域名解析；服务端只提供数据，不处理图片。

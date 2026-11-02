@@ -119,7 +119,7 @@ npm run score -- --locale en                 # 换语言输出
 把它和 miao 算出来的 `attr` 逐项比。角色等级/突破、武器、圣遗物主副词条，整条链路一次全验证。
 `test/pipeline.ts` 拿真实响应硬断言它全过（容差：绝对值 ≤0.05 或 相对 ≤0.1%）。
 
-它只服务测试，所以待在 `test/` 而不是生产路径（miao 适配在 `gateway/miao/`），命令行也不再挂 `--check` 这个开关 ——
+它只服务测试，所以待在 `test/` 而不是生产路径（miao 适配在 `gateway/miao/`）——
 `npm test` 会自动验。非要用它比一份自己手里的原始响应，就在脚本里 import 那两个函数。
 
 两个已知的口径差异（都不是我们的锅，写进容差里了）：
@@ -212,16 +212,18 @@ HTTP 层是 [hono](https://hono.dev)（路由 / 跨域 / 静态托管）+ [drizz
 npm run score -- --uid 101242308 --locale ja   # chs / cht / en / ja / ko
 python tools/sync.py i18n                      # 重新提取官方文案表（默认 chs,cht,en,ja,ko）
 I18N_LOCALES=chs,en python tools/sync.py i18n  # 只提两种语言
-I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab 不通
+I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py   # 国内直连 gitlab/enka 都不通
+python tools/sync_i18n.py --refresh          # 无视 7 天缓存，全部重下（怀疑上游更新了先跑这个）
 ```
 
 > 走 `sync.py` 时**不加参数**：编排器只认步骤名，子脚本的参数会被它清掉。
 > 要带子脚本自己的参数（比如代理），就直接调 `tools/sync_i18n.py`。
 
-文案分**游戏内文案**（`vendor/i18n/names.json`，从官方 `TextMap` 提取）和**界面文字**
-（`src/common/ui.ts`，手写 104 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
+文案分**游戏内文案**（`vendor/i18n/`：角色/武器/套装/词条来自 enka `store/gi/` 原样文件，
+圣遗物部件名来自官方 `TextMap` 的提取件）和**界面文字**
+（`src/common/ui.ts`，手写 129 条 × 5 种语言）两张表 —— 官方表里没有「刷新」「圣遗物」这类
 我们自己页面的说法。两张表都从 `src/common/i18n.ts` 出去（认语言只在那儿做一次）。
-为什么这么分、提取时踩过哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
+为什么这么分、名字表有哪三个坑，见 [`docs/DESIGN.md`](docs/DESIGN.md) §四。
 
 表不在时**静默降级**成只有中文（页面会给出提示），不会崩。
 
@@ -255,24 +257,25 @@ const ret = ArtisMark.getMarkDetail(profile, withDetail)
 npm test
 ```
 
-十二步，分工不重叠。第一列就是文件名 —— 单跑 `node test/<名字>.ts`（`typecheck` 是脚本，用
+十三步，分工不重叠。第一列就是文件名 —— 单跑 `node test/<名字>.ts`（`typecheck` 是脚本，用
 `npm run typecheck`；碰 `node:sqlite` 的那几套要加 `--disable-warning=ExperimentalWarning`）。
-项数是脚本自己打印的，没打印的写 —：
+每步自己打印跑了多少项，这里不写数字（一加断言就过期）：
 
-| 步 | 项数 | 管什么 |
-|---|---|---|
-| `typecheck` | — | `tsc --noEmit`，零构建项目唯一的类型闸门 |
-| `smoke` | — | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
-| `args` | 11 | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
-| `arch` | 71 | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/repository/dbo` 不依赖任何外层（只引 `util` / `stat`）、`config/constants.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（`rest → service → { repository, gateway }` 不许反向，`gateway/enka` 与 `repository/dbo` 是叶子适配层，只认 dbo / common / 三方）、**三层领域文件对照**（`account` / `character` 在 rest / service / repository 各有一个，后缀 `.rest.ts` / `.service.ts` / `.repo.ts`） |
-| `enka` | — | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
-| `pipeline` | 153 | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
-| `i18n` | 27 | 各类名字中英两路都对、大小写与别名归一、表缺失时能跳过 |
-| `server` | 153 | 真起监听打真 HTTP：路由（含方法不符 / 非数字路径 → 404）、静态与素材、错误形状、限流三档、CORS 预检与通配 `*`、POST 刷新（用假 enka，不联网） |
-| `cli` | 46 | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
-| `regression` | — | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
-| `damage` | — | 伤害计算基线：`calcDamage()` 的输出逐字节钉死（基线来自与原版 miao 对拍） |
-| `verify` | — | 端到端评分（输出即基线，可 diff） |
+| 步 | 管什么 |
+|---|---|
+| `typecheck` | `tsc --noEmit`，零构建项目唯一的类型闸门 |
+| `smoke` | 内核能不能脱离云崽独立加载：模块加载、元数据注册（attrMap 13 项 / 暴击率标准值 / 胡桃权重）、角色 ID 表 |
+| `args` | 命令行参数：`--key value` 与 `--key=value` 两种写法都得认（只认前者时 `--cors-origin=…` 会静默失效，配了等于没配） |
+| `arch` | 架构契约：别名可解析、依赖清单（lodash / limiter / hono / drizzle-orm）、vendor 自包含、云崽全局零残留、属性 SVG、`src/repository/dbo` 不依赖任何外层（只引 `util` / `stat`）、`config/constants.ts` 只放默认值（不引任何 src 模块）、`common/names.ts` 不反向引 `ui.ts`（否则 i18n 又成环）、**分层方向**（`rest → service → { repository, gateway }` 不许反向，`gateway/enka` 与 `repository/dbo` 是叶子适配层，只认 dbo / common / 三方）、**三层领域文件对照**（`account` / `character` 在 rest / service / repository 各有一个，后缀 `.rest.ts` / `.service.ts` / `.repo.ts`） |
+| `enka` | 上游抓取：多源并行谁先成功用谁、单源失败另一源兜得住、全失败给的是人话、`ENKA_SOURCE` 能指定单源 |
+| `pipeline` | **我们自己写的代码有没有搞坏数据**：level 基数归一化、ingest、库往返、合并抓取、脏数据、真实数据 + 面板对拍、百分比舍入、圣遗物数值口径 |
+| `i18n` | 各类名字中英两路都对、大小写与别名归一、产物保持上游形状、套装身份走 setId、表缺失时能跳过 |
+| `server` | 真起监听打真 HTTP：路由（含方法不符 / 非数字路径 → 404）、静态与素材、错误形状、限流三档、CORS 预检与通配 `*`、POST 刷新（用假 enka，不联网） |
+| `rubric` | 评分规则：列表接口、选中/清空后权重与分数跟着变、非法规则名 400、不存在的角色 / 账号 404 |
+| `cli` | **命令行入口**：把 CLI 当黑盒跑子进程，看该打印的段落在不在（汇总 / `--json` 形状 / 出错退出码非 0）、离库重跑分数不变、`--locale` 真透传 |
+| `regression` | 算法常量（上游更新后的安全网）：硬断言常量、软校验角色数/权重 |
+| `damage` | 伤害计算基线：`calcDamage()` 的输出逐字节钉死（基线来自与原版 miao 对拍） |
+| `verify` | 端到端评分（输出即基线，可 diff） |
 
 几条约定：
 
@@ -331,7 +334,7 @@ seiten-suikyou/
 │   │       └── enka.dto.ts   #   enka 响应形状 + IngestResult
 │   ├── common/               # 字典与纯函数（谁都引，不引业务）
 │   │   ├── i18n.ts           #   多语言门面：认语言 + 把下面两张表统一出口（名字 / 界面文字）
-│   │   ├── names.ts          #   官方文案：hash/id → 游戏文案（读 vendor/i18n/names.json）
+│   │   ├── names.ts          #   官方文案：hash/id → 游戏文案（读 vendor/i18n/）
 │   │   ├── ui.ts             #   界面文字手写表（按钮/标题/提示，官方表里没有）
 │   │   └── util.ts           #   num / str / parseArgs / argValue / errMessage / fmtTime（零依赖）
 │   ├── cli/score.ts          # 命令行评分入口（与 server/ 并列的两个进程入口之一）
@@ -354,12 +357,12 @@ seiten-suikyou/
 │   └── assets/               #   图片素材（python tools/sync.py assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
-│   └── i18n/names.json       # 官方文案表（sync_i18n 生成，勿手工编辑）
+│   └── i18n/                 #   官方文案（enka 4 个 json 原样 + textmap/ 部件名，sync_i18n 生成）
 ├── tools/                    # 开发期工具（不进运行时，也不进发布包）
 │   ├── README.md             #   每个工具一行简介 + 谁调谁 —— 先看这个
 │   ├── sync.py               # ★ 同步上游的唯一入口（编排下面三个，按依赖顺序跑）
 │   ├── sync_miao.py          # 内核同步（搬运 + 补丁 + 校验 + 报告；增量交给 git 算）
-│   ├── sync_i18n.py          # 多语言表提取（官方 TextMap + enka loc.json）
+│   ├── sync_i18n.py          # 名字数据同步（enka 4 个文件原样 + 部件名提取件）
 │   ├── sync_assets.py        # 图片素材全量复制（源：miao-plugin/resources，落盘 web/assets/，全程离线）
 │   ├── list_assets.ts        # 问应用本人「页面会请求哪些图」，供 sync_assets 对账
 │   ├── probe.ts              # 在真实页面跑 JS 量布局（改样式后的验收工具）

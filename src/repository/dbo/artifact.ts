@@ -23,17 +23,18 @@ export class ArtifactDbo {
   subStats: StatDbo[]
   nameHash: number | null
   setHash: number | null
+  setId: number | null
 
   constructor ({
     pos, itemId, levelRaw, star, mainPropId, appendPropIds,
-    mainStatValue, subStats, nameHash, setHash
+    mainStatValue, subStats, nameHash, setHash, setId
   }: {
     /* 外部原始值一律 unknown；num() 在这儿归一到 number|null，唯一的一次。
        两个数组字段（enka 给 StatDbo 实例、库行给普通对象）因此收两种形状。 */
     pos?: unknown; itemId?: unknown; levelRaw?: unknown; star?: unknown; mainPropId?: unknown
     appendPropIds?: number[]; mainStatValue?: unknown
     subStats?: Array<StatDbo | { prop: string; value: unknown }>
-    nameHash?: unknown; setHash?: unknown
+    nameHash?: unknown; setHash?: unknown; setId?: unknown
   }) {
     this.pos = num(pos)                          // 1 花 2 羽 3 沙 4 杯 5 头
     this.itemId = num(itemId)                    // 部件 id（miao Artifact.get 拿它查套装/名字/图标）
@@ -45,7 +46,10 @@ export class ArtifactDbo {
     /* 副词条 → 显示，不喂内核。库行读回来的是普通对象、enka 给的是 Stat —— 一律换成 Stat */
     this.subStats = (subStats || []).map(s => (s instanceof StatDbo ? s : new StatDbo(s.prop, s.value)))
     this.nameHash = num(nameHash)                // 本件名字的官方文案 key
-    this.setHash = num(setHash)                  // 套装名文案 key（同套 5 件共用一个）
+    this.setHash = num(setHash)                  // enka 原始 setNameTextMapHash（**不参与显示**，只留档）
+    /* 套装身份：**enka 的 setId**（千岩 15017）。真实件留空 —— 显示层用 itemId 推（`setIdOf`）；
+       人工/模拟件换过套装、itemId 还是原件那一个，所以必须由构造方直接给。 */
+    this.setId = num(setId)
   }
 
   /** 某个 miao key 的副词条数值（显示用）；没有这一条 → undefined */

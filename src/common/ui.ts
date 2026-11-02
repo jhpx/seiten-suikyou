@@ -1,8 +1,9 @@
 /*
  * ui —— 界面文字（按钮、分组标题、提示语）
  *
- * 与 names.json 的区别：那是**游戏内文案**（官方 TextMap 抽的，机器生成、跟着游戏版本走）；
- * 这里的界面文字官方表里根本没有（「刷新」「圣遗物」是我们自己页面的说法），只能手写。
+ * 与 vendor/i18n 的区别：那是**游戏内文案**（角色/武器/套装/词条从 enka `store/gi/`、部件名从官方
+ * TextMap 抽，机器生成、跟着游戏版本走）；这里的界面文字官方表里根本没有
+ * （「刷新」「圣遗物」是我们自己页面的说法），只能手写。
  * 量不大（一百来条 × 5 种语言），就放在代码里。
  * 缺某门语言时回落到英文 —— 界面上出现英文总比出现空白好认。
  * 占位符写成 `{名字}`，渲染时逐个替换。
@@ -25,7 +26,7 @@ const TABLE: Record<string, Record<string, string>> = {
     readFail: '读不到 uid {uid}。', needUid: '先填一个 UID', badUid: 'UID 格式不对：应为 9 或 10 位纯数字',
     fetchDone: '刷新完成：本次取得 {n} 个角色', fetchFail: '刷新失败：{msg}', fetchHardFail: '刷新失败。',
     panelSection: '面板属性', artiSection: '圣遗物',
-    noWeapon: '无武器', unknownWeapon: '未知武器', cons: '命之座', fetter: '好感', talent: '天赋', refine: '精',
+    noWeapon: '无武器', unknownWeapon: '未知武器', unknownSet: '未知套装', cons: '命之座', fetter: '好感', talent: '天赋', refine: '精',
     talentA: '普攻', talentE: '战技', talentQ: '爆发',
     mainStat: '主词条', notEquipped: '未装备',
     back: '返回',
@@ -86,6 +87,8 @@ const TABLE: Record<string, Record<string, string>> = {
     simSet: '套装', simLevel: '等级', simRefine: '精炼', simMainStat: '主词条', simSubStats: '副词条', simAddStat: '加一条',
     /* 右栏是**手填的最终数值**，不是真实装备的「若干次 roll 之和」两种口径对不上，所以不显示评分 */
     simCalculating: '重算中…', simEmpty: '改一改右边的武器或圣遗物，这里就会跟着变。',
+    /* 明细页「分享/下载」失败时的那句提示。以前失败只进 console，页面看着像「按钮没反应」 */
+    shareFail: '截图失败，没生成图片。换个浏览器或稍后再试。',
   },
   cht: {
     title: '星天水鏡', subtitle: '聖遺物評分',
@@ -98,7 +101,7 @@ const TABLE: Record<string, Record<string, string>> = {
     readFail: '讀不到 uid {uid}。', needUid: '先填一個 UID', badUid: 'UID 格式不對：應為 9 或 10 位純數字',
     fetchDone: '刷新完成：本次取得 {n} 個角色', fetchFail: '刷新失敗：{msg}', fetchHardFail: '刷新失敗。',
     panelSection: '面板屬性', artiSection: '聖遺物',
-    noWeapon: '無武器', unknownWeapon: '未知武器', cons: '命之座', fetter: '好感', talent: '天賦', refine: '精',
+    noWeapon: '無武器', unknownWeapon: '未知武器', unknownSet: '未知套装', cons: '命之座', fetter: '好感', talent: '天賦', refine: '精',
     talentA: '普攻', talentE: '戰技', talentQ: '爆發',
     mainStat: '主詞條', notEquipped: '未裝備',
     back: '返回',
@@ -145,6 +148,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '改武器', simWeaponType: '型號',
     simSet: '套裝', simLevel: '等級', simRefine: '精煉', simMainStat: '主詞條', simSubStats: '副詞條', simAddStat: '加一條',
     simCalculating: '重算中…', simEmpty: '改一下右邊的武器或聖遺物，這裡就會跟著變。',
+    shareFail: '截圖失敗，沒生成圖片。換一個瀏覽器或稍後再試。',
   },
   en: {
     title: 'Seiten Suikyou', subtitle: 'Artifact Scoring',
@@ -158,7 +162,7 @@ const TABLE: Record<string, Record<string, string>> = {
     readFail: 'Cannot read uid {uid}.', needUid: 'Enter a UID first', badUid: 'Invalid UID: must be 9 or 10 digits',
     fetchDone: 'Refreshed: {n} characters', fetchFail: 'Refresh failed: {msg}', fetchHardFail: 'Refresh failed.',
     panelSection: 'Stats', artiSection: 'Artifacts',
-    noWeapon: 'No weapon', unknownWeapon: 'Unknown weapon', cons: 'Constellation', fetter: 'Friendship', talent: 'Talents', refine: 'R',
+    noWeapon: 'No weapon', unknownWeapon: 'Unknown weapon', unknownSet: 'Unknown artifact set', cons: 'Constellation', fetter: 'Friendship', talent: 'Talents', refine: 'R',
     talentA: 'Normal', talentE: 'Skill', talentQ: 'Burst',
     mainStat: 'Main', notEquipped: 'Not equipped',
     back: 'Back',
@@ -207,6 +211,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: 'Weapon', simWeaponType: 'Model',
     simSet: 'Set', simLevel: 'Level', simRefine: 'Refinement', simMainStat: 'Main stat', simSubStats: 'Substats', simAddStat: 'Add',
     simCalculating: 'Recalculating…', simEmpty: 'Change the weapon or an artifact on the right and this updates.',
+    shareFail: 'Screenshot failed, no image was produced. Try another browser or retry later.',
   },
   ja: {
     title: '星天水鏡', subtitle: '聖遺物スコア',
@@ -220,7 +225,7 @@ const TABLE: Record<string, Record<string, string>> = {
     readFail: 'uid {uid} を読み込めません。', needUid: '先に UID を入力してください', badUid: 'UID の形式が正しくありません（9 または 10 桁の数字）',
     fetchDone: '更新完了：今回 {n} キャラ', fetchFail: '更新失敗：{msg}', fetchHardFail: '更新失敗。',
     panelSection: 'ステータス', artiSection: '聖遺物',
-    noWeapon: '武器なし', unknownWeapon: '不明な武器', cons: '命ノ星座', fetter: '好感度', talent: '天賦', refine: '精錬',
+    noWeapon: '武器なし', unknownWeapon: '不明な武器', unknownSet: '不明な聖遺物セット', cons: '命ノ星座', fetter: '好感度', talent: '天賦', refine: '精錬',
     talentA: '通常攻撃', talentE: '元素スキル', talentQ: '元素爆発',
     mainStat: 'メイン', notEquipped: '未装備',
     back: '戻る',
@@ -267,6 +272,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '武器', simWeaponType: '種類',
     simSet: 'セット', simLevel: 'レベル', simRefine: '精錬', simMainStat: 'メイン', simSubStats: 'サブ', simAddStat: '追加',
     simCalculating: '再計算中…', simEmpty: '右の武器か聖遺物を変えると、ここも変わります。',
+    shareFail: 'スクリーンショットに失敗し、画像が作れませんでした。別のブラウザか、時間をおいて再度お試しください。',
   },
   ko: {
     title: '성천수경', subtitle: '성유물 점수',
@@ -280,7 +286,7 @@ const TABLE: Record<string, Record<string, string>> = {
     readFail: 'uid {uid}를 읽을 수 없습니다.', needUid: 'UID를 먼저 입력하세요', badUid: 'UID 형식이 잘못되었습니다(9 또는 10자리 숫자)',
     fetchDone: '새로고침 완료: 캐릭터 {n}명', fetchFail: '새로고침 실패: {msg}', fetchHardFail: '새로고침 실패.',
     panelSection: '스탯', artiSection: '성유물',
-    noWeapon: '무기 없음', unknownWeapon: '알 수 없는 무기', cons: '운명의 자리', fetter: '호감도', talent: '특성', refine: '재련',
+    noWeapon: '무기 없음', unknownWeapon: '알 수 없는 무기', unknownSet: '알 수 없는 성유물 세트', cons: '운명의 자리', fetter: '호감도', talent: '특성', refine: '재련',
     talentA: '일반 공격', talentE: '원소 기술', talentQ: '원소 폭발',
     mainStat: '주 옵션', notEquipped: '미장착',
     back: '뒤로',
@@ -327,6 +333,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '무기', simWeaponType: '종류',
     simSet: '세트', simLevel: '레벨', simRefine: '재련', simMainStat: '주 옵션', simSubStats: '부 옵션', simAddStat: '추가',
     simCalculating: '다시 계산 중…', simEmpty: '오른쪽의 무기나 성유물을 바꾸면 여기도 따라 바뀝니다.',
+    shareFail: '스크린샷에 실패해 이미지가 만들어지지 않았습니다. 다른 브라우저에서 다시 시도해 주세요.',
   }
 }
 

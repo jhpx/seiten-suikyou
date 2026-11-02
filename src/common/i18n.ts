@@ -1,7 +1,8 @@
 /*
  * i18n —— 两张文案表的统一出口
  *
- * 名字表（names.ts）是官方游戏文案，从 `vendor/i18n/names.json` 读；界面文字表（ui.ts）是我们自己
+ * 名字表（names.ts）是官方游戏文案，从 `vendor/i18n/` 读（enka 的 locs/avatars/weapons/relics
+ * 原样 + 部件名的 textmap 提取件）；界面文字表（ui.ts）是我们自己
  * 页面的按钮/标题，手写。两者查表方式不同（一个按 hash/id，一个按固定键），但「语言代码怎么认、
  * 认不出退到哪」必须是同一套 —— 就在这里包一层：先认语言，再查表。
  *

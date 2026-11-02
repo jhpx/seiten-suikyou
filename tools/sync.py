@@ -18,8 +18,9 @@
 三步的依赖关系（顺序不是随便定的）
 ------------------------------------
 1. miao    —— 搬内核代码 + 权重表 + 角色/武器数据到 vendor/，产出 sync-report.md
-2. i18n    —— 从**官方 TextMap** 提取名字表；它要知道「现在有哪些角色/武器/套装」
-              才能提取对应的条目，而这取决于第 1 步搬下来的数据。**必须在 miao 之后**。
+2. i18n    —— 提取名字表：角色/武器/套装/词条名来自 enka 的 `store/gi/`（自带上限清单，
+              不依赖第 1 步搬下来的数据），只有**圣遗物部件名**还得从官方 TextMap 取
+              （enka 不收录）。放第 2 步是历史顺序，实际与 miao 无依赖。
 3. assets  —— 全量复制图片。素材目录由上游 miao-plugin 决定，与前两步无数据依赖，
               放最后纯粹因为它最慢（100MB / 1886 文件），失败时不影响前两步的产物。
 
@@ -66,7 +67,7 @@ STEPS: list[tuple[str, str, str]] = [
     ("miao", "sync_miao.py",
      "内核代码 + 权重表 artis-mark.js + 角色/武器元数据 → vendor/miao/，产出 sync-report.md"),
     ("i18n", "sync_i18n.py",
-     "从官方 TextMap 提取多语言名字表 → vendor/i18n/names.json，产出 i18n-report.md"),
+     "名字数据 → vendor/i18n/（enka 4 个原样 + 部件名提取件），产出 i18n-report.md"),
     ("assets", "sync_assets.py",
      "全量复制图片素材 → web/assets/（前端子仓库，约 100MB / 1886 文件）"),
 ]
@@ -221,9 +222,10 @@ def do_check() -> int:
         if latest:
             print(f"{DIM}    最新差异示例：{latest[0]}{RESET}")
 
-    i18n = ROOT / "vendor/i18n/names.json"
-    print(f"  {'vendor/i18n/names.json':34} {'多语言名字表':26} "
-          f"{'存在' if i18n.exists() else RED + '不存在' + RESET}")
+    i18n = ROOT / "vendor/i18n"
+    has_i18n = (i18n / "locs.json").exists() and (i18n / "textmap").is_dir()
+    print(f"  {'vendor/i18n/':34} {'名字数据（enka 原样）':26} "
+          f"{'存在' if has_i18n else RED + '不存在' + RESET}")
 
     print()
     if total_diff:

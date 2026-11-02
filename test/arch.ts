@@ -268,7 +268,7 @@ for (const o of dboOffenders.slice(0, 20)) console.log('        ' + o)
 /* util 反过来必须**零依赖** —— dbo 层引它，所以它一条 import 都不能有：
    引了 `node:` 就把运行环境带进 dbo 层（`payload_hash` 的 crypto 之所以留在 gateway/enka/，
    就是这个道理），引了任何 src 模块则等于开了条绕过分层的后门。
-   common/ 里另外三个不受这条约束：names.ts 天生要读 vendor/i18n/names.json，
+   common/ 里另外三个不受这条约束：names.ts 天生要读 vendor/i18n/ 下的 json，
    ui.ts 是纯数据表，i18n.ts 是两张表的门面（谁也不引它，它引那两张）。
    默认值全在 config/constants.ts（可以引 `node:path` 拼路径）。 */
 const sharedOffenders = []

@@ -18,7 +18,7 @@
 |---|---|---|
 | `sync.py` | ★ 唯一入口，按 miao → i18n → assets 的顺序跑完三步 | `npm run sync`；单步 `python tools/sync.py miao`；只检查 `npm run sync:check` |
 | `sync_miao.py` | 把 miao-plugin 的评分源码搬进 `vendor/miao/` 并打定点补丁 | `python tools/sync_miao.py`（用 `MIAO_PLUGIN_PATH` 换源目录） |
-| `sync_i18n.py` | 从官方 TextMap 提名字，产出 `vendor/i18n/names.json` | `python tools/sync_i18n.py`（`I18N_LOCALES=chs,en` 限定语种） |
+| `sync_i18n.py` | 搬名字数据到 `vendor/i18n/`：enka 的 4 个文件原样复制 + 部件名提取件 | `python tools/sync_i18n.py`（`I18N_LOCALES=chs,en` 限定语种；`--refresh` 强制重下） |
 | `sync_assets.py` | 全量复制 miao 素材到 `web/assets/`，并用页面清单对账 | `python tools/sync_assets.py` |
 
 ## 验收（改完前端 / 文档后自查）
@@ -47,7 +47,7 @@ chrome 本体（`chrome-headless-shell`，约 120MB）落在 `.tmp/`，准备方
 
 ```
 sync.py ─┬─► sync_miao.py  ──► vendor/miao/          （内核 + 资源清单）
-         ├─► sync_i18n.py  ──► vendor/i18n/names.json
+         ├─► sync_i18n.py  ──► vendor/i18n/           （enka 4 个原样 + textmap/ 提取件）
          └─► sync_assets.py ──► web/assets/           （miao 的 resources/ 全量复制）
                             ◄── .tmp/asset-list.json ◄── list_assets.ts（可选，对账用）
 ```

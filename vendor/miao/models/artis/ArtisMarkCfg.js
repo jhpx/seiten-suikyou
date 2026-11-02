@@ -115,7 +115,7 @@ const ArtisMarkCfg = {
            不然用户会以为那把权重表真的写着沃雅妮莎。isDefaultWeight 由 def 的调用方传入，
            角色专属规则（artis.js）自己调 def 时不传，恒为 false。
            isCustomWeight 见 def() 里的注释：专属规则默认分支手写了权重。
-           ⚠️ 只在「通用」时为 true：命中特判分支的角色标题已经自带场景名
+           ⚠️ 只在「通用」时为 true：命中特判分支的角色标题已经自带规则名
              （「可莉-纯火」），再改前缀成「自定义-纯火」是重复信息。 */
         isDefaultWeight,
         isCustomWeight: title === '通用' && isCustomWeight

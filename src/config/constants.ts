@@ -8,7 +8,7 @@ import path from 'node:path'
 
 /* ---------------- 语言 ---------------- */
 
-/** 默认语言：简体中文。与 miao 自带的中文名口径一致，也是 names.json 里的主列。 */
+/** 默认语言：简体中文。与 miao 自带的中文名口径一致，也是 vendor/i18n 里的主语言。 */
 export const DEFAULT_LOCALE = 'chs'
 
 /* ---------------- 存储 ---------------- */

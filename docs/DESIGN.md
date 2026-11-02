@@ -17,8 +17,8 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 
 三条原则：
 
-1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。658 个文件里 649 个是逐字节复制，
-   只有 9 个定点改写 + 2 个本地生成。
+1. **能原样搬就原样搬** —— 不为了「干净」而重写上游代码。搬进来的文件绝大多数是逐字节复制，
+   只有少数定点改写 + 本地生成，清单在 `tools/sync_miao.py` 里。
 2. **别名交给 package.json** —— `#miao` / `#miao.models` / `#miao.path` 原样保留在源码里，
    由本项目 `package.json` 的 `imports` 字段映射到 `vendor/miao` 下的真实文件。
    **没有任何 import 语句被改写**，IDE 跳转和静态分析照常可用。
@@ -44,7 +44,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 `limiter`（限流的令牌桶，零传递依赖）。原则是**代码最精简 + 依赖量最小**，
 允许加轻量第三方库，但加之前先算账：省下的行数配不配得上它的体积。）
 
-### 搬运范围（为什么是 658 个文件 / 4.1 MB）
+### 搬运范围（为什么要搬几 MB 的代码）
 
 除了评分算法与角色元数据，还搬了三样「容易漏掉、漏了就出不了正确分」的东西：
 
@@ -52,7 +52,7 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 |---|---|
 | `models/attr/`（`Attr.js` + `AttrData.js`） | 76 个角色规则文件里 **55 个要读 `attr.xxx`**（如胡桃的核爆判定 `attr.cpct < 15 && attr.cdmg > 280`），而 `attr` 不是数据源给的 —— 是 miao 自己按「基础值 + 武器 + 圣遗物」算的（`models/Avatar.js:320`）。 |
 | `resources/meta-gs/weapon/`（**只搬数据，不搬图片**） | 上面那个 `Attr.calc()` 要用 `Weapon.calcAttr()` 和 `weaponBuffs`。同目录下的 `icon/gacha/awaken.webp` 占 21 MB，评分用不到，全不搬。 |
-| `models/dmg/` + `models/ProfileDmg.js` + 每个角色的 `calc.js`（129 个） | 伤害计算（详见下节）。引擎 6 个文件约 1250 行纯计算；角色脚本按目录动态读取，闭包扫不出来，只能按 GLOBS 规则搬。 |
+| `models/dmg/` + `models/ProfileDmg.js` + 每个角色的 `calc.js`（一个角色一个） | 伤害计算（详见下节）。引擎 6 个文件约 1250 行纯计算；角色脚本按目录动态读取，闭包扫不出来，只能按 GLOBS 规则搬。 |
 
 另外 `src/index.ts` 里的元数据注册是「谁 import 谁登记」：漏 import 一个 `resources/meta-gs/*/index.js`，
 对应模型就会静默返回 `false`（我们踩过一次 —— `Weapon.get()` 全返回 null，界面上武器显示「未识别」）。
@@ -122,12 +122,6 @@ git log -p -- vendor/miao                          # 逐行看改了什么
 
 1. 相对 import 是否落地；2. `#miao*` 别名是否可解析；
 3. 云崽全局变量是否零残留；4. **未知外部依赖**（只允许 lodash 与 Node 内置模块）。
-
-### 相比早期方案
-
-早期用 Node 的 ESM loader hook 在运行时劫持 import 指向外部 miao-plugin 目录。已废弃，因为：
-项目依赖一个外部目录才能跑、边界模糊、IDE 跳转和静态分析全部失效、必须用 `--import` 启动。
-现在**仓库自包含**：`node test/verify.ts` 直接跑。
 
 ---
 
@@ -264,16 +258,15 @@ enka 原始响应
 
 `vendor/miao/` 只同步代码与元数据，**不同步二进制图片**（太大）。页面要还原 miao 的评分卡，
 需要三类素材：角色立绘、圣遗物/武器图标、UI 小图。它们落在前端子仓库的 `web/assets/`，
-**随子仓库提交**（约 100 MB / 1886 个文件）—— 重建依赖本地 miao-plugin 目录在、且版本对得上，
+**随子仓库提交**（约 100 MB，跟着角色/套装数增长）—— 重建依赖本地 miao-plugin 目录在、且版本对得上，
 换了机器素材不能凭空长出来。更新用 `python tools/sync.py assets`（全量复制，命令见 README）。
 
 三个设计点：
 
 - **只下库里实际出现的角色和套装**，避免一上来就拖几百 MB。
 - **「页面要什么」由页面自己回答** —— 素材的目录名是**中文**（角色名 / 套装名），而库里存的是数字 id。
-  早先脚本自己拿 id 去几张元数据表反查名字，三张表各有各的缺口，总有零星图片漏下载，页面出现空框。
-  现在改成先用页面同一套 `buildAccountView` 跑一遍、把吐出来的图片 URL 收齐（`tools/list_assets.ts`），
-  再交给下载脚本 —— 不再依赖任何猜测。
+  所以先用页面同一套 `buildAccountView` 跑一遍、把吐出来的图片 URL 收齐（`tools/list_assets.ts`），
+  再交给下载脚本 —— 不去几张元数据表猜名字（那几张表各有缺口，会漏图、页面出现空框）。
 - 元素符号不在 miao 仓库里（那边只有背景底图，不含符号本身），改从社区素材库 paimon-moe 取。
 - 404 / 缺图不报错，页面回退到 CSS 色块占位。
 
@@ -283,12 +276,15 @@ enka 原始响应
 
 `src/common/` 分两张表，因为它们的**来源和性质完全不同**：
 
-| | `vendor/i18n/names.json` | `src/common/ui.ts` |
+| | `vendor/i18n/` | `src/common/ui.ts` |
 |---|---|---|
 | 内容 | 游戏内文案：角色 / 武器 / 圣遗物部件 / 套装 / 部位 / 词条名 | 界面文字：刷新、搜索角色、面板属性、命之座… |
-| 来源 | 从官方 `TextMap` 机器提取（`tools/sync_i18n.py`） | 手写（官方表里没有这些说法） |
-| 规模 | 767 个名字组、11931 个 hash | 104 条 × 5 种语言 |
+| 来源 | enka `store/gi/`（角色/武器/套装/词条，**原样复制**）+ 官方 `TextMap`（**只为部件名**，提取件） | 手写（官方表里没有这些说法） |
 | 主键 | hash / avatarId / itemId / setId | 英文 key |
+
+**为什么两个源**：enka 的 `store/gi/{locs,avatars,weapons,relics}.json` 跟着它线上口径走，新角色新套装
+一上线就有（旧 TextMap 快照连「奥黛塔」都还没有）；但 enka **不收录圣遗物部件名**
+（「魔女的炎之花」这类，它自己的网页也不显示），所以那一类只能继续从 TextMap 取。
 
 两张表由 `src/common/i18n.ts` 统一出口：认语言（`resolveLocale`）、把界面文字包一层再给出去。
 **别再把这个包装放回 `names.ts`** —— 那样 `names` 要引 `ui`、`ui` 又要从 `names` 拿默认语言，
@@ -302,17 +298,24 @@ enka 原始响应
 权重表 / 套装缩写 / 武器特判全用中文名当键，全仓库零 `TextMapHash` 使用。
 所以翻译只能挂在我们自己的出口上，内核那边一个字都不能动 —— 动了分数就可能变。
 
-名字表的提取有三个坑，都在脚本注释里记着：
+**`vendor/i18n/` 的形状就是上游的形状**（用户明确要求：能原样的原样，好对着上游看 diff）：
+enka 的 `locs/avatars/weapons/relics.json` 是**字节级复制**，上游一更新 `git diff` 就知道哪条变了；
+只有 TextMap 没法原样（单语言 43 MB），才做提取件 `textmap/*.json`（`{hash: 文案}`，只留部件名）。
 
-1. **官方把同一段文案复用在几十处** ——「胡桃」有 49 个键、「炽烈的炎之魔女」11 个，
-   enka 返回哪个变体无法预知。所以把所有变体收进**同一个名字组**，任意变体都查得到同一条。
-   同一组在各语言下文案一致（脚本会报冲突，当前 0 处）。
-2. **词条名不能走 hash** —— 走 enka 的 `loc.json`，它的词条区按 `FIGHT_PROP_*` 枚举键控，
-   和 miao 的 `StatType` 一一对应，没有歧义。它的数字 hash 键有 +512 偏移，不能用。
-3. **套装名要拐一道** —— `setId → equipAffixId → EquipAffixExcelConfigData[level=0].nameTextMapHash`。
+名字表的三个坑，都在脚本注释里记着：
+
+1. **部件名一个 itemId 对应一个 hash**，直查即可 ——
+   库里的 `name_hash` 与 `ReliquaryExcelConfigData` 里同一 itemId 的 `nameTextMapHash` **逐条一致**
+   （实测全库 250 件：239 一致、0 不一致、11 件上游还没有）。
+2. **词条名不能走 hash** —— 走 enka 的 `FIGHT_PROP_*` 区块，它和 miao 的 `StatType` 一一对应，没有歧义。
+3. **套装身份必须是 `setId`** —— enka 玩家接口给的是 `setNameTextMapHash`
+   （千岩 1337665995），那个 hash **在 enka 的 locs.json 里查不到名字**：它和 locs 用的 `locHash`
+   （千岩 4007101907）是两个空间，拿它查表整套都会变成「未知套装」。
+   能查到名字的只有 `itemId → setId（15017）→ Sets[setId].Name → locs`。
 
 表不在时**静默降级**成只有中文（`i18n.available()` 返回 false，页面会提示），不会崩。
-每次同步产出 [`reports/i18n-report.md`](reports/i18n-report.md)：各类别条目数、每语言命中率、未收录清单。
+每次同步产出 [`reports/i18n-report.md`](reports/i18n-report.md)：各类别条目数、每语言命中率、
+上游滞后预警（enka 已有的套装里，哪些的部件名 TextMap 还没收）。
 
 ---
 
@@ -399,11 +402,10 @@ enka 原始响应
 
 ## 六、下一步
 
-1. 把多语言覆盖到**剩余的中文字面**：`classTitle`（`胡桃-护摩` 这类规则名，是 miao 自己的中文串）、
-   元素名、以及目前个别还没进表的新武器/角色名（比如「寒息」在英/日文页仍是中文）。
-   前两个要给 i18n 表再补两类条目（`test/cli.ts` 里也留了备注：`--locale en` 的输出里
-   仍会出现中文，正是 `classTitle` 这一项，不是回归）。
+1. 把多语言覆盖到**剩余的中文字面**：规则名（`classTitle`，miao 自己的中文串）。
+   意译表 `src/common/rubric-names.ts` 还缺几条，en 下目前有 6 条退回中文
+   （雷神-薙刀、莱依拉-西风、夏洛蒂-西风、希诺宁-西风、伊安珊-西风、雅珂达-西风）。
+   角色 / 武器 / 套装 / 部件 / 元素名都已走官方文案表，不用再管。
 2. 首页角色卡的进一步还原（排列/密度可调），以及明细页与 miao 出图的逐像素对拍。
 3. 圣遗物按「单件分」排序、以及词条有效率的柱状对比 —— 数据都已经在接口里了，只差排版。
-4. ~~明细页接伤害计算~~（已完成：接口 + 页面，见「伤害计算」节末尾）。剩下可做的：
-   miao 面板还有一张「换主属性伤害对比」矩阵（`calcData` 的 `dmgRet`），要不要一并展示届时定。
+4. miao 面板还有一张「换主属性伤害对比」矩阵（`calcData` 的 `dmgRet`），要不要一并展示届时定。

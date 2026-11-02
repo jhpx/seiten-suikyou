@@ -2,14 +2,14 @@
  * miao 评分规则名的多语言表。
  *
  * 为什么单独一张表：规则名是 miao 自己的中文简称（「板砖纯辅」「星超导」「讨龙」），
- * **没有官方译名可查** —— vendor/i18n/names.json 里只有角色 / 武器 / 圣遗物 / 词条的官方文案。
+ * **没有官方译名可查** —— vendor/i18n/ 里只有角色 / 武器 / 圣遗物 / 词条的官方文案。
  * 所以这一张是我们自己意译的，不是官方词；要改措辞只动这个文件。
  *
  * 为什么按「词元」存而不是整名：miao 会把多条分支拼成一个名字，用 `|` 连（「高命|精通|若水」），
  * 同一分支的两种叫法用 `/` 连（「治疗/纯水输出」）。逐条整名翻译会组合爆炸，
  * 所以拆成词元、再把原分隔符原样拼回去（见 rubricName）。
  *
- * 语言码跟 common/ui.ts、vendor/i18n 一致：chs / cht / en / ja / ko（跟 vendor/i18n/names.json 的 locales() 一致，韩文是 ko 不是 kr）。
+ * 语言码跟 common/ui.ts、vendor/i18n 一致：chs / cht / en / ja / ko（跟 names.ts 的 locales() 一致，韩文是 ko 不是 kr）。
  * chs 不需要翻译（原文就是中文），表里不写。
  */
 type Row = { cht: string; en: string; ja: string; ko: string }

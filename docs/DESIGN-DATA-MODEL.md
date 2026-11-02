@@ -114,7 +114,7 @@ enka 原始响应 (JSON)
 | `Weapon` | weapon 行 | 1:1 独立落表，键同 artifact 的 `(uid, avatar_id)` —— 列名因此不用带 `weapon_` 前缀，`Character` 也不必把列拆成三段拼 |
 | `Artifact` | artifact 行 | 保证 `appendPropIds` 保序保重复（内核靠它算词条数） |
 
-模型**不再自己管列名**（旧版的 `FIELDS` / `COLS` / `toValues` / `fromRow` 已删）：
+模型**不管列名**：
 列与类型的唯一来源是 `src/config/schema.ts` 的 drizzle 表定义，而「行 ↔ 对象」的搬运
 （列名对应、JSON 编解码、子表拼装）集中在 `src/config/store.ts` 的几对私有映射函数里
 （`accountRow`/`accountOf`、`characterRow`/`characterOf` …）。
@@ -214,35 +214,43 @@ enka 原始响应 (JSON)
 
 ## 5. i18n 的落地要点
 
-### 5.1 主键首选：官方文案 key（TextMapHash）—— 已确认真实响应里就有
+### 5.1 主键：官方文案 key（TextMapHash）
 
-**上一版这里还是「待确认」，现在已经拿真实响应确认了**：enka 的 `avatarInfoList[].equipList[].flat` 里带着
+enka 的 `avatarInfoList[].equipList[].flat` 里带着：
 
 ```
 flat.nameTextMapHash       // 这件圣遗物 / 这把武器的名字
 flat.setNameTextMapHash    // 套装名（同套装 5 件共用同一个值）
 ```
 
-（实测：uid 101242308 的响应里共 132 处 `TextMapHash` 字段。）
-
 这是**官方全语言文案表的主键**——游戏本体的 `TextMap` 资源就是 `hash → 各语言文本`。
 所以对圣遗物/武器名，我们**不需要自己翻译、也不需要自己维护 id→名字映射**：
-存下 hash，将来挂上官方文案表就一次性拿到全部语言。
+存下 hash，查 `vendor/i18n/textmap/*.json` 就拿到全部语言。
 
-因此 `artifact.name_hash` / `artifact.set_hash` / `weapon.name_hash` 三列是**现在就必须存的**：
-enka 正好白给，丢了以后要补只能重抓（我们做缓存的全部意义就是不重抓）。它仍然符合「存 id 不存名字」——
-hash 是名字的 id。
+因此 `artifact.name_hash` / `artifact.set_hash` / `weapon.name_hash` 三列必须存：
+enka 正好白给，丢了以后要补只能重抓（做缓存的全部意义就是不重抓）。它也符合「存 id 不存名字」——
+hash 是名字的 id。`--keys` 可列出库里实际用到过的 key，用来核对文案表够不够。
 
-`--keys` 把库里实际用到过的 key 列出来：将来接文案表时只要那几百条，不必把几十万条官方文案全导进来。
+**套装身份例外，必须走 `setId`**：`setNameTextMapHash`（千岩 1337665995）和 enka 文案表
+`locs.json` 的键（千岩 4007101907）是**两个不同的 hash 空间**，前者在 locs 里根本不存在，
+拿它查名字只会得到「未知套装」。能查到名字的路径是：
+
+```
+itemId（48543）→ setId（15048）→ Sets[setId].Name（1048849443）→ locs → 炉火融炼之心
+```
+
+所以显示层认 `setId`（由 `item_id` 推，查 `vendor/i18n/relics.json` 的 `Items[itemId].SetId`），
+`set_hash` 列只当原始留档、不参与显示。人工/模拟件没有真实 itemId，构造时直接给 `setId`。
 
 ### 5.2 角色名是个例外：enka 不给
 
-`avatarInfo` 里**只有 `avatarId`，没有 `nameTextMapHash`**（实测确认）。所以角色名的多语言必须另配一份
-`avatarId → 文案 key` 映射（这份映射从官方数据表里来，是静态的，一次配好即可）。
+`avatarInfo` 里**只有 `avatarId`，没有 `nameTextMapHash`**。所以角色名的多语言必须另配一份
+`avatarId → 文案 key` 映射。这份映射来自 enka 的 `store/gi/avatars.json`（156 个条目，含旅行者各形态），
+是静态的、跟着 enka 走，一次配好即可。
 
-文案**不落库**：`tools/sync_i18n.py` 把官方 TextMap 提取成 `vendor/i18n/names.json`
-（hash / avatarId / itemId / setId → 各语言文本），进程启动时读进内存查表 —— 多语言是展示层的事，
-数据层只存 id。schema 里曾经挂过一张 `i18n_text` 占位表，v4 迁移删掉了（零引用、零数据）。
+文案**不落库**：`tools/sync_i18n.py` 把 enka `store/gi/`（角色/武器/套装/词条，**原样复制**）与
+TextMap（部件名，提取成 `textmap/*.json`）搬进 `vendor/i18n/`，进程启动时读进内存查表 ——
+多语言是展示层的事，数据层只存 id。
 
 ### 5.3 计算时方向反过来
 
@@ -274,17 +282,22 @@ miao 拿中文名查表（`usefulAttr[char.name]`、`weaponCfg[wn]`），
 
 ---
 
-## 7. 待决项
+## 7. 关键决策
 
-| # | 问题 | 影响 | 现状 |
-|---|---|---|---|
-| 1 | 面板 `attr` 从哪来 | 「核爆」类规则是否触发 | ✅ 已定：调 `Attr.create().calc()` 自己算，并用 `fightPropMap` 对拍验证（§1.3、§6） |
-| 2 | enka 的 level 基数 | 主词条数值整体差一档 | ✅ 已定：1 基（满级 21），真实数据锚点 62.2% 通过 |
-| 3 | DB 选型 | 部署形态 | ✅ 已定：SQLite（`node:sqlite`，零原生模块）。schema 两边通用，将来换 Postgres 不用改模型 |
-| 4 | 响应里有没有 TextMapHash | i18n 主键选型 | ✅ 已确认有，见 §5.1 |
-| 5 | 文案表从哪来（官方 TextMap 资源怎么取、要不要落库） | 多语言能否真正上线 | ⬜ **未决**——下一步的入口 |
-| 6 | 角色名 `avatarId → 文案 key` 映射的来源 | 角色名多语言 | ⬜ **未决**，与 #5 一起解 |
-| 7 | 米游社面板做第二数据源 | 拿不到展柜之外的角色 | ⬜ 未决；`MyPanelData` 得**逆推** mainId/attrIds（上游注释直言这是"难点"），成本高 |
+| # | 问题 | 结论 |
+|---|---|---|
+| 1 | 面板 `attr` 从哪来 | 调 `Attr.create().calc()` 自己算，并用 `fightPropMap` 对拍验证（§1.3、§6） |
+| 2 | enka 的 level 基数 | 1 基（满级 21），真实数据锚点 62.2% 通过 |
+| 3 | DB 选型 | SQLite（`node:sqlite`，零原生模块）。schema 两边通用，将来换 Postgres 不用改模型 |
+| 4 | 响应里有没有 TextMapHash | 有，见 §5.1 |
+| 5 | 文案表从哪来、要不要落库 | enka `store/gi/` 原样 + TextMap 提取件放 `vendor/i18n/`，不落库（§5.2） |
+| 6 | 角色名 `avatarId → 文案 key` 映射 | 取 enka `store/gi/avatars.json`（§5.2） |
+
+遗留一项：
+
+| # | 问题 | 状况 |
+|---|---|---|
+| 7 | 米游社面板做第二数据源 | 未做；`MyPanelData` 得**逆推** mainId/attrIds（上游注释直言这是"难点"），成本高 |
 
 ---
 

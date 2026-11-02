@@ -79,7 +79,7 @@ export interface CharacterDto {
     isCustomWeight: boolean
   }
   charWeight: Record<string, number>
-  sets: Array<{ name: string; nameZh: string; count: number; icon: string | null }>
+  sets: Array<{ name: string; nameZh: string; setId: number | null; count: number; icon: string | null }>
   panel: Array<{ key: string; label: string; value: number; text: string; kind: string; weight: number }>
   attrTable: AttrRow[]
   allAttr: Array<Record<string, unknown>>

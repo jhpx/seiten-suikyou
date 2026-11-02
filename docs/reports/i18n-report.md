@@ -1,75 +1,61 @@
 # 多语言文案同步报告
 
-- 同步时间：2026-10-31T00:39:07
-- 上游来源：`gitlab.com/Dimbreath/AnimeGameData`（`master（最近提交 2026-06-29，游戏 6.6.0）`）
-- 词条来源：`cdn.jsdelivr.net/gh/EnkaNetwork/API-docs@master/store/loc.json`
+- 同步时间：2026-11-03T00:29:31
+- 名字主源：`EnkaNetwork/API-docs store/gi/{locs,avatars,weapons,relics}.json`（原样复制）
+- 部件名来源：`gitlab.com/Dimbreath/AnimeGameData（TextMap，只取部件名）`（enka 不收录部件名）
 - 语言：简体中文、繁體中文、English、日本語、한국어
 
-## 一、同步了什么
+## 一、产物
 
-| 类别 | 条目数 | 说明 |
-|---|---|---|
-| 角色 | 156 | ExcelBinOutput/AvatarExcelConfigData |
-| 武器 | 265 | ExcelBinOutput/WeaponExcelConfigData |
-| 圣遗物部件 | 4185 | 按 ReliquaryExcelConfigData 自己的 setId 归属筛（低星狗粮不入表） |
-| 套装 | 63 | setId → equipAffixId → EquipAffixExcelConfigData[level=0] |
-| 部位 | 5 | 生之花/死之羽/时之沙/空之杯/理之冠（官方表里唯一，可反查） |
-| 词条 | 47 | loc.json 的 FIGHT_PROP_* 区块 |
+| 文件 | 大小 | 来源 | 处理方式 |
+|---|---|---|---|
+| `locs.json` | 257 KB | enka | **原样** |
+| `avatars.json` | 352 KB | enka | **原样** |
+| `weapons.json` | 158 KB | enka | **原样** |
+| `relics.json` | 696 KB | enka | **原样** |
+| `slots.json` | 1 KB | 手写 | 5 个部位名 |
+| `textmap/chs.json` | 127 KB | Dimbreath TextMap | 提取 |
+| `textmap/cht.json` | 127 KB | Dimbreath TextMap | 提取 |
+| `textmap/en.json` | 151 KB | Dimbreath TextMap | 提取 |
+| `textmap/ja.json` | 137 KB | Dimbreath TextMap | 提取 |
+| `textmap/ko.json` | 150 KB | Dimbreath TextMap | 提取 |
+| **合计** | **2154 KB** | | |
 
-落库：**767 个名字组**，`nameIndex` 索引了 **11931 个 hash**（平均一个名字对应 15.6 个官方键）。
+条数：套装 65、角色 156、武器 256、部件归属 4245、部件名 hash 4185。
 
-## 二、为什么要「名字组」，以及为什么不能只按中文名合并
+源文件里 TextMap 是单语言 43 MB / 54 万条，这里只挑出部件名那几条 ——其余是任务对白和道具描述，用不上。
 
-官方把同一段文案复用在几十处：「胡桃」在完整表里有 49 个键、「宗室之花」23 个、「炽烈的炎之魔女」11 个。enka 返回的是其中任意一个 —— 实测套装经 EquipAffix 链出来的是
-`1928302715`，而 enka 给的是 `1524173875`，两个都对，只是变体不同。
-离线时无法预知 enka 给哪个，所以要把**变体键全部收进来**。
+## 二、覆盖审计（每种语言命中率）
 
-但「同名」不等于「同一个东西」：中文是**不唯一**的键 —— `以理服人` 既是武器
-Debate Club，也是任务里的一句 *Time for a debate*；`信使` 在日文下有 3 种写法。
-只按中文合并的话，enka 给武器那个 hash 时，可能查出任务那句话的英文，这才是真的串味。
+| 语言 | 角色 | 武器 | 套装 | 部件名 |
+|---|---|---|---|---|
+| 简体中文（chs） | 156/156 | 256/256 | 65/65 | 4185/4185 |
+| 繁體中文（cht） | 156/156 | 256/256 | 65/65 | 4185/4185 |
+| English（en） | 156/156 | 256/256 | 65/65 | 4185/4185 |
+| 日本語（ja） | 156/156 | 256/256 | 65/65 | 4185/4185 |
+| 한국어（ko） | 156/156 | 256/256 | 65/65 | 4185/4185 |
 
-所以合并条件是「**在所有语言下文案都相同**」：先按中文粗合并，再逐语言切分。
-真变体（各语言都一致）照旧合并在一起，撞名的被切开、各拿各的翻译。
+## 三、上游滞后预警
 
-因撞名而切出来的组：**11** 处（见下）
+下面这些套装 enka 已经有，但 TextMap 里凑不齐部件名（这些部件会退回中文名）：
 
-- 洛恩（en）→ Rowan
-- 以理服人（en）→ Peacemonger
-- 以理服人（en）→ Time for a debate
-- 落霞（en）→ Luoxia
-- 少女飘摇的思念（en）→ Maiden's Heart-stricken Infatuation
-- 盟誓金爵（en）→ Pledging Vessel
-- 成男体型测试（ja）→ 成人男性ボディテスト
-- 信使（ja）→ 伝達使
-- 信使（ja）→ 使者
-- 阿蕾奇诺（ko）→ 「아를레키노」
-- 战狂的蔷薇（ko）→ 전광의 장미
+- setId `15047`：0/30 个部件有名字
+- setId `15048`：0/30 个部件有名字
 
-## 三、每种语言解析到多少组
+上游进度：TextMap（Dimbreath `master`）最大 setId 是 **15046**，enka 已经到 **15048**。等 dump 追上来重跑本脚本即可，不用改代码。
 
-| 语言 | 有文案的组 | 占比 |
-|---|---|---|
-| 简体中文（chs） | 756 / 767 | 98.6% |
-| 繁體中文（cht） | 756 / 767 | 98.6% |
-| English（en） | 762 / 767 | 99.3% |
-| 日本語（ja） | 765 / 767 | 99.7% |
-| 한국어（ko） | 767 / 767 | 100.0% |
+## 四、缓存状态
 
-- 分母是**切分后**的最终组数；越靠后切出来的组，前面的语言还没轮到它，所以数字递增是正常的。
-
-## 四、没解析到的
-
-- 上游 dump 落后于游戏时，比它新的角色/武器/套装会**整体缺席**（不是翻译缺失，是 id 根本没进表）。实测：uid 101242308 展柜里的「熔铸者」套装（比 dump 新），以及角色「奥黛塔」
-- 只有中文、其它语言一条都没收录的组：3 个
+- 全部为本轮新下载或 7 天内的新鲜缓存。
+- 想强制重下（怀疑上游更新了）：`python tools/sync_i18n.py --refresh`。
 
 ## 五、怎么复现
 
 ```bash
-# 默认 chs,cht,en,ja,ko；原始大文件缓存在 .tmp/i18n-src/（已被 git 忽略）
+# 原始大文件缓存在 .tmp/i18n-src/（已被 git 忽略），只有产物进仓库
 python tools/sync_i18n.py
-# 国内直连 gitlab 不通，需要代理时
+# 国内直连不通时（enka 在 raw.githubusercontent、TextMap 在 gitlab）
 I18N_PROXY=socks5h://127.0.0.1:4080 python tools/sync_i18n.py
 ```
 
-> `vendor/miao/` 是「原样搬运 + 定点改写」，本目录不同：
-> 它是**从 43 MB 原始表里提取出来的子集**，提取逻辑见脚本。
+> enka 那 4 个文件是**字节级原样复制**；TextMap 那份是提取件，提取逻辑见脚本。

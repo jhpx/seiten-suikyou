@@ -59,7 +59,7 @@
 
 ## 多语言与显示口径
 
-- `vendor/i18n/names.json` 是生成的官方名称数据；`src/common/ui.ts` 是手写的界面文案。两者用途不同，不要互相替代。
+- `vendor/i18n/` 是生成的官方名称数据（enka 的 `locs/avatars/weapons/relics` 原样 + 部件名的 `textmap/` 提取件）；`src/common/ui.ts` 是手写的界面文案。两者用途不同，不要互相替代。
 - 当前依赖方向为 `common/i18n` 读取 `names` 和 `ui`；`names` 与 `ui` 不应互相依赖。修改该结构时，检查 `test/arch.ts` 的依赖断言。
 - `repository/dbo/` 不应依赖官方文案表 `common/names.ts`（它要读 vendor 文案表，会把 IO 拽进数据库对象层）；词条词汇表在 `common/stat.ts`，dbo 可引它。
 - 词条数值显示统一走 `service/artifact.service.ts` 中现有的 `attrValueText(...)` 逻辑（圣遗物与词条的「显示口径」已抽到该叶子模块，`character.service.ts` 单向引它），以保持不同数据源之间的显示口径。不要绕过它直接使用 `Format.pct`，除非已确认新场景的语义不同并补充测试。
@@ -128,4 +128,4 @@ node test/verify.ts
 - 接口、中间件或跨域问题：检查 `server/routes.ts`、`server/index.ts` 与 `test/server.ts`。
 - 数据结构问题：检查 `config/schema.ts`、`config/db.ts`、`config/store.ts` 和 `test/pipeline.ts`。
 - 评分差异：检查 `gateway/miao/`、`vendor/miao/` 的同步补丁和 `test/verify.ts`。
-- 多语言问题：检查 `src/common/ui.ts`、`vendor/i18n/names.json` 和 `test/i18n.ts`。
+- 多语言问题：检查 `src/common/ui.ts`、`vendor/i18n/`（locs.json 等上游原样文件）和 `test/i18n.ts`。

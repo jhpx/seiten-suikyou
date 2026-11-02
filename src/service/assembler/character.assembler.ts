@@ -18,7 +18,7 @@ import { fmtTime } from '../../common/util.ts'
 /* 显示口径 + 圣遗物卡片：叶子模块，单向引用，不成环 */
 import {
   statLabel, pctText, attrValueText, KEY_TITLE,
-  artifactOf, artifactIcon, assetSeg, shortLabel
+  artifactOf, artifactIcon, assetSeg, shortLabel, setIdOf
 } from '../artifact.service.ts'
 import type { AttrRow, CharacterDto, MarkDetail } from '../dto/character.dto.ts'
 
@@ -160,12 +160,30 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
   /* 规则标题（miao 口径的中文「角色名-规则名」）：classTitle 与 rubricLabel 都用它推 */
   const title = classTitleOf(result)
 
-  const sets = Object.entries(result.sets || {}).map(([name, count]) => ({
-    name: i18n.fromZh(name, loc) || name,
-    nameZh: name,
-    count,
-    icon: artifactIcon(name, 1)
-  }))
+  /* 套装归属按**自己库里的每件圣遗物**数，不按 miao 的 `result.sets`：
+   * miao 那边是按**套装显示名**分组的，同一套在不同时刻可能被它吐成两个名（裂套的真凶）。
+   * 身份用 setId（enka 的套装 id，由 itemId 推 / 人工件直接给），跨角色、跨刷新都稳定。
+   * 名字查不到就显示「未知套装」，绝不退回 miao 显示名。
+   * 对照 MEMORY 数据通路铁律：库里只存数字 id、不存名字。 */
+  const bySet = new Map<number | null, number>()
+  for (const a of ch.artifacts || []) {
+    if (a.pos == null) continue
+    const setId = setIdOf(a)
+    bySet.set(setId, (bySet.get(setId) || 0) + 1)
+  }
+  const sets = [...bySet.entries()]
+    .map(([setId, count]) => {
+      const nameZh = (setId === null ? null : i18n.setName(setId, 'zh')) || ''
+      return {
+        name: (setId === null ? null : i18n.setName(setId, loc)) || i18n.uiText('unknownSet', loc),
+        nameZh,
+        setId,
+        count,
+        icon: artifactIcon(nameZh, 1)
+      }
+    })
+    /* 件数多的在前，同数按名字排 —— 固定顺序，别让它在两次请求之间抖 */
+    .sort((x, y) => y.count - x.count || x.name.localeCompare(y.name))
 
   const panel = panelOf(profile.attr, loc).map(p => ({ ...p, weight: cw[p.key] || 0 }))
 
