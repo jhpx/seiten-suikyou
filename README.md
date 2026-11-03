@@ -346,15 +346,24 @@ seiten-suikyou/
 │   ├── index.html            #   外壳（顶栏 / 视图容器 / 页脚），引 bootstrap.js（相对路径，见「分开部署」）
 │   ├── bootstrap.js          #   入口：引齐 feature 模块（副作用注册渲染器）+ 控制器 + 启动
 │   ├── core.js               #   基座：state / 工具 / 编排（经 reg 注册表反向调 feature，无环依赖）
-│   ├── roster.js             #   feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
-│   ├── filter.js             #   feature：筛选条 = 排序｜视图切换｜漏斗多选面板（稀有度 / 元素 / 圣遗物套装 / 评价等级 / 评价权重）
-│   ├── sort.js               #   feature：多条件排序（至多 3 字段的排序链）
-│   ├── detail.js             #   feature：角色明细画布 + 缩放
-│   ├── i18n.js               #   feature：loadMeta / 切语言 / 静态文案
-│   ├── history.js            #   feature：UID 历史（localStorage）
+│   ├── env.js                #   可选部署配置（API_BASE 指定后端地址）
 │   ├── style.css             #   外壳样式
 │   ├── miao.css              #   评分卡样式（miao 的 profile-detail.css 移植版）
-│   └── assets/               #   图片素材（python tools/sync.py assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
+│   ├── assets/               #   图片素材（python tools/sync.py assets 从 miao-plugin 复制，约 100MB，随子仓库提交）
+│   └── features/             #   业务模块（各自 import ../core.js，经 reg 注册渲染器）
+│       ├── roster.js         #   feature：账号头 + 角色网格 + 卡片（武器 / 圣遗物两种视图）
+│       ├── filter.js         #   feature：筛选条 = 排序｜视图切换｜漏斗多选面板（稀有度 / 元素 / 圣遗物套装 / 评价等级 / 评价权重）
+│       ├── sort.js           #   feature：多条件排序（至多 3 字段的排序链）
+│       ├── advice.js         #   feature：圣遗物刷取建议面板
+│       ├── sim.js            #   feature：模拟比对页面
+│       ├── i18n.js           #   feature：loadMeta / 切语言 / 静态文案
+│       ├── history.js        #   feature：UID 历史（localStorage）
+│       └── detail/           #   明细页子模块（import ../../core.js）
+│           ├── detail.js             #   编排：renderDetail + loadRubric + onShare
+│           ├── detail-card.js        #   卡片渲染（武器 / 圣遗物卡）
+│           ├── detail-damage.js      #   伤害表加载与渲染
+│           ├── detail-fit.js         #   页面适配（fitLongText / fitSelectText / fitDetailScale）
+│           └── detail-screenshot.js  #   截图下载（按需动态导入截图依赖）
 ├── vendor/
 │   ├── miao/                 # 从 miao-plugin 搬运的源码（sync 生成，勿手工编辑）
 │   └── i18n/                 #   官方文案（enka 4 个 json 原样 + textmap/ 部件名，sync_i18n 生成）
