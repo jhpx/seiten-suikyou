@@ -54,7 +54,7 @@ export function panelText (attr: Record<string, number> | null | undefined, loca
   return panelOf(attr, locale).map(p => `${p.label} ${p.text}`).join('  ')
 }
 
-/* 角色图像资源 —— 照抄 miao 的 CharImg.getImgs（models/character/CharImg.js:87）。 */
+/* 角色图像资源 —— 参照 miao 的图片资源结构，前端自行拼 assets/ 路径。 */
 function charImgs (char: any): Record<string, string> {
   const base = `assets/meta-gs/character/${assetSeg(char.name)}/`
   const talentCons = char.talentCons || {}

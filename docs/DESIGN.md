@@ -32,13 +32,13 @@ miao-plugin 是为云崽（Yunzai + oicq）写的插件，不是库。它假设�
 | 全局 `logger` | `components/Data.js` 的 `delFile` | 改 `console.error` |
 | `Common`（渲染）/ `App`（应用） | `components/index.js`；`ProfileDmg` 引它只为 `calc_auto`（组团伤害）分支 | 从入口摘掉（本项目无人引用）；`ProfileDmg` 里那个分支一并移除 |
 | 云崽模型 `User` / `MysApi` / `Player` / `Abyss` … | `models/index.js` | 从入口摘掉，连同顶层副作用 |
-| `Cfg`（用户配置） | 依赖 `cfg/CfgData.js` → 217 行 `cfg_system.js` schema | `components/_local/Cfg.js` 最小实现 |
-| `Version`（宿主版本检测） | 读 `package.json` / `CHANGELOG.md`、辨别 Yunzai V2/V3 | `components/_local/Version.js` 最小实现 |
-| `CharImg`（渲染层） | 写死云崽路径 + 依赖 `image-size` | 整体置空 |
+| `Cfg`（用户配置） | 依赖 `cfg/CfgData.js` → 217 行 `cfg_system.js` schema | **已删除**：唯一活调用点 `Format.js` 的千分位分组数恒为 3，已写死（`vendor/miao` 现不再含 `Cfg`） |
+| `Version`（宿主版本检测） | 读 `package.json` / `CHANGELOG.md`、辨别 Yunzai V2/V3 | **已删除**：只被 `Cfg` 内部恒 false 的 `isMiao` 分支引用，纯死代码 |
+| `CharImg`（渲染层） | 写死云崽路径 + 依赖 `image-size` | **已彻底移除**：图片 getter 在本项目从不被调用，连同整套图片方法一起删 |
 | `lodash` | 全仓库 46 种方法 | **直接用真依赖**，不替换 |
-| `image-size` | 只有 `CharImg` 用 | CharImg 已置空，故不引入 |
+| `image-size` | 只有 `CharImg` 用 | CharImg 已移除，故不引入 |
 
-`components/_local/` 下两个文件是本项目手写的（不是上游内容），同步时自动生成。
+`components/_local/` 下的 Cfg / Version 替身文件已于 2026-11-03 全部移除（`vendor/miao` 现不再含 `_local/` 下的任何替身）；详见 `VENDOR-REPLACEMENTS.md`。
 （上表说的是**内核**的依赖怎么处置。**本项目自己**的依赖另有一套口径：
 `test/arch.ts` 盯着 `dependencies` 清单，当前两项 —— `lodash`（内核要的）与
 `limiter`（限流的令牌桶，零传递依赖）。原则是**代码最精简 + 依赖量最小**，
@@ -330,11 +330,11 @@ enka 的 `locs/avatars/weapons/relics.json` 是**字节级复制**，上游一�
    上游 miao-plugin 永远比我们新，这是正常的 —— 所以这个命令会反复跑，不该拆成三步让人挑。
    跑之前可以先 `npm run sync:check` 看差异规模；跑完**必须** `npm test`，
    权重表变了评分基线就会变（逐项核对差异是上游修正还是我们回归，别直接改基线了事）。
-3. `Cfg` 恒为空配置（网页版没有配置交互层）。评分链路只用到 `Cfg.get('notReleasedData')` 和
-   `Cfg.get('qFace')` 两个布尔开关，`_local/Cfg.js` 复刻了「上游读不到配置文件」的行为
-   （返回 `undefined` 而不是默认值 —— 这点是逐字对齐上游的）。
+3. ~~`Cfg` / `Version` 两个云崽替身在 2026-11-03 已删除~~（原：恒为空配置、复刻「读不到配置文件」行为）。
+   删除依据：`Cfg` 唯一活调用点 `Format.js` 的千分位分组数在本项目恒为 3，已写死；`Version` 只被
+   `Cfg` 内部恒 false 的 `isMiao` 分支引用。详见 `VENDOR-REPLACEMENTS.md`。
 4. **目录层级是硬约束**：`tools/path.js` 靠自身位置推算 miao 根，`Data.getRoot('miao')` 依赖它。
-   所以 `vendor/miao/` 这一层不能拍平，`_local/` 也必须留在 `components/` 下（`Format.js` 通过 `#miao` 取 `Cfg`）。
+   所以 `vendor/miao/` 这一层不能拍平（`Format.js` 通过 `#miao` 取 `Data` / `Meta` 等仍在用的组件）。
 5. **圣遗物 level 的基数**：内核要 0 基（5★ 满级 = 20）。enka 给的是 1 基（实测满级 = 21），
    所以 `src/gateway/miao/materialize.ts` 组装 profile 时对 enka 减 1 —— 就这一处，不另立模块。
    库里存的是原始值 + 来源，万一推断错了改这一行就能全量重算，不用重新抓。

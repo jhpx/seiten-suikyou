@@ -6,8 +6,7 @@
 * */
 import lodash from 'lodash'
 import Base from './Base.js'
-import { Data, Format, Cfg, Meta } from '#miao'
-import CharImg from './character/CharImg.js'
+import { Data, Format, Meta } from '#miao'
 import CharTalent from './character/CharTalent.js'
 import CharId from './character/CharId.js'
 import CharMeta, { srAttrName } from './character/CharMeta.js'
@@ -56,7 +55,6 @@ class Character extends Base {
   get isRelease () {
     if (this.isCustom) return false
     if (this.eta) return this.eta * 1 < new Date() * 1
-    if (Cfg.get('notReleasedData')) return true
     return false
   }
 
@@ -126,34 +124,6 @@ class Character extends Base {
   // 获取角色描述
   get desc () {
     return CharMeta.getDesc(this.meta?._detail?.desc || '')
-  }
-
-  // 获取头像
-  get face () {
-    return this.getImgs().face
-  }
-
-  // 获取Q版头像
-  get qFace () {
-    return this.getImgs().qFace
-  }
-
-  // 获取侧脸图像
-  get side () {
-    if (this.isSr) {
-      return this.getImgs().face
-    }
-    return this.getImgs().side
-  }
-
-  // gacha图像
-  get gacha () {
-    return this.getImgs().gacha
-  }
-
-  // 获取character相关图像
-  get imgs () {
-    return this.getImgs()
   }
 
   // 获取详情数据
@@ -250,14 +220,6 @@ class Character extends Base {
     return CharMeta.getMaterials(this, type)
   }
 
-  // 获取角色character-img图片
-  getCardImg (se = false, def = true) {
-    if (this.name === '旅行者') {
-      return CharImg.getCardImg(['空', '荧'], se, def)
-    }
-    return CharImg.getCardImg(this.name, se, def)
-  }
-
   // 设置天赋数据
   getAvatarTalent (talent = {}, cons = 0, mode = 'original') {
     return CharTalent.getAvatarTalent(this, talent, cons, mode)
@@ -302,30 +264,6 @@ class Character extends Base {
   isElem (elem = '') {
     elem = elem.toLowerCase()
     return this.elem === elem || this.elemName === elem
-  }
-
-  // 获取角色插画
-  getImgs (costume = '') {
-    if (lodash.isArray(costume)) {
-      costume = costume[0]
-    }
-    let costumeIdx = this.checkCostume(costume) ? '2' : ''
-    let cacheId = `costume${costumeIdx}`
-    if (!this._imgs) {
-      this._imgs = {}
-    }
-    if (!this._imgs[cacheId]) {
-      if (this.isSr) {
-        this._imgs[cacheId] = CharImg.getImgsSr(this.name, this.talentCons)
-      } else {
-        this._imgs[cacheId] = CharImg.getImgs(this.name, costumeIdx, this.isTraveler ? this.elem : '', this.weaponType, this.talentCons)
-      }
-    }
-    let imgs = this._imgs[cacheId]
-    return {
-      ...imgs,
-      qFace: Cfg.get('qFace') ? (imgs.qFace || imgs.face) : imgs.face
-    }
   }
 
   // 基于角色名获取Character

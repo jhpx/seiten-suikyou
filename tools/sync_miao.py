@@ -72,7 +72,6 @@ FILES = [
     "models/Material.js",
     "models/character/CharCfg.js",
     "models/character/CharId.js",
-    "models/character/CharImg.js",
     "models/character/CharMeta.js",
     "models/character/CharTalent.js",
     # --- 面板属性计算（角色规则读 profile.attr，见下方说明） ---
@@ -152,124 +151,6 @@ GLOBS = [
 #   ("regex",   正则, 替换模板)        —— 正则替换
 # 空 new 表示删除。
 
-CHAR_IMG_STUB = """/*
- * CharImg —— 本项目已置空（非上游内容，由 tools/sync_miao.py 生成）
- *
- * 原文件是渲染层代码：读角色立绘、算图片尺寸，里面写死了云崽的路径
- * `./plugins/miao-plugin/resources/`，还依赖第三方包 image-size。
- * 评分是纯计算，用不到图片，故整体替换为空实现。
- */
-const noop = () => ''
-
-const CharImg = new Proxy({
-  getCardImg: noop,
-  getRandomImg: noop,
-  getImgs: () => ({}),
-  getImgsSr: () => ({})
-}, {
-  get (t, k) {
-    if (k in t) return t[k]
-    if (typeof k === 'symbol') return undefined
-    return noop
-  }
-})
-
-export default CharImg
-"""
-
-LOCAL_CFG = """/*
- * Cfg —— 本项目的最小替代（非上游内容，由 tools/sync_miao.py 生成）
- *
- * 【为什么不用上游 components/Cfg.js】
- * 上游 Cfg 的依赖链是：
- *   components/Cfg.js → components/cfg/CfgData.js → config/system/cfg_system.js（217 行 schema）
- * 整条链是为「云崽用户在聊天里改插件配置」服务的，网页版没有这个交互层。
- * 评分链路只用到它的两个布尔开关：
- *   models/Character.js:59   Cfg.get('notReleasedData')  未实装角色是否返回数据
- *   models/Character.js:313  Cfg.get('qFace')            卡片是否用 q 版头像（只影响渲染）
- * 所以这里复刻「上游读不到配置文件」的行为：cfg 恒为空对象。
- *
- * 【get 返回什么：必须给 def，不能给 undefined】
- * 上游 get 里那句 `lodash.isUndefined(cfg) ? def : ret` 判断的是**整个 cfg 对象**，
- * 而上游的 cfg 永远不是 undefined（它是「schema 默认值 + 用户存档」合并出来的），
- * 所以那一支是死代码 —— 上游实际返回 `lodash.get(cfg, rote)`，也就是 **schema 里的默认值**。
- * 我们这边 cfg 是空对象、手上也没有那份 schema，所以「上游会返回 schema 默认值」这件事
- * 只能靠调用点自带的那份默认值还原：查不到就给 def。
- *   components/Format.js:13  `Cfg.get('commaGroup', 3)` —— schema 里 commaGroup 的 def 也是 3
- *   （miao-plugin `config/system/cfg_system.js:207`：逗号分组，千位组设为 3）
- * 三者对得上：schema 默认 3 = 调用点默认 3 = 参考结果图里那个 `+4,778.6`。
- * 之前这里返回 undefined → 那条正则变成 `\\\\d{(\\\\d{undefined})+$}`，一个都不匹配 →
- * **全站数字都没有千分位**（面板 17395、词条 +4778.6），跟 miao 的结果图不一致，
- * 而 test/smoke.ts 当时把错的行为当期望值写进了断言，所以没人发现。
- *
- * 对另外两个调用点的影响：传 truthy 时行为完全一样，因为不给 def 时 def 默认是空串，
- * 空串与 undefined 一样是 falsy（`if (Cfg.get('notReleasedData'))`、`Cfg.get('qFace') ? ...`）。
- */
-import lodash from 'lodash'
-
-const cfg = {}
-const miaoCfg = {}
-const Version = { isMiao: false }
-
-const Cfg = {
-  get (rote, def = '') {
-    if (Version.isMiao && miaoCfg[rote]) {
-      return true
-    }
-    let ret = lodash.get(cfg, rote)
-    return lodash.isUndefined(ret) ? def : ret
-  },
-  set (rote, val) {
-    cfg[rote] = val
-  },
-  del (rote) {
-    lodash.set(cfg, rote, undefined)
-  },
-  getCfg () {
-    return cfg
-  },
-  getCfgSchema () {
-    return {}
-  },
-  getCfgSchemaMap () {
-    return {}
-  },
-  /* 上游返回 `style=transform:scale(...)`，本项目不渲染，返回空串 */
-  scale () {
-    return ''
-  }
-}
-
-export default Cfg
-"""
-
-LOCAL_VERSION = """/*
- * Version —— 本项目的最小替代（非上游内容，由 tools/sync_miao.py 生成）
- *
- * 上游 components/Version.js 读 package.json / CHANGELOG.md、检测宿主机型
- * （Yunzai V2 / V3 / AlemonJS），这些概念在本项目里都不存在。
- * 评分链路只用到 Version.isMiao —— 上游在云崽下为 true，本项目恒 false。
- */
-const Version = {
-  version: 'local',
-  isMiao: false,
-  isV3: false,
-  name: 'seiten-suikyou',
-  get yunzai () {
-    return ''
-  },
-  get changelogs () {
-    return ''
-  },
-  runtime () {},
-  readLogFile () {
-    return {}
-  }
-}
-
-export default Version
-"""
-
 MODELS_INDEX_HEAD = """import Base from './Base.js'
 import Character from './Character.js'
 import Artifact from './Artifact.js'
@@ -290,19 +171,17 @@ MODELS_INDEX_EXPORT = """export {
 
 COMPONENTS_INDEX_HEAD = """import Data from './Data.js'
 import Format from './Format.js'
-import Cfg from './_local/Cfg.js'
-import Version from './_local/Version.js'
 import MiaoError from './MiaoError.js'
 import Meta from './Meta.js'
 
-export { Data, Cfg, Format, Version, MiaoError, Meta }
+export { Data, Format, MiaoError, Meta }
 """
 
 PATCHES = [
     # ---------------------------------------------------------------- 组件入口
     {
         "file": "components/index.js",
-        "desc": "摘掉云崽专属组件（Common 渲染 / App 应用）；Cfg 与 Version 指向本地最小实现",
+        "desc": "摘掉云崽专属组件（Common / App 渲染）；Cfg / Version 两个替身已整体删除，不再生成也不导出",
         "ops": [
             (
                 "regex",
@@ -533,11 +412,51 @@ const rootPath = miaoPath""",
             ),
         ],
     },
-    # ---------------------------------------------------------------- 渲染层
+    # ---------------------------------------------------------------- 移除图片渲染依赖与云崽配置替身
     {
-        "file": "models/character/CharImg.js",
-        "desc": "整体替换为置空实现（渲染层，写死云崽路径且依赖 image-size）",
-        "ops": [("replace_file", CHAR_IMG_STUB)],
+        "file": "models/Character.js",
+        "desc": "本工程评分/面板计算用不到角色立绘，且不用云崽配置替身：\n"
+                "① 删 import 的 CharImg 与 Cfg；② 删整套图片 getter（face/side/gacha/qFace/imgs）及 getCardImg/getImgs 方法；\n"
+                "③ isRelease 删掉恒 falsy 的 notReleasedData 分支（Cfg 在本项目永远回落到 def=''）。\n"
+                "效果：Character.js 不再引用 CharImg / Cfg；Cfg.js / Version.js / CharImg.js 三个替身全部移出同步。",
+        "ops": [
+            ("replace", "import { Data, Format, Cfg, Meta } from '#miao'\n", "import { Data, Format, Meta } from '#miao'\n"),
+            ("replace", "import CharImg from './character/CharImg.js'\n", ""),
+            ("replace",
+             "    if (this.eta) return this.eta * 1 < new Date() * 1\n    if (Cfg.get('notReleasedData')) return true\n    return false\n",
+             "    if (this.eta) return this.eta * 1 < new Date() * 1\n    return false\n"),
+            ("replace",
+             "  // 获取头像\n  get face () {\n    return this.getImgs().face\n  }\n\n"
+             "  // 获取Q版头像\n  get qFace () {\n    return this.getImgs().qFace\n  }\n\n"
+             "  // 获取侧脸图像\n  get side () {\n    if (this.isSr) {\n      return this.getImgs().face\n    }\n    return this.getImgs().side\n  }\n\n"
+             "  // gacha图像\n  get gacha () {\n    return this.getImgs().gacha\n  }\n\n"
+             "  // 获取character相关图像\n  get imgs () {\n    return this.getImgs()\n  }\n\n",
+             ""),
+            ("replace",
+             "  // 获取角色character-img图片\n  getCardImg (se = false, def = true) {\n"
+             "    if (this.name === '\u65c5\u884c\u8005') {\n      return CharImg.getCardImg(['\u7a7a', '\u8367'], se, def)\n    }\n"
+             "    return CharImg.getCardImg(this.name, se, def)\n  }\n\n",
+             ""),
+            ("replace",
+             "  // 获取角色插画\n  getImgs (costume = '') {\n"
+             "    if (lodash.isArray(costume)) {\n      costume = costume[0]\n    }\n"
+             "    let costumeIdx = this.checkCostume(costume) ? '2' : ''\n"
+             "    let cacheId = `costume${costumeIdx}`\n"
+             "    if (!this._imgs) {\n      this._imgs = {}\n    }\n"
+             "    if (!this._imgs[cacheId]) {\n      if (this.isSr) {\n        this._imgs[cacheId] = CharImg.getImgsSr(this.name, this.talentCons)\n      } else {\n        this._imgs[cacheId] = CharImg.getImgs(this.name, costumeIdx, this.isTraveler ? this.elem : '', this.weaponType, this.talentCons)\n      }\n    }\n"
+             "    let imgs = this._imgs[cacheId]\n    return {\n      ...imgs,\n"
+             "      qFace: Cfg.get('qFace') ? (imgs.qFace || imgs.face) : imgs.face\n    }\n  }\n\n",
+             ""),
+        ],
+    },
+    # ---------------------------------------------------------------- 千分位分组数写死（移除 Cfg 依赖）
+    {
+        "file": "components/Format.js",
+        "desc": "Cfg 已删除：commaGroup 在本项目永远回落到调用点给的 def（3），等价于常量 3，直接写死并去掉 Cfg import",
+        "ops": [
+            ("replace", "import { Cfg } from '#miao'\n", ""),
+            ("replace", "Cfg.get('commaGroup', 3)", "3"),
+        ],
     },
     # ---------------------------------------------------------------- 缓存定时器
     {
@@ -547,7 +466,7 @@ const rootPath = miaoPath""",
             (
                 "regex",
                 r"(reFn\[id\] = setTimeout\(\(\) => \{[\s\S]*?\}, time \* 1000\))",
-                r"\1\n        if (reFn[id] && reFn[id].unref) reFn[id].unref()",
+                r"\1\n        // 本地改动（非上游）：unref 让缓存过期定时器不拖住 Node 事件循环，一次性 CLI 算完即退，不再卡 10 分钟；浏览器里 setTimeout 返回数字、无 unref，自动跳过\n        if (reFn[id] && reFn[id].unref) reFn[id].unref()",
             )
         ],
     },
@@ -571,30 +490,10 @@ const rootPath = miaoPath""",
 ]
 
 # 生成的文件（非上游内容）。路径相对 vendor/miao/
-GENERATED = [
-    ("components/_local/Cfg.js", LOCAL_CFG, "云崽用户配置的最小替代"),
-    ("components/_local/Version.js", LOCAL_VERSION, "云崽版本检测的最小替代"),
-]
+GENERATED = []
 
 # 生成文件「为什么不能直接用上游的」——报告第四节要用，写在这儿免得两处对不上
-GEN_NOTES = {
-    "components/_local/Cfg.js": (
-        "上游 `Cfg` 的依赖链是 `Cfg → cfg/CfgData → config/system/cfg_system.js`（217 行 schema），"
-        "整条链是为「云崽用户在聊天里改插件配置」服务的，本项目没有这层交互。"
-        "评分链路只用到它的两个布尔开关（`notReleasedData` / `qFace`），"
-        "所以这里复刻上游「读不到配置文件」的行为（配置恒为空对象）。"
-        "⚠️ 但 `get` 查不到时必须返回调用点给的 `def`，不能返回 `undefined`："
-        "上游的 `cfg` 是 schema 合并出来的、永远不为 undefined，那句 `isUndefined(cfg) ? def : ret` 是死代码，"
-        "实际生效的就是 schema 默认值 —— 我们手上没有 schema，只能用调用点自带的默认值还原它。"
-        "最要紧的一处是 `components/Format.js` 的 `Cfg.get('commaGroup', 3)`："
-        "schema 里 commaGroup 的 def 也是 3，返回 undefined 会让全站数字丢掉千分位（`+4778.6` 而非 `+4,778.6`）。"
-    ),
-    "components/_local/Version.js": (
-        "上游 `Version` 读 `package.json` / `CHANGELOG.md`，并检测宿主是 Yunzai V2 / V3 还是 AlemonJS，"
-        "这些概念在本项目里都不存在。评分链路只用到 `Version.isMiao`"
-        "（上游在云崽下为 true，这里恒 false）。"
-    ),
-}
+GEN_NOTES = {}
 
 # --------------------------------------------------------------------------
 # 报告用的分类（前缀匹配，顺序即展示顺序 —— 长的写在前面）
@@ -621,7 +520,7 @@ GROUP_PURPOSE = {
     "面板属性计算": "`Attr`（面板计算）＋ `AttrData`（属性基准表）—— 角色评分规则要读 `profile.attr`",
     "伤害计算引擎": "`DmgCalc`（各区乘算的伤害公式）＋ `DmgAttr`（属性计算与 buff 施加）＋ `DmgBuffs`（武器/圣遗物/角色 buff 汇总）＋ `DmgMastery`（元素反应系数）＋ `DmgCalcMeta`（等级与反应基础表）＋ `AttrItem`",
     "伤害计算编排": "`ProfileDmg` —— 加载角色 `calc.js`、组装属性与 buff、逐条算伤害的入口（只取它的 `calcData`，云崽那套模板渲染不要）",
-    "角色元数据": "`CharCfg`（读角色评分规则）、`CharId`、`CharImg`、`CharMeta`、`CharTalent`",
+    "角色元数据": "`CharCfg`（读角色评分规则）、`CharId`、`CharMeta`、`CharTalent`",
     "领域模型": "`Base`、`Character`、`Weapon`、`Artifact`、`ArtifactSet`、`Material` ＋ `models/index.js` 入口",
     "路径工具": "`path.js` —— `#miao.path` 别名的目标",
     "角色数据": "每个角色一个目录：`data.json`（等级/突破/天赋等基础数据）＋ `artis.js`（该角色的评分规则）＋ `calc.js`（该角色的伤害计算脚本，旅行者按元素分开放 `旅行者/<元素>/`）；另有 4 个索引文件（`index` / `alias` / `extra` / `data.json`）",

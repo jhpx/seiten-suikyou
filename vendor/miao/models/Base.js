@@ -81,6 +81,7 @@ export default class Base {
         reFn[id] = setTimeout(() => {
           self._delCache()
         }, time * 1000)
+        // 本地改动（非上游）：unref 让缓存过期定时器不拖住 Node 事件循环，一次性 CLI 算完即退，不再卡 10 分钟；浏览器里 setTimeout 返回数字、无 unref，自动跳过
         if (reFn[id] && reFn[id].unref) reFn[id].unref()
       }
       return cacheMap[id]

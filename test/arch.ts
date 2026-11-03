@@ -78,31 +78,23 @@ eq(Object.keys(pkg.imports || {}).sort(), ['#miao', '#miao.models', '#miao.path'
 for (const [spec, target] of Object.entries(pkg.imports || {})) {
   ok(fs.existsSync(path.resolve(ROOT, target)), `${spec} → ${target} 落地`)
 }
-eq(Object.keys(comp).sort(), ['Cfg', 'Data', 'Format', 'Meta', 'MiaoError', 'Version'],
-  '#miao 导出集合')
+eq(Object.keys(comp).sort(), ['Data', 'Format', 'Meta', 'MiaoError'],
+  '#miao 导出集合（Cfg / Version 替身已删除）')
 eq(Object.keys(models).sort(), ['Artifact', 'ArtifactSet', 'Base', 'Character', 'Material', 'Weapon'],
   '#miao.models 导出集合（云崽模型已摘除）')
 eq(path.resolve(miaoPath.miaoPath), VENDOR, '#miao.path 的 miaoPath 指向 vendor/miao')
 
 // ─────────────────────────────────────────── 2. 本地替代的边界
-console.log('\n=== 2. 本地替代的边界（Cfg / Version / Data.getRoot）===')
+console.log('\n=== 2. 本地替代的边界（Data.getRoot）===')
 
-ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Cfg.js')), '_local/Cfg.js 存在（生成物）')
-ok(fs.existsSync(path.join(VENDOR, 'components', '_local', 'Version.js')), '_local/Version.js 存在（生成物）')
+/* 历史说明：Cfg / Version 两个「云崽替身」已于 2026-11-03 删除。
+   - Version 只被 Cfg 内部一个恒 false 的 isMiao 分支引用，纯死代码；
+   - Cfg 唯一活着的调用点是 Format.js 的 `Cfg.get('commaGroup', 3)`，而 Cfg 在我们这边
+     永远回落到调用点给的 def（3），等价于常量 3，故 Format.js 直接写死 3，不再依赖 Cfg。
+   删除后 `#miao` 不再导出 Cfg / Version（见上面导出集合断言）。 */
 
-/* Cfg.get 查不到键时**必须回落到调用点给的 def** —— 这是「本地替代」唯一的对外行为约定：
-   我们手上没有上游那份 schema，只能靠调用点自带的默认值还原。 */
-/* 本地替身 Cfg.get 的 def 在 vendored JS 里只推得到 string；实际什么都收（上游 schema 的默认值）。
-   这条要钉的正是「**数字** def 也能原样回落」，所以绕过那个推断。 */
-const cfgGet = comp.Cfg.get as (key: string, def?: unknown) => unknown
-eq(cfgGet('commaGroup', 3), 3, "Cfg.get('commaGroup', 3) → 3（与上游 schema 里的 def 一致）")
-eq(comp.Cfg.get('任意键', '默认值'), '默认值', 'Cfg.get(缺省) → 回落到调用点给的 def')
-/* 端到端：这条才是千分位真正生效的证据（分组数由上面那个 3 决定） */
-eq(comp.Format.comma(1234.567), '1,235', 'Format.comma 按 Cfg.get 的分组数打千分位')
-/* 另两个调用点（notReleasedData / qFace）只看真假：不给 def 时 def 默认是空串，
-   空串与 undefined 一样是 falsy —— 所以这两处行为没变。断「falsy」而不是断 undefined。 */
-eq(Boolean(comp.Cfg.get('notReleasedData')), false, "Cfg.get('notReleasedData') → falsy（与上游无配置一致）")
-eq(comp.Version.isMiao, false, 'Version.isMiao → false（本项目不在云崽下）')
+// 千分位仍按分组数 3 生效（端到端证据；原本由 Cfg.get 的分组数决定，现写死为 3）
+eq(comp.Format.comma(1234.567), '1,235', 'Format.comma 按分组数 3 打千分位')
 
 // 位置敏感点：tools/path.js 靠自身位置推算 miao 根，挪动目录会在这里炸
 eq(path.resolve(comp.Data.getRoot('miao')), VENDOR, 'Data.getRoot("miao") → vendor/miao（目录层级硬约束）')
