@@ -40,8 +40,9 @@ export const SOURCES: Array<{ name: string; base: string }> = [
 ]
 
 /** 抓取超时（毫秒）。并行下这是「最坏等多久」—— 谁先回来用谁，慢的没人等。
- *  8s 的依据：microgg 冷回源 6s、enka 抖动上限 4.5s，两边都得留出赢的机会。 */
-export const DEFAULT_TIMEOUT_MS = 8000
+ *  15s 的依据：microgg 冷回源实测约 11s、enka 抖动上限约 4.5s；留余量让没缓存过的冷号也能赢一次，
+ *  不被 8s 一刀切判超时。正常情况 enka 先回（2~4.5s），不会真等到 15s。 */
+export const DEFAULT_TIMEOUT_MS = 15000
 
 /** 请求上游时带的 UA：纯标识，别伪装浏览器。发版改版本号时顺手改。 */
 export const DEFAULT_UA = 'seiten-suikyou/0.1 (artifact score viewer)'
