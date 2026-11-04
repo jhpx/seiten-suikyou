@@ -399,7 +399,7 @@ seiten-suikyou/
 | 怎么装、怎么跑 | 本文件 |
 | 每个接口的请求 / 响应、错误码、限流与跨域约定 | [`docs/API.md`](docs/API.md) |
 | 怎么部署（本地运行 / 前后端分离 / 后端上线） | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
-| 整体架构全貌（前后端两个 origin、miao 内核调用链，可交互） | [`docs/seiten-suikyou-architecture.html`](docs/seiten-suikyou-architecture.html) |
+| 整体架构（前端子仓库 + 后端分层 server → rest → service → config → repository，可交互） | [`docs/seiten-suikyou-architecture.html`](docs/seiten-suikyou-architecture.html) |
 | 前端怎么组织（core 基座 + feature 注册表 + 唯一的 api 出口，可交互） | [`docs/seiten-suikyou-web-architecture.html`](docs/seiten-suikyou-web-architecture.html) |
 | 为什么内嵌 miao 内核、页面与多语言怎么还原、改动前的硬约束 | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | 数据层设计（存储存 id 不存名字、为什么不设计算中间层） | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
