@@ -1,0 +1,61 @@
+NOTICE
+
+本项目「星天水镜 / seiten-suikyou」使用了以下第三方的代码、数据与素材。
+本文件用于履行相应的署名与许可要求。
+
+
+一、miao-plugin
+--------------------------------------------------------------------
+项目：miao-plugin —— Yunzai-Bot 的角色面板 / 角色查询插件
+作者：Yoimiya（https://github.com/yoimiya-kokomi）
+仓库：https://github.com/yoimiya-kokomi/miao-plugin
+许可：MIT License, Copyright (c) 2023 Yoimiya
+
+本项目使用 miao-plugin 的以下部分：
+  - 评分算法（vendor/miao/ 内的计算内核与权重表）
+  - 角色 / 武器等元数据
+  - 前端图片素材（web/assets/，来自 miao-plugin 的 resources/）
+
+说明：miao-plugin 对其图片与其他素材另有声明「均来自于网络，仅供交流学习使用，
+如有侵权请联系，会立即删除」。该部分素材不在 MIT 许可范围内，本项目同样不用于
+任何盈利目的。
+
+
+miao-plugin 的 MIT 许可全文如下：
+
+MIT License
+
+Copyright (c) 2023 Yoimiya
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+二、其他数据来源
+--------------------------------------------------------------------
+  - 角色面板数据：Enka.Network（https://enka.network/）
+  - 多语言文案（i18n）：角色 / 武器 / 套装 / 词条名来自 Enka 的 store/gi/ 原样文件；
+    圣遗物部件名来自 Dimbreath/AnimeGameData
+    （https://gitlab.com/Dimbreath/AnimeGameData）的 TextMap 提取件。
+    此路与 miao-plugin 无关。
+
+
+三、素材与非商业声明
+--------------------------------------------------------------------
+原神（Genshin Impact）及其角色、图标等素材版权归米哈游（miHoYo / HoYoverse）所有，
+本项目与米哈游无隶属关系，不用于任何盈利目的。
