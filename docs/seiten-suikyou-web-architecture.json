@@ -2,17 +2,17 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "星天水镜 · 前端（seiten-suikyou-web）",
+    "title": "星天水镜 seiten-suikyou · 前端架构",
     "locale": "zh-CN",
     "output": "seiten-suikyou-web-architecture.html",
     "quality_profile": "showcase",
     "viewBox": [
-      1090,
-      720
+      1140,
+      690
     ],
     "repository": {
       "url": "https://github.com/jhpx/seiten-suikyou-web",
-      "revision": "b5218426b88dbdbabf47a5dd49ab647ce604516d"
+      "revision": "a08b61ac018be742505a8ea2593302e5fc2341ac"
     }
   },
   "components": [
@@ -21,19 +21,19 @@
       "type": "frontend",
       "label": "页面骨架",
       "sublabel": "index.html",
+      "tag": "两个 view + 顶栏表单",
       "pos": [
-        445,
-        70
+        420,
+        50
       ],
       "size": [
         200,
         56
       ],
-      "tag": "两个 view 切换",
       "sources": [
         {
           "path": "index.html",
-          "line": 49,
+          "line": 57,
           "label": "type=module 引入口"
         }
       ]
@@ -43,20 +43,20 @@
       "type": "frontend",
       "label": "入口 · 控制器",
       "sublabel": "bootstrap.js",
+      "tag": "引齐 feature · boot() · 整页缩放",
       "pos": [
-        445,
-        176
+        70,
+        150
       ],
       "size": [
-        200,
+        1000,
         56
       ],
-      "tag": "boot / loadUid / fetchUid",
       "sources": [
         {
           "path": "bootstrap.js",
-          "line": 18,
-          "label": "loadUid / fetchUid / boot"
+          "line": 101,
+          "label": "boot()"
         }
       ]
     },
@@ -64,20 +64,19 @@
       "id": "roster",
       "type": "frontend",
       "label": "首页",
-      "sublabel": "roster.js",
+      "sublabel": "features/roster.js",
       "pos": [
-        74,
-        290
+        70,
+        280
       ],
       "size": [
-        150,
-        60
+        124,
+        64
       ],
-      "tag": "账号头 + 网格",
       "sources": [
         {
-          "path": "roster.js",
-          "line": 234,
+          "path": "features/roster.js",
+          "line": 218,
           "label": "reg.renderRoster"
         }
       ]
@@ -88,23 +87,22 @@
       "label": "筛选 / 排序",
       "sublabel": "filter.js · sort.js",
       "pos": [
-        272,
-        290
+        216,
+        280
       ],
       "size": [
-        150,
-        60
+        124,
+        64
       ],
-      "tag": "弹窗，确定才生效",
       "sources": [
         {
-          "path": "filter.js",
-          "line": 239,
+          "path": "features/filter.js",
+          "line": 261,
           "label": "reg.renderFilterBar"
         },
         {
-          "path": "sort.js",
-          "line": 149,
+          "path": "features/sort.js",
+          "line": 159,
           "label": "sortAvatars / filteredAvatars"
         }
       ]
@@ -113,43 +111,83 @@
       "id": "detail",
       "type": "frontend",
       "label": "明细页",
-      "sublabel": "detail.js",
+      "sublabel": "detail/ · 4 个零件",
       "pos": [
-        470,
-        290
+        362,
+        280
       ],
       "size": [
-        150,
-        60
+        124,
+        64
       ],
-      "tag": "复刻 miao 结果图",
       "sources": [
         {
-          "path": "detail.js",
-          "line": 433,
+          "path": "features/detail/detail.js",
+          "line": 297,
           "label": "reg.renderDetail"
+        }
+      ]
+    },
+    {
+      "id": "sim",
+      "type": "frontend",
+      "label": "模拟比对",
+      "sublabel": "features/sim.js",
+      "pos": [
+        508,
+        280
+      ],
+      "size": [
+        124,
+        64
+      ],
+      "sources": [
+        {
+          "path": "features/sim.js",
+          "line": 896,
+          "label": "reg.renderSim / openSim"
+        }
+      ]
+    },
+    {
+      "id": "advice",
+      "type": "frontend",
+      "label": "刷本建议",
+      "sublabel": "features/advice.js",
+      "pos": [
+        654,
+        280
+      ],
+      "size": [
+        124,
+        64
+      ],
+      "sources": [
+        {
+          "path": "features/advice.js",
+          "line": 307,
+          "label": "reg.renderAdvice"
         }
       ]
     },
     {
       "id": "i18n",
       "type": "frontend",
-      "label": "界面文案",
-      "sublabel": "i18n.js",
+      "label": "文案与语言",
+      "sublabel": "features/i18n.js",
       "pos": [
-        668,
-        290
+        800,
+        280
       ],
       "size": [
-        150,
-        60
+        124,
+        64
       ],
-      "tag": "/api/meta 取 ui 表",
       "sources": [
         {
-          "path": "i18n.js",
-          "line": 44,
-          "label": "reg.loadMeta"
+          "path": "features/i18n.js",
+          "line": 43,
+          "label": "reg.loadMeta / applyStaticUi"
         }
       ]
     },
@@ -157,19 +195,18 @@
       "id": "history",
       "type": "frontend",
       "label": "UID 历史",
-      "sublabel": "history.js",
+      "sublabel": "features/history.js",
       "pos": [
-        866,
-        290
+        946,
+        280
       ],
       "size": [
-        150,
-        60
+        124,
+        64
       ],
-      "tag": "localStorage",
       "sources": [
         {
-          "path": "history.js",
+          "path": "features/history.js",
           "line": 42,
           "label": "reg.renderUidHistory"
         }
@@ -180,24 +217,24 @@
       "type": "frontend",
       "label": "core.js 基座",
       "sublabel": "state · T() · el() · api() · reg",
+      "tag": "不 import 任何 feature",
       "pos": [
-        215,
-        440
+        70,
+        430
       ],
       "size": [
-        680,
+        1000,
         64
       ],
-      "tag": "不 import 任何 feature",
       "sources": [
         {
           "path": "core.js",
-          "line": 312,
+          "line": 404,
           "label": "export const reg"
         },
         {
           "path": "core.js",
-          "line": 85,
+          "line": 112,
           "label": "api：唯一出口"
         }
       ]
@@ -206,16 +243,16 @@
       "id": "api",
       "type": "backend",
       "label": "后端 /api/*",
-      "sublabel": "另一个 origin",
+      "sublabel": "另一个 origin · CORS 白名单",
+      "tag": "env.js 的 API_BASE，留空 = 同源",
       "pos": [
-        440,
-        615
+        410,
+        580
       ],
       "size": [
-        220,
+        320,
         64
-      ],
-      "tag": "CORS 白名单"
+      ]
     }
   ],
   "boundaries": [
@@ -228,6 +265,8 @@
         "roster",
         "filter",
         "detail",
+        "sim",
+        "advice",
         "i18n",
         "history",
         "core"
@@ -242,17 +281,12 @@
       "to": "bootstrap",
       "label": "type=module",
       "fromSide": "bottom",
-      "toSide": "top",
-      "labelAt": [
-        545,
-        140
-      ]
+      "toSide": "top"
     },
     {
       "id": "boot-roster",
       "from": "bootstrap",
       "to": "roster",
-      "label": "import 即注册",
       "fromSide": "bottom",
       "toSide": "top"
     },
@@ -267,6 +301,20 @@
       "id": "boot-detail",
       "from": "bootstrap",
       "to": "detail",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-sim",
+      "from": "bootstrap",
+      "to": "sim",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "boot-advice",
+      "from": "bootstrap",
+      "to": "advice",
       "fromSide": "bottom",
       "toSide": "top"
     },
@@ -306,6 +354,20 @@
       "toSide": "top"
     },
     {
+      "id": "sim-core",
+      "from": "sim",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "advice-core",
+      "from": "advice",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
       "id": "i18n-core",
       "from": "i18n",
       "to": "core",
@@ -323,14 +385,11 @@
       "id": "core-api",
       "from": "core",
       "to": "api",
-      "label": "fetch API_BASE + /api/*",
+      "label": "GET /api/* · 带 locale",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top",
-      "labelAt": [
-        563,
-        560
-      ]
+      "labelDy": 32
     }
   ],
   "cards": [
@@ -339,26 +398,26 @@
       "title": "怎么拆的",
       "items": [
         "index.html 只有骨架：顶栏表单 + #view-roster / #view-detail 两个空 div，内容全靠 JS 现填",
-        "bootstrap.js 是控制器：把各 feature 引到一起（副作用 = 往 reg 注册渲染器），再绑顶栏事件、boot()",
-        "core.js 不 import 任何 feature —— 编排函数只从 reg 里取（renderAll / openDetail / refreshRosterGrid）"
+        "bootstrap.js 是控制器：引齐 feature（副作用 = 往 reg 注册渲染器），绑事件、boot()、整页等比缩放",
+        "core.js 不 import 任何 feature —— 编排函数只从 reg 里取（renderAll / openDetail / renderRosterGrid）"
       ]
     },
     {
       "dot": "emerald",
-      "title": "注册表与零循环依赖",
+      "title": "注册表换掉循环依赖",
       "items": [
-        "feature 加载时把渲染器写进 core.reg：renderRoster / renderFilterBar / renderDetail / loadMeta / renderUidHistory",
-        "core 编排时反调 reg.xxx?.()：roster 里也是 reg.renderFilterBar?.() 调筛选条 —— 两个方向都不 import 对方",
-        "所以文件之间只有 feature → core 单向依赖，靠 reg 换掉了循环 import"
+        "feature 加载时写进 core.reg：renderRoster / renderFilterBar / renderDetail / renderSim / renderAdvice / loadMeta / renderUidHistory",
+        "core 编排时反调 reg.xxx?.()，roster 里也是 reg.renderFilterBar?.() 调筛选条 —— 两个方向都不 import 对方",
+        "明细页拆成 card / damage / fit / screenshot 四件，各自只认 detail.js 给的上下文"
       ]
     },
     {
       "dot": "rose",
-      "title": "出口与部署",
+      "title": "出口与版式",
       "items": [
-        "core.api() 是唯一出口：API_BASE + path 拼地址，认 {ok,data} / {ok:false,error} 两种形状，非 ok 一律 throw",
-        "API_BASE 来自 env.js，留空 = 同源（本地 npm run server 一台机器全包），填后端域名 = 跨域",
-        "图片是相对路径（assets/...），浏览器按页面所在目录解析；PAGE_BASE 只用来改地址栏，不参与资源加载"
+        "core.api() 是唯一出口：API_BASE + path，认 {ok,data} / {ok:false,error} 两种形状，非 ok 一律 throw",
+        "API_BASE 来自 env.js：留空 = 同源（npm run server 一台机器全包），填域名 = 跨域走 CORS 白名单",
+        "全站只维护 600 宽一套版式，窄屏等比缩放（--shell-s），所以 style.css 里一条 @media 都没有"
       ]
     }
   ]

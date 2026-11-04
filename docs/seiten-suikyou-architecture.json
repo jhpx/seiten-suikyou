@@ -2,151 +2,70 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "星天水镜 seiten-suikyou · 架构与 miao 内核调用链",
+    "title": "星天水镜 seiten-suikyou · 前后端架构",
     "locale": "zh-CN",
     "output": "seiten-suikyou-architecture.html",
     "quality_profile": "showcase",
     "viewBox": [
-      1090,
-      620
+      1140,
+      600
     ],
     "repository": {
       "url": "https://github.com/jhpx/seiten-suikyou",
-      "revision": "267a9f99b5972c6dc24de6c8364a5a7405b2003d"
+      "revision": "ba9be087a257affec35a1441fbd4f947f101a232"
     }
   },
   "components": [
     {
-      "id": "cli",
+      "id": "browser",
       "type": "frontend",
-      "label": "CLI",
-      "sublabel": "src/cli/score.ts",
+      "label": "网页",
+      "sublabel": "web/ · core.js",
+      "tag": "零构建 · core.js + features",
       "pos": [
-        40,
-        90
+        30,
+        170
       ],
       "size": [
-        140,
-        60
+        120,
+        76
+      ]
+    },
+    {
+      "id": "cli",
+      "type": "backend",
+      "label": "命令行",
+      "sublabel": "cli/score.ts",
+      "tag": "与 server 并列的入口",
+      "pos": [
+        30,
+        20
       ],
-      "tag": "不经 HTTP 直连",
+      "size": [
+        120,
+        64
+      ],
       "sources": [
         {
           "path": "src/cli/score.ts",
-          "line": 199,
-          "label": "toMiaoProfile + getMarkDetail"
+          "line": 116,
+          "label": "main()"
         }
       ]
-    },
-    {
-      "id": "fetcher",
-      "type": "backend",
-      "label": "抓取器",
-      "sublabel": "enka.ts · 多源",
-      "pos": [
-        212,
-        90
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "tag": "并行，先到先得",
-      "sources": [
-        {
-          "path": "src/upstream/enka.ts",
-          "line": 115,
-          "label": "fetchEnka 多源并行"
-        }
-      ]
-    },
-    {
-      "id": "enka",
-      "type": "external",
-      "label": "enka 数据源",
-      "sublabel": "microgg / enka.network",
-      "pos": [
-        384,
-        90
-      ],
-      "size": [
-        140,
-        60
-      ]
-    },
-    {
-      "id": "kernel",
-      "type": "backend",
-      "label": "内核出口",
-      "sublabel": "src/index.ts",
-      "pos": [
-        556,
-        90
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "tag": "注册 Meta",
-      "sources": [
-        {
-          "path": "src/index.ts",
-          "line": 18,
-          "label": "import resources/meta-gs/*"
-        }
-      ]
-    },
-    {
-      "id": "ingest",
-      "type": "backend",
-      "label": "入库整形",
-      "sublabel": "enka-account.ts",
-      "pos": [
-        384,
-        200
-      ],
-      "size": [
-        140,
-        56
-      ],
-      "tag": "只存数字 id",
-      "sources": [
-        {
-          "path": "src/upstream/enka-account.ts",
-          "line": 25,
-          "label": "ingestPayload"
-        }
-      ]
-    },
-    {
-      "id": "browser",
-      "type": "frontend",
-      "label": "前端站点",
-      "sublabel": "独立仓库 · 静态托管",
-      "pos": [
-        40,
-        330
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "tag": "env.js → API_BASE"
     },
     {
       "id": "server",
       "type": "backend",
-      "label": "HTTP 服务",
-      "sublabel": ":8787",
+      "label": "HTTP 入口",
+      "sublabel": "server/ · routes",
       "pos": [
-        212,
-        330
+        220,
+        170
       ],
       "size": [
-        140,
-        60
+        120,
+        76
       ],
-      "tag": "cors → 限流 → 路由",
       "sources": [
         {
           "path": "src/server/index.ts",
@@ -156,19 +75,203 @@
       ]
     },
     {
+      "id": "rest",
+      "type": "backend",
+      "label": "控制器",
+      "sublabel": "rest/*.rest.ts",
+      "pos": [
+        410,
+        170
+      ],
+      "size": [
+        120,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/rest/account.rest.ts",
+          "line": 16,
+          "label": "list / detail / refresh"
+        }
+      ]
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "用例",
+      "sublabel": "service/*.service.ts",
+      "pos": [
+        600,
+        170
+      ],
+      "size": [
+        120,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/service/account.service.ts",
+          "line": 53,
+          "label": "buildAccountView"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "type": "backend",
+      "label": "存储门面",
+      "sublabel": "config/store.ts",
+      "pos": [
+        790,
+        170
+      ],
+      "size": [
+        120,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/config/store.ts",
+          "line": 200,
+          "label": "loadAccountWithCharacters"
+        }
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "行读写",
+      "sublabel": "repository/ · dbo",
+      "pos": [
+        980,
+        170
+      ],
+      "size": [
+        120,
+        76
+      ],
+      "sources": [
+        {
+          "path": "src/repository/account.repo.ts",
+          "line": 28,
+          "label": "mergeAccount"
+        }
+      ]
+    },
+    {
+      "id": "common",
+      "type": "backend",
+      "label": "字典与文案",
+      "sublabel": "i18n · names · ui",
+      "pos": [
+        410,
+        340
+      ],
+      "size": [
+        120,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/common/i18n.ts",
+          "line": 31,
+          "label": "uiText / 名字表统一出口"
+        }
+      ]
+    },
+    {
+      "id": "miao-gw",
+      "type": "backend",
+      "label": "miao 适配",
+      "sublabel": "materialize · damage",
+      "pos": [
+        600,
+        340
+      ],
+      "size": [
+        120,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/gateway/miao/materialize.ts",
+          "line": 67,
+          "label": "toMiaoProfile"
+        }
+      ]
+    },
+    {
+      "id": "enka-gw",
+      "type": "backend",
+      "label": "enka 适配",
+      "sublabel": "fetch · convertor",
+      "pos": [
+        790,
+        340
+      ],
+      "size": [
+        120,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/gateway/enka/enka.fetch.ts",
+          "line": 102,
+          "label": "fetchEnka 多源并行"
+        }
+      ]
+    },
+    {
+      "id": "vendor",
+      "type": "backend",
+      "label": "miao 内核",
+      "sublabel": "ArtisMark · Attr",
+      "tag": "vendor/miao · 同步产物",
+      "pos": [
+        600,
+        490
+      ],
+      "size": [
+        120,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/index.ts",
+          "line": 23,
+          "label": "导出 ArtisMark 等内核模块"
+        }
+      ]
+    },
+    {
+      "id": "enka",
+      "type": "external",
+      "label": "上游数据源",
+      "sublabel": "microgg / enka.network",
+      "tag": "两源并行，谁先成功用谁",
+      "pos": [
+        790,
+        490
+      ],
+      "size": [
+        120,
+        66
+      ]
+    },
+    {
       "id": "db",
       "type": "database",
       "label": "本地库",
-      "sublabel": "SQLite",
+      "sublabel": "SQLite · 无迁移",
+      "tag": "跨多次抓取累积",
       "pos": [
-        384,
-        330
+        980,
+        490
       ],
       "size": [
-        140,
-        60
+        120,
+        66
       ],
-      "tag": "跨多次抓取累积",
       "sources": [
         {
           "path": "src/config/db.ts",
@@ -176,389 +279,165 @@
           "label": "openDb 按表定义建表"
         }
       ]
-    },
-    {
-      "id": "materialize",
-      "type": "backend",
-      "label": "组装 profile",
-      "sublabel": "materialize.ts",
-      "pos": [
-        556,
-        330
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "tag": "id → 中文名",
-      "sources": [
-        {
-          "path": "src/kernel/materialize.ts",
-          "line": 67,
-          "label": "toMiaoProfile"
-        }
-      ]
-    },
-    {
-      "id": "metatable",
-      "type": "backend",
-      "label": "Meta 元数据",
-      "sublabel": "词条基准 / 角色表",
-      "pos": [
-        728,
-        170
-      ],
-      "size": [
-        140,
-        56
-      ],
-      "sources": [
-        {
-          "path": "vendor/miao/resources/meta-gs/character/index.js",
-          "label": "角色规则总注册"
-        }
-      ]
-    },
-    {
-      "id": "cfg",
-      "type": "backend",
-      "label": "ArtisMarkCfg",
-      "sublabel": "权重 + 角色规则",
-      "pos": [
-        728,
-        250
-      ],
-      "size": [
-        140,
-        56
-      ],
-      "sources": [
-        {
-          "path": "vendor/miao/models/artis/ArtisMarkCfg.js",
-          "line": 108,
-          "label": "getCfg"
-        },
-        {
-          "path": "vendor/miao/resources/meta-gs/character/阿蕾奇诺/artis.js",
-          "label": "角色规则：按面板改权重"
-        }
-      ]
-    },
-    {
-      "id": "artismark",
-      "type": "backend",
-      "label": "ArtisMark",
-      "sublabel": "getMarkDetail()",
-      "pos": [
-        728,
-        330
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "tag": "唯一评分入口",
-      "sources": [
-        {
-          "path": "vendor/miao/models/artis/ArtisMark.js",
-          "line": 191,
-          "label": "getMarkDetail"
-        }
-      ]
-    },
-    {
-      "id": "attr",
-      "type": "backend",
-      "label": "Attr / ArtisAttr",
-      "sublabel": "算面板 + 解析词条",
-      "pos": [
-        728,
-        450
-      ],
-      "size": [
-        140,
-        56
-      ],
-      "sources": [
-        {
-          "path": "vendor/miao/models/attr/Attr.js",
-          "line": 43,
-          "label": "Attr.calc()"
-        },
-        {
-          "path": "vendor/miao/models/artis/ArtisAttr.js",
-          "line": 21,
-          "label": "getAttr 解析 attrIds"
-        }
-      ]
-    },
-    {
-      "id": "shape",
-      "type": "backend",
-      "label": "组装 JSON",
-      "sublabel": "service/*.service.ts",
-      "pos": [
-        910,
-        330
-      ],
-      "size": [
-        140,
-        60
-      ],
-      "sources": [
-        {
-          "path": "src/service/account.service.ts",
-          "line": 57,
-          "label": "buildAccountView"
-        }
-      ]
-    },
-    {
-      "id": "i18n",
-      "type": "backend",
-      "label": "i18n",
-      "sublabel": "多语言表",
-      "pos": [
-        910,
-        450
-      ],
-      "size": [
-        140,
-        56
-      ],
-      "sources": [
-        {
-          "path": "src/common/names.ts",
-          "line": 83,
-          "label": "name(hash, locale)"
-        }
-      ]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
-      "label": "前端 · 独立仓库单独托管",
+      "label": "前端 · web/ 子仓库",
       "wraps": [
         "browser"
       ],
-      "pad": 20
+      "pad": 22
     },
     {
       "kind": "region",
-      "label": "miao 内核 · vendor/miao（同步产物，不改写）",
+      "label": "后端 · 单个 Node 进程（层间单向依赖）",
       "wraps": [
-        "metatable",
-        "cfg",
-        "artismark",
-        "attr"
+        "server",
+        "rest",
+        "service",
+        "store",
+        "repo",
+        "common",
+        "miao-gw",
+        "enka-gw"
       ],
       "pad": 22
     }
   ],
   "connections": [
     {
-      "id": "cli-fetch",
-      "from": "cli",
-      "to": "fetcher",
-      "label": "抓取 --uid",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40
-    },
-    {
-      "id": "fetch-enka",
-      "from": "fetcher",
-      "to": "enka",
-      "label": "HTTPS 并行",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40
-    },
-    {
-      "id": "fetch-ingest",
-      "from": "fetcher",
-      "to": "ingest",
-      "label": "原始响应",
-      "fromSide": "bottom",
-      "toSide": "left",
-      "labelSegment": 1
-    },
-    {
-      "id": "ingest-db",
-      "from": "ingest",
-      "to": "db",
-      "label": "落库",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 24
-    },
-    {
       "id": "browser-server",
       "from": "browser",
       "to": "server",
-      "label": "跨域 GET /api/*",
+      "label": "GET /api/*",
+      "variant": "emphasis",
       "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -60
+      "toSide": "left"
     },
     {
-      "id": "server-fetch",
+      "id": "server-rest",
       "from": "server",
-      "to": "fetcher",
-      "label": "POST /api/accounts/:uid/refresh",
-      "variant": "dashed",
-      "fromSide": "top",
-      "toSide": "bottom",
-      "labelDy": -40
+      "to": "rest",
+      "label": "分派",
+      "fromSide": "right",
+      "toSide": "left"
     },
     {
-      "id": "server-db",
-      "from": "server",
+      "id": "rest-service",
+      "from": "rest",
+      "to": "service",
+      "label": "ctx 能力",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "service-store",
+      "from": "service",
+      "to": "store",
+      "label": "聚合",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "store-repo",
+      "from": "store",
+      "to": "repo",
+      "label": "行映射",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "repo-db",
+      "from": "repo",
       "to": "db",
-      "label": "读库（service → repo）",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40
-    },
-    {
-      "id": "db-materialize",
-      "from": "db",
-      "to": "materialize",
-      "label": "行数据",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40
-    },
-    {
-      "id": "materialize-attr",
-      "from": "materialize",
-      "to": "attr",
-      "label": "Attr.create().calc()",
-      "fromSide": "bottom",
-      "toSide": "left",
-      "labelSegment": 1,
-      "labelDx": -20
-    },
-    {
-      "id": "attr-artismark",
-      "from": "attr",
-      "to": "artismark",
-      "label": "profile.attr",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "materialize-artismark",
-      "from": "materialize",
-      "to": "artismark",
-      "label": "miao profile",
-      "variant": "emphasis",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40,
-      "labelDx": -50
-    },
-    {
-      "id": "artismark-cfg",
-      "from": "artismark",
-      "to": "cfg",
-      "label": "取权重",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "cfg-meta",
-      "from": "cfg",
-      "to": "metatable",
-      "label": "查词条基准",
-      "fromSide": "top",
-      "toSide": "bottom"
-    },
-    {
-      "id": "kernel-meta",
-      "from": "kernel",
-      "to": "metatable",
-      "label": "import 即注册",
-      "fromSide": "right",
-      "toSide": "top",
-      "labelSegment": 0
-    },
-    {
-      "id": "artismark-shape",
-      "from": "artismark",
-      "to": "shape",
-      "label": "评分结果",
-      "variant": "emphasis",
-      "fromSide": "right",
-      "toSide": "left",
-      "labelDy": -40,
-      "labelDx": 40
-    },
-    {
-      "id": "shape-i18n",
-      "from": "shape",
-      "to": "i18n",
-      "label": "按 locale 取名",
+      "label": "SQL",
       "fromSide": "bottom",
       "toSide": "top",
-      "labelDy": 24
+      "labelDy": 30
     },
     {
-      "id": "shape-browser",
-      "from": "shape",
-      "to": "browser",
-      "label": "JSON 响应",
-      "variant": "dashed",
+      "id": "service-miao",
+      "from": "service",
+      "to": "miao-gw",
+      "label": "算分",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30,
+      "labelDx": -26
+    },
+    {
+      "id": "miao-vendor",
+      "from": "miao-gw",
+      "to": "vendor",
+      "label": "ArtisMark / Attr",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 26
+    },
+    {
+      "id": "service-enka",
+      "from": "service",
+      "to": "enka-gw",
+      "label": "刷新",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "enka-upstream",
+      "from": "enka-gw",
+      "to": "enka",
+      "label": "HTTPS 并行",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 26
+    },
+    {
+      "id": "rest-common",
+      "from": "rest",
+      "to": "common",
+      "label": "locale · 文案",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30
+    },
+    {
+      "id": "cli-service",
+      "from": "cli",
+      "to": "service",
+      "label": "不走 HTTP",
       "fromSide": "right",
-      "toSide": "bottom",
-      "via": [
-        [
-          1070,
-          360
-        ],
-        [
-          1070,
-          560
-        ],
-        [
-          110,
-          560
-        ]
-      ],
-      "labelSegment": 2,
-      "labelDy": -12
+      "toSide": "top"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "两个仓库 · 两个 origin",
+      "title": "前端 · web/ 子仓库",
       "items": [
-        "前端 seiten-suikyou-web 是独立仓库、纯静态零构建，丢 Pages 或任意静态主机；后端就只剩 /api/*（本地形态下才顺带托管页面）",
-        "接口地址在 env.js 的 API_BASE：留空 = 同源（本地一台机器全包），填后端域名 = 跨域，后端要配 --cors-origin",
-        "图片是相对路径，浏览器按页面所在目录解析 —— assets/ 跟着前端发布，后端那台机器不需要"
+        "bootstrap.js 把 core 与 features/ 注册进 core.reg，编排经注册表反调 → 无环依赖",
+        "明细页拆成 card / damage / fit / screenshot 四件，模拟比对与刷本建议各占一个 feature",
+        "只认 /api/*：角色名、词条名、按钮文字全从接口来，前端不写死一个字"
       ]
     },
     {
       "dot": "emerald",
-      "title": "入口 · 落库 · 内核",
+      "title": "后端 · 分层单向",
       "items": [
-        "CLI 与 POST /api/accounts/:uid/refresh 共用同一个抓取器：两个源同时打，谁先回来用谁，全失败才报错",
-        "库里只存数字 id（uid / avatarId / itemId / propId / setId）与官方文案 hash，不存中文名",
-        "enka 只给展柜那 8–12 个角色，靠 SQLite 跨多次抓取累积；CLI 不经 HTTP，与接口共用同一条读路径",
-        "src/index.ts 先 import resources/meta-gs/* 注册 Meta，再原样导出内核；#miao 走 package.json imports，不改写上游 import",
-        "materialize.ts 把 id 翻成中文名与真 Artis 实例并算好面板；唯一评分入口 ArtisMark.getMarkDetail(profile, true)",
-        "圣遗物只喂 mainId / attrIds 原始数组 —— 重复次数是算副词条有效率的依据，外面先聚合就丢了"
+        "server 只装配（routes 表 + 限流 + 静态托管），rest 只做 HTTP，service 编排用例并出 dto",
+        "存储侧拆两半：config 是 schema → db → store（聚合门面），repository 是一表一行 + dbo",
+        "gateway 隔离外部：miao（评分 / 伤害 / 规则 / 模拟）、enka（抓取与翻译）；common 只是字典"
       ]
     },
     {
       "dot": "rose",
-      "title": "出口与多语言",
+      "title": "数据与运行",
       "items": [
-        "service 层把分数、词条、套装拼成 JSON（account/character.service.ts），浏览器只负责画",
-        "i18n 按 locale 供名字与界面文字，前端一个词条名都不写死",
-        "评分输出必须与 miao 逐字一致：改内核或数据层后跑 test/verify.ts 对基线，diff 为空才算过"
+        "SQLite 无迁移：config/schema.ts 即 DDL，改结构就 SCHEMA_VERSION+1，老库直接报错",
+        "库里只存数字 id 与原始值，名字按 locale 在出口渲染；评分必须与 miao 逐字一致",
+        "只有 simulator / rubric 收请求体，其余参数全在 URL；限流三档按路由挂"
       ]
     }
   ]
