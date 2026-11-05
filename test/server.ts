@@ -60,6 +60,13 @@ console.log('=== 1. 元信息与健康检查 ===')
   const h = await json('/api/health')
   eq(h.ok, true, '/api/health 返回 ok')
   eq(h.data.uids, 1, '/api/health 报出 1 个 uid')
+  eq(Array.isArray(h.data.regions), true, '/api/health 含 regions 数组（各区分服明细）')
+  eq(Array.isArray(h.data.microggServers), true, '/api/health 含 microggServers 数组（镜像两服）')
+  /* 状态页抓取是异步的，断言只查「有数据时字段形状对」，不依赖网络时序 */
+  const shapeOk = (list: any) => Array.isArray(list) && list.every((r: any) =>
+    typeof r.name === 'string' && ['up', 'down', 'unknown'].includes(r.status) && /^#[0-9a-fA-F]{3,8}$/.test(r.color))
+  eq(shapeOk(h.data.regions), true, '/api/health 各区服带合法状态与身份色')
+  eq(shapeOk(h.data.microggServers), true, '/api/health microgg 两服带合法状态与身份色')
 
   const m = await json('/api/meta')
   const codes = m.data.locales.map((l: any) => l.code)

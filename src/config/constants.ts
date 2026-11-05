@@ -47,6 +47,14 @@ export const DEFAULT_TIMEOUT_MS = 15000
 /** 请求上游时带的 UA：纯标识，别伪装浏览器。发版改版本号时顺手改。 */
 export const DEFAULT_UA = 'seiten-suikyou/0.1 (artifact score viewer)'
 
+/** 数据源状态同步间隔（毫秒）：后端周期拉一次 status.enka.network，结果缓存在内存，前端进页面读一次。
+ *  5 分钟的依据：status.enka.network 自己约每分钟才更新一次，再密也只是重复旧值；
+ *  「一眼看见」的状态不需要秒级精度，5 分钟对主页指示灯完全够用，也更省上游。 */
+export const HEALTH_CHECK_INTERVAL_MS = 5 * 60_000
+
+/** 拉取 status.enka.network 的超时（毫秒）：页面挂了就别干等，超时当 unknown。8s 足够——页面本身几 KB 文本。 */
+export const HEALTH_FETCH_TIMEOUT_MS = 8000
+
 /* ---------------- 限流 ---------------- */
 
 /** 三档默认额度（每分钟）。可用 `RATE_FETCH` / `RATE_FETCH_ALL` / `RATE_READ` 覆盖，

@@ -30,6 +30,7 @@ import type { MiddlewareHandler } from 'hono'
 import { i18n } from '../index.ts'
 import { openDb } from '../config/db.ts'
 import { accountView, countAccounts, createIngestService, listAccounts } from '../service/account.service.ts'
+import { createHealthService } from '../service/health.service.ts'
 import type { FetchImpl } from '../service/account.service.ts'
 import { characterDamage, weightFilterOptions, listRubrics, selectRubric } from '../service/character.service.ts'
 import { characterSim, simCatalogOf } from '../service/simulator.service.ts'
@@ -76,6 +77,9 @@ export function createApp ({
   /* 限流闸门。rateLimit 传 false 就没有闸门（本地调试用），guard 也就变成空中间件 */
   const gate = createRateGate({ rules: rateLimit })
   const ingest = createIngestService({ db, fetchImpl })
+  /* 数据源健康度：周期拉 status.enka.network，结果缓存在内存，供 /api/health 读。
+     createApp 里只建实例；真正起定时器在 startServer（测试用 createApp 不会起定时器）。 */
+  const health = createHealthService()
 
   /* 控制器要的能力集 —— 实现都在 service 层，这里只是接起来 */
   const ctx: ApiContext = {
@@ -92,7 +96,11 @@ export function createApp ({
       rubrics: (uid, avatarId, locale) => listRubrics(db, uid, avatarId, locale),
       selectRubric: (uid, avatarId, rubric) => selectRubric(db, uid, avatarId, rubric)
     },
-    ingest: ingest.fetch
+    ingest: ingest.fetch,
+    health: {
+      regions: () => health.get().regions,
+      microggServers: () => health.get().microggServers
+    }
   }
 
   const app = new Hono()
@@ -144,7 +152,7 @@ export function createApp ({
   app.notFound(c => fail(c, 404, 'not_found', `没有这个接口：${c.req.method} ${c.req.path}`))
   app.onError((e, c) => fail(c, 500, 'internal', errMessage(e)))
 
-  return { app, db, rules: gate?.rules ?? null }
+  return { app, db, rules: gate?.rules ?? null, health }
 }
 
 /**
@@ -156,6 +164,8 @@ export function createApp ({
  */
 export function startServer ({ port = DEFAULT_PORT, host = LOCAL_HOST, ...appOpts }: { port?: number, host?: string } & AppOptions = {}) {
   const created = createApp(appOpts)
+  /* 起定时器：周期同步数据源状态页。仅在真正监听时做 —— 测试走 createApp 不会触发，免得挂住进程退出。 */
+  created.health.start()
   return new Promise<typeof created & { server: ReturnType<typeof serve>, port: number, url: string }>((resolve) => {
     /* port 传 0 = 让系统随便挑一个空闲端口，测试里就这么用 */
     const server = serve({ fetch: created.app.fetch, port, hostname: host }, (info) => {

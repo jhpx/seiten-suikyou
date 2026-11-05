@@ -13,6 +13,7 @@
  * 断言同样只在失败时打印。
  */
 import { fetchEnka } from '../src/gateway/enka/enka.fetch.ts'
+import { parseEnkaStatus } from '../src/gateway/enka/enka.status.ts'
 
 let pass = 0, fail = 0
 function eq (actual: unknown, expected: unknown, label: string): void {
@@ -189,7 +190,7 @@ console.log('\n=== 3. 全失败时的错误信息 ===')
     { match: 'enka', throw: abort }
   ])
   const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
-  ok(msg.includes('8000'), '默认超时 8000ms（microgg 冷回源 6s、enka 上限 4.5s，都得留出赢的机会）')
+  ok(msg.includes('15000'), '默认超时 15000ms（microgg 冷回源实测约 11s、enka 抖动上限约 4.5s，留余量让冷号也能赢一次）')
 }
 
 /* ---------------- 4. 排查用的手动指定源 ---------------- */
@@ -209,6 +210,33 @@ console.log('\n=== 4. ENKA_SOURCE 指定单源 ===')
     const msg = await messageOf(() => fetchEnka(101242308, { fetchImpl }))
     ok(msg.includes('microgg') && msg.includes('enka'), '写错源名时把可选值列出来')
   } finally { delete process.env.ENKA_SOURCE }
+}
+
+/* ---------------- 5. status.enka.network 解析（纯函数，不联网） ---------------- */
+console.log('\n=== 5. 状态页解析：区服配色 + MicroGG 两服 ===')
+
+{
+  /* 仿状态页的服务端渲染文本：官方 6 区一句、MicroGG 镜像两服一句 */
+  const color = (c: string, name: string) => `<b style="color: ${c}">${name}</b>`
+  const html = `<p>Enka.Network is <b class="green">up.</b></p>
+    <p>For Genshin, ${color('#e67e22', 'euro')}, ${color('#5bb4ef', 'usa')}, ${color('#e9c223', 'asia')},
+       ${color('#75cd69', 'cht')}, ${color('#e74c3c', 'china')} seem to be up,
+       while ${color('#ff6f9e', 'bilibili')} is <span class="red">dead</span>.</p>
+    <p>${color('#e74c3c', 'china')} is up, while ${color('#ff6f9e', 'bilibili')} is
+       <span class="red">dead</span> <span>(profile.microgg.cn)</span>.</p>`
+  const p = parseEnkaStatus(html)
+
+  eq(p.regions.length, 6, '官方 6 个区服全解出来')
+  eq(p.regions[0], { name: 'euro', status: 'up', color: '#e67e22' }, 'euro 在线且抄到橙')
+  eq(p.regions[5], { name: 'bilibili', status: 'down', color: '#ff6f9e' }, 'bilibili 离线且抄到粉')
+  eq(p.regions.map(r => r.color), ['#e67e22', '#5bb4ef', '#e9c223', '#75cd69', '#e74c3c', '#ff6f9e'], '6 区各自不同身份色')
+  /* MicroGG 段是单独一句，别被前面 For Genshin 那句带偏 */
+  eq(p.microggServers.map(s => [s.name, s.status]), [['china', 'up'], ['bilibili', 'down']], 'MicroGG 两服 china 在线 / bilibili 离线')
+  eq(p.microggServers.every(s => /^#[0-9a-fA-F]{6}$/.test(s.color)), true, 'MicroGG 两服也带身份色')
+
+  /* 页面没有 MicroGG 段时，两服仍以 unknown 占位，不能凭空消失 */
+  const plain = parseEnkaStatus('<p>Enka.Network is up.</p>')
+  eq(plain.microggServers.map(s => s.status), ['unknown', 'unknown'], '缺 MicroGG 段时两服兜底 unknown')
 }
 
 console.log(fail > 0

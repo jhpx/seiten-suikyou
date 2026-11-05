@@ -30,6 +30,13 @@ export interface ApiContext {
     /** 权重筛选项，按语言给名字 */
     weightOptions: (locale: string) => WeightOption[]
   }
+  /** 数据源在线状态（/api/health 用）：后端周期同步 status.enka.network，前端进页面读一次。只暴露只读快照 */
+  health: {
+    /** Enka 官方 Genshin 各区分服状态（逐个铺开显示，带状态页配色） */
+    regions: () => Array<{ name: string; status: 'up' | 'down' | 'unknown'; color: string }>
+    /** MicroGG 镜像节点的两个服（china / bilibili），与官方区分列 */
+    microggServers: () => Array<{ name: string; status: 'up' | 'down' | 'unknown'; color: string }>
+  }
   accounts: {
     /** 列表页摘要 */
     list: () => AccountSummary[]

@@ -358,7 +358,7 @@ for (const side of ['gateway', 'common']) {
 const DOMAINS = ['account', 'character']
 const LAYERS: Array<{ dir: string, suffix: string, domains: string[], plain: string[] }> = [
   { dir: 'rest', suffix: '.rest.ts', domains: [...DOMAINS, 'meta'], plain: ['reply.ts'] },
-  { dir: 'service', suffix: '.service.ts', domains: DOMAINS, plain: ['context.ts', 'advice.ts', 'artifact.service.ts', 'simulator.service.ts'] },
+  { dir: 'service', suffix: '.service.ts', domains: DOMAINS, plain: ['context.ts', 'advice.ts', 'artifact.service.ts', 'health.service.ts', 'simulator.service.ts'] },
   { dir: 'repository', suffix: '.repo.ts', domains: DOMAINS, plain: [] }
 ]
 for (const { dir, suffix, domains, plain } of LAYERS) {

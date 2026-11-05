@@ -90,7 +90,7 @@ const TABLE: Record<string, Record<string, string>> = {
     /* 右栏是**手填的最终数值**，不是真实装备的「若干次 roll 之和」两种口径对不上，所以不显示评分 */
     simCalculating: '重算中…', simEmpty: '改一改右边的武器或圣遗物，这里就会跟着变。',
     /* 明细页「分享/下载」失败时的那句提示。以前失败只进 console，页面看着像「按钮没反应」 */
-    shareFail: '截图失败，没生成图片。换个浏览器或稍后再试。',
+    shareFail: '截图失败，没生成图片。换个浏览器或稍后再试。'
   },
   cht: {
     title: '星天水鏡', subtitle: '聖遺物評分',
@@ -152,7 +152,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '改武器', simWeaponType: '型號',
     simSet: '套裝', simLevel: '等級', simRefine: '精煉', simMainStat: '主詞條', simSubStats: '副詞條', simAddStat: '加一條',
     simCalculating: '重算中…', simEmpty: '改一下右邊的武器或聖遺物，這裡就會跟著變。',
-    shareFail: '截圖失敗，沒生成圖片。換一個瀏覽器或稍後再試。',
+    shareFail: '截圖失敗，沒生成圖片。換一個瀏覽器或稍後再試。'
   },
   en: {
     title: 'Seiten Suikyou', subtitle: 'Artifact Scoring',
@@ -217,7 +217,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: 'Weapon', simWeaponType: 'Model',
     simSet: 'Set', simLevel: 'Level', simRefine: 'Refinement', simMainStat: 'Main stat', simSubStats: 'Substats', simAddStat: 'Add',
     simCalculating: 'Recalculating…', simEmpty: 'Change the weapon or an artifact on the right and this updates.',
-    shareFail: 'Screenshot failed, no image was produced. Try another browser or retry later.',
+    shareFail: 'Screenshot failed, no image was produced. Try another browser or retry later.'
   },
   ja: {
     title: '星天水鏡', subtitle: '聖遺物スコア',
@@ -280,7 +280,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '武器', simWeaponType: '種類',
     simSet: 'セット', simLevel: 'レベル', simRefine: '精錬', simMainStat: 'メイン', simSubStats: 'サブ', simAddStat: '追加',
     simCalculating: '再計算中…', simEmpty: '右の武器か聖遺物を変えると、ここも変わります。',
-    shareFail: 'スクリーンショットに失敗し、画像が作れませんでした。別のブラウザか、時間をおいて再度お試しください。',
+    shareFail: 'スクリーンショットに失敗し、画像が作れませんでした。別のブラウザか、時間をおいて再度お試しください。'
   },
   ko: {
     title: '성천수경', subtitle: '성유물 점수',
@@ -343,7 +343,7 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '무기', simWeaponType: '종류',
     simSet: '세트', simLevel: '레벨', simRefine: '재련', simMainStat: '주 옵션', simSubStats: '부 옵션', simAddStat: '추가',
     simCalculating: '다시 계산 중…', simEmpty: '오른쪽의 무기나 성유물을 바꾸면 여기도 따라 바뀝니다.',
-    shareFail: '스크린샷에 실패해 이미지가 만들어지지 않았습니다. 다른 브라우저에서 다시 시도해 주세요.',
+    shareFail: '스크린샷에 실패해 이미지가 만들어지지 않았습니다. 다른 브라우저에서 다시 시도해 주세요.'
   }
 }
 

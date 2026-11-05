@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `fetch` | `POST /api/accounts/:uid/refresh`（另加全局总闸 `fetchAll` 30） | 每 IP 20 | `429` + `Retry-After` |
 | `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/characters/:avatarId/damage` | 每 IP 300 | `429` + `Retry-After` |
-| `none` | `/api/meta`、`/api/health` | 不限（探活被限会误报故障） | — |
+| `none` | `/api/meta`、`/api/health` | 不限（状态探针被限会误报故障） | — |
 
 静态页与素材图**故意不限流**。本地调试可加 `--no-rate-limit` 关掉。
 
@@ -73,7 +73,7 @@
 | 方法 | 路径 | 作用 |
 |---|---|---|
 | GET | `/api/meta` | 语言表、界面文案、权重筛选项 |
-| GET | `/api/health` | 存活探针 |
+| GET | `/api/health` | 存活探针 + 数据源状态快照 |
 | GET | `/api/accounts` | 账号列表 |
 | GET | `/api/accounts/:uid` | 一个账号的完整视图 |
 | GET | `/api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算 |
@@ -109,9 +109,24 @@
 
 ### 2.2 `GET /api/health`
 
-存活探针 / 部署自检用。
+存活探针 / 部署自检用，同时给主页的「数据源在线状态」指示灯供数。
 
-**响应 `data`：** `{ "uids": 12 }`（库里现有 uid 数）。
+**响应 `data`：**
+```jsonc
+{
+  "uids": 12,                          // 库里现有 uid 数
+  "regions": [                        // Enka 官方 Genshin 各区分服
+    { "name": "euro", "status": "up", "color": "#e67e22" }
+  ],
+  "microggServers": [                 // MicroGG 镜像节点自己的两个服（china / bilibili）
+    { "name": "china", "status": "up", "color": "#e74c3c" }
+  ]
+}
+```
+
+`status` 为 `up` / `down` / `unknown`，`color` 是状态页给该区服的标识色。后端每 5 分钟拉一次
+`status.enka.network` 缓存在内存，前端进页面读一次；拉不到时 `regions` 为空数组、
+`microggServers` 两服以 `unknown` 占位。
 
 ### 2.3 `GET /api/accounts`
 
