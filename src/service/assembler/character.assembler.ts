@@ -194,7 +194,7 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
   }
   const enkaAll = ArtifactDbo.subStatTotals(ch.artifacts)
-  const allAttr = Array.from({ length: 9 }, (_, i) => {
+  const allAttr = Array.from({ length: 10 }, (_, i) => {
     const a = allAttrRaw[i]
     if (!a || !a.key) return {}
     return {
@@ -206,6 +206,16 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
       cls: weightClass(cw[a.key] || 0)
     }
   })
+
+  /* 有效词条数：把右侧「有效词条汇总」里每个副词条「左边那个数值」（词条有效率 eff）加起来，
+     只加金色 great + 白色 useful（权重>0），排除灰色 nouse；与右侧网格配色口径一致。
+     eff 为 '-'（无有效率）时按 0 计；空位（不足 10 种）自然不计入。 */
+  const effNum = (e?: string) => (e != null && e !== '-' ? Number(e) || 0 : 0)
+  const round1 = (n: number) => Math.round(n * 10) / 10
+  const effValid = round1(allAttr.reduce((s, a) => s + (a.cls && a.cls !== 'nouse' ? effNum(a.eff) : 0), 0))
+  /* 无效词条数：与 有效词条数 对称，只加灰色 nouse（权重=0）的 eff，表示「浪费掉的有效率」。
+     eff 为 '-' 时按 0 计；不足 10 种/无 nouse 时自然为 0。 */
+  const effInvalid = round1(allAttr.reduce((s, a) => s + (a.cls === 'nouse' ? effNum(a.eff) : 0), 0))
 
   const consList = [1, 2, 3, 4, 5, 6].map(i => i <= (profile.cons ?? 0))
 
@@ -294,7 +304,11 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
       /* 页面显示的规则名：classTitle 是 miao 的中文原文，rubricLabel 按当前语言重拼（角色名+规则名） */
       rubricLabel: rubricLabel(ch.avatarId ?? 0, title, loc),
       isDefaultWeight: !!result.isDefaultWeight,
-      isCustomWeight: !!result.isCustomWeight
+      isCustomWeight: !!result.isCustomWeight,
+      /* 有效词条数：右侧各副词条 eff（左边数值）之和，只加金色 great + 白色 useful。详见上面 effValid 计算。 */
+      effValid,
+      /* 无效词条数：右侧各副词条 eff 之和，只加灰色 nouse（权重=0）。详见上面 effInvalid 计算。 */
+      effInvalid
     },
     charWeight: cw,
     sets,

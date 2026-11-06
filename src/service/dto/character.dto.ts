@@ -77,6 +77,10 @@ export interface CharacterDto {
     rubricLabel: string
     isDefaultWeight: boolean
     isCustomWeight: boolean
+    /** 有效词条数：右侧各副词条 eff（左边数值）之和，只加金色 great + 白色 useful */
+    effValid: number
+    /** 无效词条数：右侧各副词条 eff 之和，只加灰色 nouse（权重=0），表示浪费掉的有效率 */
+    effInvalid: number
   }
   charWeight: Record<string, number>
   sets: Array<{ name: string; nameZh: string; setId: number | null; count: number; icon: string | null }>
