@@ -189,9 +189,16 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
 
   const allAttrRaw = profile.artis?.getAllAttr?.() || []
   const rawAll: Record<string, number> = {}
-  const coreArtis: Record<string, { attrs?: Array<{ key: string; value: number }> }> = profile.artis?.artis || {}
+  /* effByKey 收的是**未舍入**的原始 eff（ArtisAttr.getData 的产物），用于全精度聚合。
+     ⚠️ allAttr[].eff 是 miao formatArti 已经 ÷0.85 + round1 过的**展示字符串**，只能用于显示，
+        不能拿来累加 —— 见 AGENTS.md「数值精度」。 */
+  const effByKey: Record<string, number> = {}
+  const coreArtis: Record<string, { attrs?: Array<{ key: string; value: number; eff?: number }> }> = profile.artis?.artis || {}
   for (const arti of Object.values(coreArtis)) {
-    for (const at of arti.attrs || []) rawAll[at.key] = (rawAll[at.key] || 0) + at.value
+    for (const at of arti.attrs || []) {
+      rawAll[at.key] = (rawAll[at.key] || 0) + at.value
+      effByKey[at.key] = (effByKey[at.key] || 0) + (at.eff || 0)
+    }
   }
   const enkaAll = ArtifactDbo.subStatTotals(ch.artifacts)
   const allAttr = Array.from({ length: 10 }, (_, i) => {
@@ -207,15 +214,16 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     }
   })
 
-  /* 有效词条数：把右侧「有效词条汇总」里每个副词条「左边那个数值」（词条有效率 eff）加起来，
-     只加金色 great + 白色 useful（权重>0），排除灰色 nouse；与右侧网格配色口径一致。
-     eff 为 '-'（无有效率）时按 0 计；空位（不足 10 种）自然不计入。 */
-  const effNum = (e?: string) => (e != null && e !== '-' ? Number(e) || 0 : 0)
-  const round1 = (n: number) => Math.round(n * 10) / 10
-  const effValid = round1(allAttr.reduce((s, a) => s + (a.cls && a.cls !== 'nouse' ? effNum(a.eff) : 0), 0))
-  /* 无效词条数：与 有效词条数 对称，只加灰色 nouse（权重=0）的 eff，表示「浪费掉的有效率」。
-     eff 为 '-' 时按 0 计；不足 10 种/无 nouse 时自然为 0。 */
-  const effInvalid = round1(allAttr.reduce((s, a) => s + (a.cls === 'nouse' ? effNum(a.eff) : 0), 0))
+  /* 有效 / 无效词条数：从**原始 eff** 聚合，全程全精度；舍入只在展示层（前端 detail.js 的 toFixed(1)）做。
+     按权重>0 分有效（gold+white）/ 无效（nouse），与右侧网格配色口径一致。
+     ÷0.85 只是把 miao 的「单 roll 最大值」分母换成「均值」，属于口径转换、不是舍入。 */
+  let effValid = 0
+  let effInvalid = 0
+  for (const [key, rawEff] of Object.entries(effByKey)) {
+    const shown = rawEff / 0.85
+    if ((cw[key] || 0) > 0) effValid += shown
+    else effInvalid += shown
+  }
 
   const consList = [1, 2, 3, 4, 5, 6].map(i => i <= (profile.cons ?? 0))
 
