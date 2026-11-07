@@ -21,6 +21,19 @@
 | `sync_i18n.py` | 搬名字数据到 `vendor/i18n/`：enka 的 4 个文件原样复制 + 部件名提取件 | `python tools/sync_i18n.py`（`I18N_LOCALES=chs,en` 限定语种；`--refresh` 强制重下） |
 | `sync_assets.py` | 全量复制 miao 素材到 `web/assets/`，并用页面清单对账 | `python tools/sync_assets.py` |
 
+## 素材预处理（按需，不是同步步骤）
+
+| 文件 | 一行简介 | 怎么跑 |
+|---|---|---|
+| `gen_flower.py` | 每套生成 5 张缩略图 `1~5.webp`（裁边后缩到 96px）：`1.webp` 兼作卡片 / 筛选框 / 建议面板的套装图标，5 张一起供建议面板画部位小图 | `python tools/gen_flower.py` 补缺图；`--force` 全部重生成；`--edge` 改边长 |
+
+上游新增套装时先 `python tools/sync.py assets`，再跑一次它补图；`npm run sync:check` 会报缺图。
+产物落在前端子仓库 `web/assets/meta-gs/artifact/thumbs/<setId>/` —— **独立目录，不混进 `imgs/`**；
+目录名是 enka 的 setId（脚本从 `vendor/i18n/` 现算中文名 → id），不是中文套装名，
+所以 `imgs/` 中文、`thumbs/` 数字，两层不同是有意的。`imgs/` 下的原图留给明细页
+（那里显示 100px，96px 小图会糊）。
+`thumbs/` 随子仓库提交（母仓库只更新子模块指针）。
+
 ## 验收（改完前端 / 文档后自查）
 
 | 文件 | 一行简介 | 怎么跑 |

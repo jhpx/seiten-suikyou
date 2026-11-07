@@ -276,7 +276,7 @@
 | `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |
 | `weapon.attrs` | `[{ key, label, value }]`：`key` 是标准词条 key（`atkBase` / `atk` / `hp` / `mastery` / `cpct` / `cdmg` / `recharge` …），`label` 是已本地化的官方名（基础攻击力 / 攻击力 / 生命值…），`value` 是显示串（`608` / `49.6%`） |
 | `score` | `{ mark:'204.8', markValue:204.81, markClass:'SS', classTitle, rubricLabel, isDefaultWeight, isCustomWeight }`。`mark` 是分数文本（可直接显示）、`markClass` 是档位；`classTitle` 是 miao 的中文原文（`芙宁娜-通用`，诊断/对拍用），**页面显示用 `rubricLabel`**（同一件事的当前语言版本，如 `Furina-General`） |
-| `sets` | 圣遗物套装汇总（`[{ setId, name, nameZh, count, icon }]`）。按 `setId` 归属统计，同一套不会裂成两组；**单件也收**（`count: 1`，卡片上要显示），筛选时客户端只认 `count >= 2` —— 1 件不激活套装效果，算不上「穿这套」。`icon` 是花部位图（相对路径 `assets/...`） |
+| `sets` | 圣遗物套装汇总（`[{ setId, name, nameZh, count, icon }]`）。按 `setId` 归属统计，同一套不会裂成两组；**单件也收**（`count: 1`，接口给全量件数，由客户端决定显示哪些），客户端只认 `count >= 2` —— 1 件不激活套装效果，算不上「穿这套」，卡片不列、也不显示图标。`icon` 是**套装代表图**：1 号位（花）裁掉透明边、缩到 96px 的 `1.webp`，放在 `assets/meta-gs/artifact/thumbs/<setId>/`（本地预处理件，不是上游素材）。目录名用 `setId` 而非中文套装名：数字身份不随官方译名变，也和前端筛选／排序用的套装身份一致；`imgs/` 那层是上游原样复制，仍按中文套装名摆。`artifacts[].icon` 才是 `imgs/<套装名>/` 下的 1~5 号部位原图（明细页显示 100px，用原图）。刷取建议里那排 18px 的部位小图不另给字段：前端把 `icon` 的末段换成 `<部位号>.webp`，就能拿到同一 `thumbs/<setId>/` 目录下的预处理件（花就是 1 号，换出来还是自己） |
 | `artifacts` | 5 件圣遗物明细，每件含 `pos` / `posName` / `empty` / `name` / `nameZh` / `setId` / `setName` / `level` / `star` / `icon`（相对路径 `assets/...`）/ `main` / `subs` / `mark` |
 | `panel` / `attrTable` / `allAttr` / `consList` / `talent` | 明细页面板、属性表、合计、命座、天赋 |
 
@@ -305,7 +305,7 @@
     {
       "nameZh": "昔日宗室之仪",
       "name": "昔日宗室之仪",    // 跟 locale 走
-      "icon": "assets/meta-gs/artifact/imgs/昔日宗室之仪/1.webp",
+      "icon": "assets/meta-gs/artifact/thumbs/15007/1.webp",  // 套装代表图（1 号花图裁边缩到 96px，目录是 setId）；advice.sets 与 avatars[].sets 同口径
       "bad":  [ /* AdvicePiece */ ],   // D / C / B 档
       "mid":  [ /* AdvicePiece */ ],   // A / S 档
       "good": [ /* AdvicePiece */ ],   // 只有 SS 档（不含 SS 的这份里恒为空）

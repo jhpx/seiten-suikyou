@@ -180,6 +180,24 @@ export function artifactIcon (setNameZh: string | null | undefined, pos: number)
   return setNameZh ? `assets/meta-gs/artifact/imgs/${assetSeg(setNameZh)}/${pos}.webp` : null
 }
 
+/* **整套的代表图** = 1 号位（花）裁掉透明边、等比缩到 96px 的预处理件。
+   卡片、筛选框、刷取建议的套装图标全用它 —— 原图有 150~380px，而这几处最多只显示
+   31px（高分屏 94px），直接给原图是白下十倍像素；裁边顺手把「老素材满格、
+   新素材主体偏小」的参差抹平，三处拿到同一张图，主体大小天然一致。
+   ⚠️ 目录名用 **setId**（enka 的稳定数字身份），不用中文套装名：中文名来自文案表，
+      官方改一次译名、或 setName 查不到（i18n-report 里 15047/15048 那类），
+      拼出来的路径就 404 没图；前端筛选／排序本来也拿 setId 当套装身份，口径统一。
+   ⚠️ 单独放 thumbs/，不塞进 imgs/：imgs 是上游素材的**原样复制**
+      （tools/sync_assets.py 全量同步），按上游的中文套装名摆；两层命名不同是有意的。
+   ⚠️ 花就是 1 号位，代表图直接用 1.webp；同目录 2~5.webp 是另外四个部位的小图
+      （tools/gen_flower.py 产出）。advice.js 把 1.webp 的末段换成部位号去推，
+      pos=1 时换出来还是自己。
+   ⚠️ 明细页那些单件部位图仍走 artifactIcon() 的 imgs/ 原图：那边显示 100px，
+      96px 的小图会糊。 */
+export function artifactSetIcon (setId: number | null | undefined): string | null {
+  return setId == null ? null : `assets/meta-gs/artifact/thumbs/${setId}/1.webp`
+}
+
 /** 一件圣遗物的**套装身份** = enka 的 setId（千岩 15017）。
  *
  *  为什么不是 enka 玩家接口给的 `setHash`：那个 `setNameTextMapHash`（千岩 1337665995）
@@ -200,7 +218,8 @@ export function artifactOf (pos: number, marked: MarkedArtifact | undefined, art
   if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
 
   // 套装名只认 setId→官方名，绝不退回 miao 显示名：官方真缺名（本地 vendor/i18n 落后游戏版本）就显示「未知套装」。
-  // 图标目录按官方中文名排（assets/meta-gs/artifact/imgs/<套装名>/<部位>.webp）。
+  // 明细页部位原图的目录按官方中文名摆（imgs/<套装名>/<部位>.webp，上游原样复制）；
+  // 套装代表图不走这里，它按 setId 排，见 artifactSetIcon。
   const setId = setIdOf(artifact)
   const setNameZh = (setId === null ? null : i18n.setName(setId, 'zh')) || ''
   /* 初始副词条条数：3 = 初始三词条、4 = 初始四词条（见 Artifact.quality）。

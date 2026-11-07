@@ -145,10 +145,12 @@ let chsView = null
     ok(diluc.artifacts.every((a: any) => a.posName), '每个位置都有部位名')
     ok(diluc.panel.length > 0, `面板属性 ${diluc.panel.length} 项`)
     ok(diluc.sets.length > 0, `套装 ${diluc.sets.map((s: any) => s.name + '×' + s.count).join(' ')}`)
-    /* 套装视图拿「花」（部位 1）那张部位图当整套的代表图，2+2 时两张各裁一半拼。
-       钉死在 /1.webp：哪天改成别的部位，卡片上认套的线索就断了 */
-    ok(diluc.sets.every((s: any) => /^assets\/meta-gs\/artifact\/imgs\/[^/]+\/1\.webp$/.test(s.icon || '')),
-      '每个套装都带花的部位图', JSON.stringify(diluc.sets.map((s: any) => s.icon)))
+    /* 套装代表图是预处理件 thumbs/<setId>/1.webp（1 号位花图裁边缩到 96px），不是原图。
+       钉死路径形状：目录必须是数字 setId（不随官方译名变）、文件必须是 1.webp；
+       卡片、筛选框、刷取建议三处都靠这个字段，写成 imgs/ 原图就白下十倍像素。
+       同目录 2~5.webp 是建议面板的部位小图，advice.js 把 1.webp 末段换成部位号来推。 */
+    ok(diluc.sets.every((s: any) => /^assets\/meta-gs\/artifact\/thumbs\/\d+\/1\.webp$/.test(s.icon || '')),
+      '每个套装都带预处理代表图', JSON.stringify(diluc.sets.map((s: any) => s.icon)))
     const withSubs = diluc.artifacts.filter((a: any) => !a.empty && a.subs.length)
     ok(withSubs.length > 0, '圣遗物带副词条')
     ok(withSubs.every((a: any) => a.subs.every((s: any) => s.upNum >= 1)),

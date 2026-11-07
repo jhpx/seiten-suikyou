@@ -18,7 +18,7 @@ import { fmtTime } from '../../common/util.ts'
 /* 显示口径 + 圣遗物卡片：叶子模块，单向引用，不成环 */
 import {
   statLabel, pctText, attrValueText, KEY_TITLE,
-  artifactOf, artifactIcon, assetSeg, shortLabel, setIdOf
+  artifactOf, artifactSetIcon, assetSeg, shortLabel, setIdOf
 } from '../artifact.service.ts'
 import type { AttrRow, CharacterDto, MarkDetail } from '../dto/character.dto.ts'
 
@@ -179,7 +179,8 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
         nameZh,
         setId,
         count,
-        icon: artifactIcon(nameZh, 1)
+        /* 图标目录按 setId 摆（稳定数字身份），不按中文名 —— 见 artifactSetIcon 的注释 */
+        icon: artifactSetIcon(setId)
       }
     })
     /* 件数多的在前，同数按名字排 —— 固定顺序，别让它在两次请求之间抖 */
