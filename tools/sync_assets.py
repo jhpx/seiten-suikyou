@@ -35,8 +35,14 @@ web/assets/ 里已有的其他图原样保留（复制不是清空）。
 数字身份不随官方译名变；imgs/ 那层仍是上游给的中文目录名，两层不同是有意的。
 卡片 / 筛选框 / 刷取建议的套装图标用 1.webp，建议面板那排部位小图用 1~5.webp；
 **明细页仍走 imgs/ 原图**（那里显示 100px，小图会糊）。
-生成入口是 tools/gen_flower.py —— 同步完发现新套装就跑一次补图；
-`python tools/sync.py --check` 会报缺图。
+**武器小图同理**：`weapon/thumbs/<itemId>.webp` 是把上游
+`weapon/<类型>/<中文名>/icon.webp`（256px）等比缩到 96px 的预处理件。武器原图几乎满格，
+所以只缩不裁；按 miao 五份 data.json 的 itemId 命名、不分类型目录、不用中文名 —
+id 全局唯一，也不会随译名变。首页卡片 28×38px、模拟器 40px 用 thumb；
+**明细页那张 100px 武器卡仍走原图**。同理放在独立 thumbs/ 目录、本脚本不生成。
+
+两类小图的生成入口都是 tools/gen_flower.py —— 同步完发现新套装 / 新武器就跑一次补图；
+`python tools/sync.py --check` 会分别报两类缺图。
 """
 import argparse
 import json

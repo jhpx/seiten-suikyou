@@ -19,6 +19,7 @@ import { ArtifactSet } from '../src/index.ts'
 import * as repo from '../src/config/store.ts'
 import { character as characterT, fetchLog as fetchLogT } from '../src/config/schema.ts'
 import { ingestPayload } from '../src/gateway/enka/enka.service.ts'
+import { simCatalog } from '../src/gateway/miao/simulate.ts'
 import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/advice.ts'
 import type { EnkaPayload } from '../src/gateway/enka/enka.dto.ts'
 
@@ -156,6 +157,13 @@ let chsView = null
     ok(withSubs.every((a: any) => a.subs.every((s: any) => s.upNum >= 1)),
       '副词条都带强化次数（内核靠重复次数算的，不能丢）')
     ok(!!diluc.weapon.name, `武器名 ${diluc.weapon.name}`)
+    /* 武器两张图按显示尺寸分开：icon 是上游 256px 原图（明细页 100px 武器卡），
+       thumb 是 96px 预处理件（首页卡片 / 模拟器小格）。钉死两者形状，
+       别让首页又去下 256px 原图；thumb 用 itemId 命名、不分武器类型。 */
+    ok(/^assets\/meta-gs\/weapon\/[^/]+\/[^/]+\/icon\.webp$/.test(diluc.weapon.icon || ''),
+      '武器 icon 是上游原图', String(diluc.weapon.icon))
+    ok(/^assets\/meta-gs\/weapon\/thumbs\/\d+\.webp$/.test(diluc.weapon.thumb || ''),
+      '武器 thumb 是按 itemId 命名的预处理件', String(diluc.weapon.thumb))
   }
 
   /* 全局刷圣遗物建议：铺在整包视图里（不让前端多打一次请求）。
@@ -947,6 +955,15 @@ console.log('\n=== 13. 模拟比对目录 ===')
     '1★/2★ 没有副属性（sub 是 null）')
   ok(cat.weapons.every((w: any) => !w.sub || /[%\d]/.test(w.sub.values['90'])), '副属性带单位或数值')
   ok(cat.weapons.every((w: any) => w.star >= 1), '每把武器都有星级（下拉要标 3★/4★/5★）')
+  /* 下拉框不能有「看不出差别」的重复项：上游给「一心传」名刀留了 11419/11420/11421
+     三个剧情阶段的 id，除 id 外全同。夹具里只有弓 / 大剑 / 法器三个角色，而目录按武器
+     类型过滤，所以直接问单手剑那份目录；再顺手钉住接口给出的目录也没重复。 */
+  {
+    const yi = simCatalog('sword').weapons.filter(w => w.name.includes('一心传'))
+    eq(yi.map(w => Number(w.itemId)), [11419], '剧情刀的三个 id 在目录里只留一条')
+    eq(cat.weapons.length, new Set(cat.weapons.map((w: any) => JSON.stringify({ ...w, itemId: 0 }))).size,
+      '接口返回的目录里没有「除 itemId 外完全相同」的两把武器')
+  }
   {
     /* 阿莫斯之弓是迪卢克拿不了的（弓 vs 双手剑）—— 拿目录里真有的那把验数值 */
     const w = cat.weapons.find((x: any) => x.star === 5)

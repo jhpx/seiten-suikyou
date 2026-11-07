@@ -268,6 +268,18 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
   const wName = (ch.weapon.equipped ? i18n.weaponName(ch.weapon.itemId, loc) : null) ||
     profile.weapon.name || ''
 
+  /* 武器图分两个尺寸：icon 是上游原图，留给明细页那张 100px 的武器卡
+     （点进去才加载，不占首屏）；thumb 是缩到 96px 的本地预处理件，
+     首页卡片 28×38px、模拟器 40px 用它 —— 原图 256px 白下十倍像素。
+     小图按 enka 武器 id 命名、不按类型分目录：id 全局唯一，也不绑中文译名。
+     认不出这把武器时两边都退回通用类型图，别让首页变空。 */
+  const wIcon = wObj
+    ? `assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
+    : (ch.weapon.equipped ? `assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null)
+  const wThumb = wObj && ch.weapon.itemId
+    ? `assets/meta-gs/weapon/thumbs/${ch.weapon.itemId}.webp`
+    : wIcon
+
   const imgs = charImgs(char)
   const elem = profile.elem || char.elem || ''
 
@@ -299,9 +311,8 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
       affix: profile.weapon.affix,
       promote: profile.weapon.promote,
       star: wObj?.star ?? 0,
-      icon: wObj
-        ? `assets/meta-gs/weapon/${assetSeg(wObj.type)}/${assetSeg(wObj.name)}/icon.webp`
-        : (ch.weapon.equipped ? `assets/common/item/atk-${char.weaponType || 'sword'}.webp` : null),
+      icon: wIcon,
+      thumb: wThumb,
       attrs: weaponAttrs,
       desc: weaponDesc
     },

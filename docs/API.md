@@ -273,7 +273,8 @@
 | `elem` / `elemText` / `elemBg` / `elemIcon` | 元素 key / 元素名 / 元素底图 / 元素图标（响应里的相对路径 `assets/...`） |
 | `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`） |
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
-| `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |
+| `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon, thumb(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |
+| `weapon.icon` / `weapon.thumb` | 两张图按显示尺寸分：`icon` 是上游原图 `assets/meta-gs/weapon/<类型>/<中文名>/icon.webp`（256px），只给**明细页那张 100px 武器卡**用；`thumb` 是 `assets/meta-gs/weapon/thumbs/<itemId>.webp`（缩到 96px、不裁边，武器原图几乎满格），给**首页卡片 28×38px 和模拟器 40px 小格**用。目录按 itemId 命名，不分武器类型、不用中文名，id 不会重复也不会随译名变。本地预处理件，生成入口 `tools/gen_flower.py`；未装备或查不到武器时两者都是 `null`（前端回退到通用类型图） |
 | `weapon.attrs` | `[{ key, label, value }]`：`key` 是标准词条 key（`atkBase` / `atk` / `hp` / `mastery` / `cpct` / `cdmg` / `recharge` …），`label` 是已本地化的官方名（基础攻击力 / 攻击力 / 生命值…），`value` 是显示串（`608` / `49.6%`） |
 | `score` | `{ mark:'204.8', markValue:204.81, markClass:'SS', classTitle, rubricLabel, isDefaultWeight, isCustomWeight }`。`mark` 是分数文本（可直接显示）、`markClass` 是档位；`classTitle` 是 miao 的中文原文（`芙宁娜-通用`，诊断/对拍用），**页面显示用 `rubricLabel`**（同一件事的当前语言版本，如 `Furina-General`） |
 | `sets` | 圣遗物套装汇总（`[{ setId, name, nameZh, count, icon }]`）。按 `setId` 归属统计，同一套不会裂成两组；**单件也收**（`count: 1`，接口给全量件数，由客户端决定显示哪些），客户端只认 `count >= 2` —— 1 件不激活套装效果，算不上「穿这套」，卡片不列、也不显示图标。`icon` 是**套装代表图**：1 号位（花）裁掉透明边、缩到 96px 的 `1.webp`，放在 `assets/meta-gs/artifact/thumbs/<setId>/`（本地预处理件，不是上游素材）。目录名用 `setId` 而非中文套装名：数字身份不随官方译名变，也和前端筛选／排序用的套装身份一致；`imgs/` 那层是上游原样复制，仍按中文套装名摆。`artifacts[].icon` 才是 `imgs/<套装名>/` 下的 1~5 号部位原图（明细页显示 100px，用原图）。刷取建议里那排 18px 的部位小图不另给字段：前端把 `icon` 的末段换成 `<部位号>.webp`，就能拿到同一 `thumbs/<setId>/` 目录下的预处理件（花就是 1 号，换出来还是自己） |

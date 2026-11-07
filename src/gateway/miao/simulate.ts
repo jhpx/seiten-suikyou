@@ -341,7 +341,21 @@ export function simCatalog (weaponType: string): { weapons: SimWeaponOption[]; s
   })
   weapons.sort((a, b) => b.star - a.star || a.itemId - b.itemId)
 
+  /* 下拉框里不该出现「看不出差别」的重复项。上游给「一心传」名刀留了 11419/11420/11421
+     三个剧情阶段的 id：名字、星级、精炼简介、各档属性完全一样，只有 id 不同，列出来就是
+     三个分不出来的同名选项，选哪个算出来也一样。判据用「除 itemId 外全同」—— 只在真的
+     一模一样时才合并，留排在最前那条（id 最小）；将来上游若给三个阶段配了不同数值，
+     它们就自动全留下，不会误删。这三个 id 是剧情道具，不进背包，真实账号装备不到。 */
+  const seen = new Set<string>()
+  const uniqueWeapons = weapons.filter(w => {
+    const { itemId: _itemId, ...visible } = w
+    const key = JSON.stringify(visible)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   const sets: SimSetOption[] = []
   Meta.forEach('gs', 'artiSet', (ds: any) => { sets.push({ set: ds.name, positions: setPositionsOf(ds.name) }) })
-  return { weapons, sets }
+  return { weapons: uniqueWeapons, sets }
 }

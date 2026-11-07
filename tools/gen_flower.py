@@ -1,31 +1,29 @@
 #!/usr/bin/env python3
-"""给每套圣遗物生成 1~5.webp 五张缩略图（裁掉透明边 + 缩到 96px）。
+"""生成首页用的两类缩略图：圣遗物部位小图 + 武器小图（都缩到 96px 的 webp）。
 
-产物落在 web/assets/meta-gs/artifact/thumbs/<setId>/ 下，
-和上游原图 imgs/ **分开**：imgs/ 是 tools/sync_assets.py 从 miao 全量复制的原样素材，
-一个字节不改；thumbs/ 是本地加工件，上游根本没有。混在一起就分不清哪些是同步来的。
+产物是**本地加工件**，落在 web/assets/meta-gs/ 下各自的 thumbs/ 目录里，
+和上游原图分开：原图是 tools/sync_assets.py 从 miao 全量复制的，一个字节不改；
+混在一起就分不清哪些是同步来的。
 
-目录名为什么是 setId
---------------------
-imgs/ 的目录名是上游给的**中文套装名**，但 thumbs/ 是我们自己的产物，用 enka 的
-setId（游戏内稳定数字身份）当目录名更稳：中文名来自文案表，官方改一次译名、
-或某些套装查不到名字，按中文拼的路径就 404 没图。setId 也是前端筛选／排序、
-前端 core.js 认套装身份时用的同一个 id。映射从 vendor/i18n/ 的
-locs.json（zh-cn）+ relics.json（Sets[sid].Name 是文案 hash）现算，不另维护一份表。
-⚠️ 所以 imgs/ 中文、thumbs/ 数字，两层命名不同是有意的，别又统一回去。
+圣遗物：artifact/thumbs/<setId>/1~5.webp
+----------------------------------------
+上游 imgs/ 按中文套装名摆，我们的产物用 enka 的 setId 当目录名：中文名来自文案表，
+官方改译名或某些套装查不到名字，按中文拼的路径就 404。setId 也是前端筛选／排序
+认套装身份用的同一个 id。映射从 vendor/i18n/ 的 locs.json + relics.json 现算。
+花就是 1 号位，直接拿 1.webp 当整套代表图，1~5.webp 供建议面板画五个部位。
+上游部位图 150~380px 且透明留白不统一（老素材主体 92~95%，新素材 73~87%），
+所以这里**裁掉透明边再缩**，让一排图标主体大小一致。
 
-为什么要有这些图
-----------------
-卡片（19px）、筛选框（18px）、刷取建议的套装图标（40px 里显示 31px）都用 1.webp
-—— 花就是 1 号位，直接拿它当整套的代表图。
-刷取建议里那排部位小图（18px，窄档 14px）用 1~5.webp。
-上游的部位图有 150~380px 且四周透明留白不统一：老素材主体占 92~95%，
-新素材只有 73~87%。直接给原图既白下十倍像素，又让一排图标看着参差。
-这里把「裁边 + 缩小」提前做好，前端只管摆放，不用再拿 canvas 现算放大系数。
-前端 advice.js 把 1.webp 的末段换成部位号推 2~5，pos=1 时换出来还是自己。
+武器：weapon/thumbs/<itemId>.webp
+---------------------------------
+上游是 weapon/<类型>/<中文名>/icon.webp，首页卡片只有 28×38px。小图按 miao 五个
+data.json 里的武器 id 命名，**不按类型分目录** —— id 全局唯一，路径也不绑中文译名。
+实测 257 张原图主体最长边占画布中位 98%（最小 77%），所以**只缩不裁**：
+裁边等于白放大构图、体积反而多 3%。映射直接读 vendor/miao/resources/meta-gs/weapon/
+的 5 份 data.json，和后端 MiaoWeapon.get(itemId) 用的是同一套 id。
 
-⚠️ 明细页的 artifacts[].icon 仍走 imgs/ 下的原图：那里显示 100px（高分屏 300px），
-   96px 的小图会糊。本脚本只管首页 / 筛选框 / 刷取建议这类小尺寸场景。
+⚠️ 明细页仍走上游原图（圣遗物 imgs/、武器 icon.webp）：那里显示 100px，
+   96px 的小图会糊；而且明细页点进去才加载，不占首屏。
 
 为什么用无头浏览器
 ------------------
@@ -36,12 +34,12 @@ locs.json（zh-cn）+ relics.json（Sets[sid].Name 是文案 hash）现算，不
 
 用法
 ----
-    python tools/gen_flower.py            # 只补缺图（1~5.webp 都查）
+    python tools/gen_flower.py            # 只补缺图（两类都查）
     python tools/gen_flower.py --force    # 全部重生成（换尺寸 / 换画质时用）
     python tools/gen_flower.py --edge 128 # 改边长（默认 96）
 
-上游新增了套装？先 python tools/sync.py assets 把 1~5.webp 拷过来，再跑本脚本补图；
-`python tools/sync.py --check` 会报出 imgs/ 里有原图、thumbs/ 里却缺缩略图的套装。
+上游新增素材？先 python tools/sync.py assets 把原图拷过来，再跑本脚本补图；
+`python tools/sync.py --check` 会报出缺哪些缩略图。
 """
 from __future__ import annotations
 
@@ -59,6 +57,9 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parent.parent
 IMGS = ROOT / "web" / "assets" / "meta-gs" / "artifact" / "imgs"
 THUMBS = ROOT / "web" / "assets" / "meta-gs" / "artifact" / "thumbs"
+WEAPON_META = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "weapon"
+WEAPON_IMGS = ROOT / "web" / "assets" / "meta-gs" / "weapon"
+WEAPON_THUMBS = WEAPON_IMGS / "thumbs"
 CHROME = ROOT / ".tmp" / "chs" / "chrome-headless-shell-win64" / "chrome-headless-shell.exe"
 
 # 页面里的 JS 用的是 {{EDGE}} / {{ITEMS}} 两个占位符，别用 f-string —— JS 里全是花括号
@@ -68,26 +69,30 @@ const ITEMS = {{ITEMS}}, EDGE = {{EDGE}}, Q = 0.82;
 const out = {};
 let done = 0;
 function finish () { document.getElementById('out').textContent = JSON.stringify(out); document.title = 'done'; }
-/* key 是「setId/输出文件名」，一套来 5 条（1~5） */
-ITEMS.forEach(([key, u]) => {
+/* key 是产物相对路径：圣遗物「<setId>/<部位>.webp」、武器「weapon/<itemId>.webp」；
+   trim 决定要不要先裁透明边 —— 圣遗物留白不统一要裁，武器原图几乎满格不用裁 */
+ITEMS.forEach(([key, u, trim]) => {
   const im = new Image();
   im.onload = () => {
     try {
       const W = im.naturalWidth, H = im.naturalHeight;
-      /* 先等比缩到 64 宽扫一遍 alpha，16 是「肉眼看不见」那档透明度 */
-      const w = 64, h = Math.max(8, Math.round(64 * H / W));
-      const c0 = document.createElement('canvas'); c0.width = w; c0.height = h;
-      const g0 = c0.getContext('2d', { willReadFrequently: true });
-      g0.drawImage(im, 0, 0, w, h);
-      const d = g0.getImageData(0, 0, w, h).data;
-      let l = w, r = -1, t = h, b = -1;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        if (d[(y * w + x) * 4 + 3] > 16) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; }
+      let sx = 0, sy = 0, sw = W, sh = H;
+      if (trim) {
+        /* 先等比缩到 64 宽扫一遍 alpha，16 是「肉眼看不见」那档透明度 */
+        const w = 64, h = Math.max(8, Math.round(64 * H / W));
+        const c0 = document.createElement('canvas'); c0.width = w; c0.height = h;
+        const g0 = c0.getContext('2d', { willReadFrequently: true });
+        g0.drawImage(im, 0, 0, w, h);
+        const d = g0.getImageData(0, 0, w, h).data;
+        let l = w, r = -1, t = h, b = -1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          if (d[(y * w + x) * 4 + 3] > 16) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; }
+        }
+        if (r < 0) throw new Error('整张全透明');
+        /* 缩略图坐标映射回原图，裁出内容框 */
+        sx = l / w * W; sy = t / h * H;
+        sw = (r - l + 1) / w * W; sh = (b - t + 1) / h * H;
       }
-      if (r < 0) throw new Error('整张全透明');
-      /* 缩略图坐标映射回原图，裁出内容框再等比缩到最长边 EDGE */
-      const sx = l / w * W, sy = t / h * H;
-      const sw = (r - l + 1) / w * W, sh = (b - t + 1) / h * H;
       const k = EDGE / Math.max(sw, sh);
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(sw * k)); c.height = Math.max(1, Math.round(sh * k));
@@ -99,7 +104,7 @@ ITEMS.forEach(([key, u]) => {
   im.onerror = () => { out[key] = 'ERR load'; if (++done === ITEMS.length) finish(); };
   im.src = u;
 });
-setTimeout(() => { if (document.title !== 'done') finish(); }, 45000);
+setTimeout(() => { if (document.title !== 'done') finish(); }, 120000);
 </script></body></html>'''
 
 
@@ -121,6 +126,26 @@ def set_ids() -> dict[str, str]:
         if text and text not in m:
             m[text] = str(sid)
     return m
+
+
+def weapon_ids() -> list[tuple[str, str, str]]:
+    """miao 五份 weapon/<类型>/data.json 的武器清单：[(itemId, 类型, 中文名)]。
+
+    这些 id 就是后端 MiaoWeapon.get(itemId) 认的那一套，小图文件名也用它，
+    一处映射两处用。data.json 形如 {"11101": {"id":11101,"name":"无锋剑","star":1}}。
+    ⚠️ 同名多 id 是上游事实：「一心传」名刀有 11419/11420/11421 三个 id 共用一张原图，
+       会产出三张内容相同的小图 —— 不同武器实体，不是「一张图起了两个名字」那种重复。
+    """
+    if not WEAPON_META.is_dir():
+        return []
+    rows: list[tuple[str, str, str]] = []
+    for tdir in sorted(p for p in WEAPON_META.iterdir() if p.is_dir()):
+        f = tdir / "data.json"
+        if not f.is_file():
+            continue
+        for iid, row in json.loads(f.read_text(encoding="utf-8")).items():
+            rows.append((str(iid), tdir.name, row["name"]))
+    return rows
 
 
 def serve_once(html: str) -> tuple[int, threading.Thread, http.server.ThreadingHTTPServer]:
@@ -155,7 +180,7 @@ def serve_once(html: str) -> tuple[int, threading.Thread, http.server.ThreadingH
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="生成圣遗物缩略图 thumbs/<setId>/1~5.webp（裁边 + 缩到 96px）")
+    ap = argparse.ArgumentParser(description="生成圣遗物 / 武器缩略图（缩到 96px 的 webp）")
     ap.add_argument("--force", action="store_true", help="已有的也重新生成")
     ap.add_argument("--edge", type=int, default=96, help="最长边像素（默认 96）")
     args = ap.parse_args()
@@ -166,11 +191,14 @@ def main() -> int:
     if not IMGS.is_dir():
         print(f"找不到素材目录：{IMGS}", file=sys.stderr)
         return 1
+    if not WEAPON_META.is_dir():
+        print(f"找不到 miao 武器元数据：{WEAPON_META}\n先跑 python tools/sync.py miao", file=sys.stderr)
+        return 1
 
-    # 一套五个文件 1~5.webp；1 号（花）同时当套装代表图。
-    # 源图在 imgs/<中文套装名>/ 下（上游原名，只读），产物写到 thumbs/<setId>/ 下。
+    # 一条 todo = (产物相对路径, 源图 URL, 要不要裁透明边)。
+    # 圣遗物一套五个文件 1~5.webp（1 号花同时当代表图），源图在 imgs/<中文套装名>/ 下。
     ids = set_ids()
-    todo = []
+    todo: list[tuple[str, str, int]] = []
     for set_dir in sorted(p.parent for p in IMGS.glob("*/1.webp")):
         name = set_dir.name
         sid = ids.get(name)
@@ -184,9 +212,17 @@ def main() -> int:
                 continue                      # 上游这套本来就缺这个部位，别凭空造
             if args.force or not (THUMBS / sid / out_name).exists():
                 url = "/web/assets/meta-gs/artifact/imgs/" + quote(name) + f"/{pos}.webp"
-                todo.append((sid + "/" + out_name, url))
+                todo.append((sid + "/" + out_name, url, 1))
+    # 武器：按 itemId 命名、不按类型分目录；原图几乎满格，只缩不裁。
+    for iid, wtype, wname in weapon_ids():
+        if not (WEAPON_IMGS / wtype / wname / "icon.webp").exists():
+            continue                          # 这个 id 上游没给原图，别凭空造
+        out_name = iid + ".webp"
+        if args.force or not (WEAPON_THUMBS / out_name).exists():
+            url = "/web/assets/meta-gs/weapon/" + quote(wtype) + "/" + quote(wname) + "/icon.webp"
+            todo.append(("weapon/" + out_name, url, 0))
     if not todo:
-        print("thumbs/<setId>/ 里的 1~5.webp 全都有，没活干（要重生成加 --force）")
+        print("artifact/thumbs 和 weapon/thumbs 都齐了，没活干（要重生成加 --force）")
         return 0
 
     html = PAGE.replace("{{ITEMS}}", json.dumps(todo, ensure_ascii=False)).replace("{{EDGE}}", str(args.edge))
@@ -194,9 +230,9 @@ def main() -> int:
     try:
         out = subprocess.run(
             [str(CHROME), "--headless", "--disable-gpu", "--no-sandbox", "--no-proxy-server",
-             "--virtual-time-budget=60000", "--dump-dom",
+             "--virtual-time-budget=180000", "--dump-dom",
              f"http://127.0.0.1:{port}/__gen_flower.html"],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=400,
         ).stdout
     finally:
         srv.shutdown()
@@ -216,10 +252,13 @@ def main() -> int:
             bad += 1
             continue
         raw = base64.b64decode(v.split(",", 1)[1])
-        sid, out_name = key.split("/", 1)
-        out_dir = THUMBS / sid
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / out_name).write_bytes(raw)
+        if key.startswith("weapon/"):
+            out_file = WEAPON_THUMBS / key[len("weapon/"):]
+        else:
+            sid, out_name = key.split("/", 1)
+            out_file = THUMBS / sid / out_name
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_bytes(raw)
         total += len(raw)
         ok += 1
     print(f"生成 {ok} 张，共 {total / 1024:.1f} KB（平均 {total / max(ok, 1) / 1024:.2f} KB）"

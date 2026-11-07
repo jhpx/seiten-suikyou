@@ -63,7 +63,10 @@ export interface CharacterDto {
     affix: number | null
     promote: number | null
     star: number
+    /** 明细页 100px 武器卡用的上游原图 */
     icon: string | null
+    /** 首页卡片 / 模拟器 40px 小格用的 96px 预处理件 */
+    thumb: string | null
     attrs: Array<{ key: string; label: string; value: string }>
     desc: string
   }

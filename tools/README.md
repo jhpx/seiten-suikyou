@@ -25,13 +25,15 @@
 
 | 文件 | 一行简介 | 怎么跑 |
 |---|---|---|
-| `gen_flower.py` | 每套生成 5 张缩略图 `1~5.webp`（裁边后缩到 96px）：`1.webp` 兼作卡片 / 筛选框 / 建议面板的套装图标，5 张一起供建议面板画部位小图 | `python tools/gen_flower.py` 补缺图；`--force` 全部重生成；`--edge` 改边长 |
+| `gen_flower.py` | 一次产出两类小图（都缩到 96px）：圣遗物 `artifact/thumbs/<setId>/1~5.webp`（**裁边**，`1.webp` 兼作套装代表图）、武器 `weapon/thumbs/<itemId>.webp`（**只缩不裁**，武器原图几乎满格） | `python tools/gen_flower.py` 补缺图；`--force` 全部重生成；`--edge` 改边长 |
 
-上游新增套装时先 `python tools/sync.py assets`，再跑一次它补图；`npm run sync:check` 会报缺图。
-产物落在前端子仓库 `web/assets/meta-gs/artifact/thumbs/<setId>/` —— **独立目录，不混进 `imgs/`**；
-目录名是 enka 的 setId（脚本从 `vendor/i18n/` 现算中文名 → id），不是中文套装名，
-所以 `imgs/` 中文、`thumbs/` 数字，两层不同是有意的。`imgs/` 下的原图留给明细页
-（那里显示 100px，96px 小图会糊）。
+上游新增套装 / 武器时先 `python tools/sync.py assets`，再跑一次它补图；`npm run sync:check` 会分别报两类缺图。
+产物都在前端子仓库的**独立 `thumbs/` 目录**里，不混进上游原图目录（后者全量复制、一字节不改）。
+目录名一律用数字 id：圣遗物是 enka 的 setId（脚本从 `vendor/i18n/` 现算中文名 → id），
+武器是 miao 五份 `data.json` 的 itemId、不分类型目录 —— id 唯一，也不随官方译名变。
+原图目录仍按上游的中文名摆，两层命名不同是有意的。
+`imgs/` 圣遗物原图（明细页 100px）、`weapon/<类型>/<中文名>/icon.webp` 武器原图（明细页 100px 武器卡）
+都留给明细页，96px 小图在那儿会糊。
 `thumbs/` 随子仓库提交（母仓库只更新子模块指针）。
 
 ## 验收（改完前端 / 文档后自查）

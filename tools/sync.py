@@ -235,24 +235,22 @@ def do_check() -> int:
     print(f"  {'vendor/i18n/':34} {'名字数据（enka 原样）':26} "
           f"{'存在' if has_i18n else RED + '不存在' + RESET}")
 
-    # thumbs/ 里整套都是**本地预处理件**，上游目录比对根本看不见，得单独查漏。
-    # 一套五个文件 1~5.webp：1 号（花）同时当套装代表图。
-    # 目录名是 enka setId，不是 imgs/ 的中文套装名 —— 要一份中文名 → setId 的映射。
-    # 上游新增套装、或补齐了某个部位的原图，不跑生成脚本，页面上那格就是破图。
+    # 两类缩略图都是**本地预处理件**，上游目录比对根本看不见，得单独查漏。
+    # 映射规则只在 gen_flower.py 里写一份（set_ids / weapon_ids），这里加载来用，免得两处漂移。
+    # 那个脚本模块级只有常量和函数定义，exec 一下没有副作用。
+    spec = importlib.util.spec_from_file_location("gen_thumbs_check", TOOLS / "gen_flower.py")
+    if spec is None or spec.loader is None:
+        raise ImportError("无法加载 tools/gen_flower.py 的 set_ids() / weapon_ids()")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # 圣遗物：一套五个文件 1~5.webp，1 号（花）同时当套装代表图；目录名是 enka setId。
     # ⚠️ 只查「有 1.webp」的那 59 套：祭冰/祭水/祭火/祭雷之人只有一顶冠（单件散件套），
     #    页面按 count >= 2 过滤，根本不显示，不需要代表图。
     imgs = ROOT / "web/assets/meta-gs/artifact/imgs"
     thumbs = ROOT / "web/assets/meta-gs/artifact/thumbs"
     if imgs.is_dir() and has_i18n:
-        # 映射规则只在 gen_flower.py 的 set_ids() 里写一份，这里加载它来用，免得两处漂移。
-        # 那个脚本模块级只有常量和函数定义，exec 一下没有副作用。
-        spec = importlib.util.spec_from_file_location("gen_flower_ids", TOOLS / "gen_flower.py")
-        if spec is None or spec.loader is None:
-            raise ImportError("无法加载 tools/gen_flower.py 的 set_ids()")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
         ids: dict[str, str] = mod.set_ids()
-
         sets = sorted(p.parent for p in imgs.glob("*/1.webp"))
         wanted = [f"{n}.webp" for n in range(1, 6)]
         miss_files = 0
@@ -278,6 +276,18 @@ def do_check() -> int:
         if miss_sets:
             preview = "、".join(miss_sets[:8]) + ("…" if len(miss_sets) > 8 else "")
             print(f"{DIM}    缺图：{preview}{RESET}")
+            print(f"{DIM}    补图：python tools/gen_flower.py{RESET}")
+
+    # 武器：按 miao 五份 data.json 的 itemId 逐个查，不按类型分目录、也不查中文名。
+    weapon_thumbs = ROOT / "web/assets/meta-gs/weapon/thumbs"
+    wids = mod.weapon_ids()
+    if wids:
+        miss = [iid for iid, _, _ in wids if not (weapon_thumbs / f"{iid}.webp").exists()]
+        flag = f"{YELLOW}缺 {len(miss)} 张{RESET}" if miss else f"{GREEN}齐全{RESET}"
+        print(f"  {'weapon/thumbs/*.webp':34} {'武器小图（本地预处理）':26} "
+              f"{len(wids)} 把 / {flag}")
+        if miss:
+            print(f"{DIM}    缺图 id：{'、'.join(miss[:8])}{'…' if len(miss) > 8 else ''}{RESET}")
             print(f"{DIM}    补图：python tools/gen_flower.py{RESET}")
 
     print()
