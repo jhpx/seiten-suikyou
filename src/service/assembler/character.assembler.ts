@@ -215,9 +215,10 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     }
   })
 
-  /* 有效 / 无效词条数：从**原始 eff** 聚合，全程全精度；舍入只在展示层（前端 detail.js 的 toFixed(1)）做。
-     按权重>0 分有效（gold+white）/ 无效（nouse），与右侧网格配色口径一致。
-     ÷0.85 只是把 miao 的「单 roll 最大值」分母换成「均值」，属于口径转换、不是舍入。 */
+  /* 有效 / 无效词条的「当量」（不是条数）：从**原始 eff** 聚合，全程全精度；舍入只在展示层
+     （前端 detail.js 的 toFixed(1)）做。按权重 > 0 分有效（网格里的金/白）/ 无效（灰色 nouse），
+     与右侧网格的配色口径一致。÷0.85 只是把 miao 的「单 roll 最大值」分母换成「均值」，
+     属于口径转换、不是舍入 —— 所以一档词条的当量落在 0.82~1.18，均值 1.0。 */
   let effValid = 0
   let effInvalid = 0
   for (const [key, rawEff] of Object.entries(effByKey)) {
@@ -325,9 +326,10 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
       rubricLabel: rubricLabel(ch.avatarId ?? 0, title, loc),
       isDefaultWeight: !!result.isDefaultWeight,
       isCustomWeight: !!result.isCustomWeight,
-      /* 有效词条数：右侧各副词条 eff（左边数值）之和，只加金色 great + 白色 useful。详见上面 effValid 计算。 */
+      /* 有效词条当量：权重 > 0 的那些副词条的 eff 之和（网格里金/白那几档）。见上面 effValid 计算。 */
       effValid,
-      /* 无效词条数：右侧各副词条 eff 之和，只加灰色 nouse（权重=0）。详见上面 effInvalid 计算。 */
+      /* 无效词条当量：权重 = 0 的那些（网格里的灰色 nouse）。
+         页面不单独显示它，只用来跟 effValid 相加得出「总词条」那个分母（前端算 有效/总）。 */
       effInvalid
     },
     charWeight: cw,
@@ -336,8 +338,9 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     attrTable: attrTableOf(profile, loc, cw, elem),
     allAttr,
     consList,
+    /* 每件的有效/总当量要按角色权重切，所以把 cw 传进去 —— 口径与上面 score.effValid 一致 */
     artifacts: [1, 2, 3, 4, 5].map(pos =>
-      artifactOf(pos, result.artis?.[pos], artifactsByPos.get(pos), loc, profile.artis?.artis?.[pos]))
+      artifactOf(pos, result.artis?.[pos], artifactsByPos.get(pos), loc, profile.artis?.artis?.[pos], cw))
   }
 }
 

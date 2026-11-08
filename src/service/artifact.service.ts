@@ -212,10 +212,12 @@ export function setIdOf (artifact: ArtifactDbo | null | undefined): number | nul
 }
 
 /** 一件圣遗物：miao 的评分结果 + 数据库对象（DBO，拿 set 身份查名字、拿 enka 的原始数值做显示）。
- *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf */
-export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: ArtifactDbo | undefined, locale: string, raw: unknown) {
+ *  raw 是内核解析出的裸数字（`profile.artis.artis[pos]`）—— 只在没有 enka 值时兜底，见 enkaNumsOf
+ *  cw 是角色的词条权重表（key → 权重），只用来判「这条词条算不算有效」：权重 > 0 即有效。
+ *     传了它就按该角色的口径算 effValid；不传（默认空表）effValid 恒为 0 —— 明细页必须传。 */
+export function artifactOf (pos: number, marked: MarkedArtifact | undefined, artifact: ArtifactDbo | undefined, locale: string, raw: unknown, cw: Record<string, number> = {}) {
   const posName = slotLabel(pos, locale)
-  if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null }
+  if (!marked || !marked.name) return { pos, posName, empty: true, initSubs: null, effValid: 0, effTotal: 0 }
 
   // 套装名只认 setId→官方名，绝不退回 miao 显示名：官方真缺名（本地 vendor/i18n 落后游戏版本）就显示「未知套装」。
   // 明细页部位原图的目录按官方中文名摆（imgs/<套装名>/<部位>.webp，上游原样复制）；
@@ -229,6 +231,18 @@ export function artifactOf (pos: number, marked: MarkedArtifact | undefined, art
   const initSubs = initRaw === 3 || initRaw === 4 ? initRaw : null
   const enka = enkaNumsOf(artifact)                 // 显示数值：优先 enka 原始 statValue，内核重算的只兜底
   const { main: rawMain, sub: rawSub } = rawNumsOf(raw)
+  /* 这一件的有效 / 总词条当量：跟 character.assembler.ts 里 score.effValid 是同一套原始 eff，
+     只是按「件」求和而不是按「角色」求和，两边加起来能对上。
+     ⚠️ 千万别改用 marked.attrs[].eff 累加：那是 miao 已 ÷0.85 又四舍五入成一位小数的
+        展示串，一件 4 条、五件 20 条加起来会漂 0.1~0.5，跟总分对不上账。 */
+  let effValid = 0
+  let effTotal = 0
+  const rawAttrs = (raw as { attrs?: Array<{ key: string; eff?: number }> } | undefined)?.attrs || []
+  for (const at of rawAttrs) {
+    const e = (at.eff || 0) / 0.85
+    effTotal += e
+    if ((cw[at.key] || 0) > 0) effValid += e
+  }
   const subs = (marked.attrs || [])
     .filter(x => x.key)
     .map(x => ({
@@ -267,6 +281,9 @@ export function artifactOf (pos: number, marked: MarkedArtifact | undefined, art
           point: statPoint(marked.main._mark)
         }
       : null,
-    subs
+    subs,
+    /* 全精度、未舍入；前端 detail.js 显示时才 toFixed(1) */
+    effValid,
+    effTotal
   }
 }
