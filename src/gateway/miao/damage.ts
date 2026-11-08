@@ -35,6 +35,24 @@ export interface MiaoDamage {
 }
 
 /**
+ * 把 profile.artis 从 Artis 实例换成「套装名 → 件数」这张表（`Artis.sets`）再喂内核。
+ *
+ * 为什么必须换：内核查 2/4 件套效果走的是 `DmgBuffs.getArtisBuffs(profile.artis)`
+ * → `ArtifactSet.eachSet(idxs)`，而 eachSet 的入参就是 `{ 套装名: 2|4 }` 这种平表
+ * （上游 `Avatar.calcDmg` 里写的也是 `artis:artis.sets`）。
+ * 直接给 Artis 实例的话，eachSet 只能遍历到实例自己的 game/artis/isProfile 三个字段，
+ * 一件套装都认不出来 —— 表现就是 buff 列表里没有套装条目，**伤害本身也少算了套装加成**
+ * （魔女4 给蒸发加 15%，实测差 4 万）。
+ *
+ * 只在伤害出口换，不动 MiaoProfile 本身：面板属性（`Attr.create`）和评分
+ * （`ArtisMark` / `profile.artis.forEach`）要的是实例，两边口径不同是有意的。
+ */
+function withArtisSets (profile: MiaoProfile): MiaoProfile {
+  const artis = (profile as any).artis
+  return { ...profile, artis: artis?.sets ?? artis }
+}
+
+/**
  * 算一个角色的全部伤害条目。角色没配 calc.js 时返回 null
  * （129 个脚本覆盖不了全部角色，部分四星与未实装角色没有）。
  *
@@ -46,7 +64,7 @@ export interface MiaoDamage {
 export async function calcDamage (profile: MiaoProfile, opts: { enemyLv?: number } = {}): Promise<MiaoDamage | null> {
   let ret: any
   try {
-    const dmg = new ProfileDmg(profile as any, 'gs')
+    const dmg = new ProfileDmg(withArtisSets(profile), 'gs')
     ret = await dmg.calcData({ enemyLv: opts.enemyLv ?? 103 })
   } catch (e) {
     console.error(`[damage] 角色 ${(profile as any).id} 伤害计算失败:`, e)

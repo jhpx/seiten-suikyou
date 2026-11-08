@@ -6,11 +6,15 @@
  * 取 1 位小数硬断言 —— 公式或数据变了必须 fail，逼人确认是上游变了还是我们搬错了。
  *
  * 四个用例各管一种形状：
- *   胡桃      常规攻击流：半血被动火伤 + 护摩生命转攻击 + 蒸发反应系数
+ *   胡桃      常规攻击流：半血被动火伤 + 护摩生命转攻击 + 蒸发反应系数 + 魔女4 的套装加成
  *   可莉      命座参数条目（cons 过滤 + params 开关）与固定值条目（basic 模式 dmg(555)）
  *   瓦列里    没配 calc.js 的角色 → null，且不许抛
  *   旅行者火  旅行者按元素分目录的 calc.js + 天赋多段值（a3 的 [低空, 高空] 对）+ 夜魂
  *   坎蒂丝    带 unit 的条目（「Q提升普攻伤害」只有 avg、单位是 '%'）
+ *
+ * ⚠️ 套装效果必须进 buff 列表 —— 曾经整块缺失（`profile.artis` 给的是 Artis 实例而不是
+ *    `artis.sets` 平表，内核一件套装都认不出来），连带伤害也少算了套装加成。
+ *    基线里的「炽烈的炎之魔女4」「绝缘之旗印4」两行就是这条的哨兵，别当成文案顺手删掉。
  */
 import { Attr, Character } from '../src/index.ts'
 import { calcDamage } from '../src/gateway/miao/damage.ts'
@@ -59,17 +63,18 @@ const num = (v: number | null) => v === null ? null : v.toFixed(1)
 console.log('=== 1. 胡桃：护摩之杖 + 炽烈的炎之魔女4（常规攻击流 + 蒸发）===')
 const hutao = await calcDamage(mkProfile('胡桃', { name: '护摩之杖', affix: 1, level: 90 }))
 eq(hutao && hutao.entries.map((e) => ({ title: e.title, dmg: num(e.dmg), avg: num(e.avg) })), [
-  { title: '半血开E重击', dmg: '129082.4', avg: '103096.6' },
-  { title: '半血开E重击蒸发', dmg: '275667.5', avg: '220172.4' },
-  { title: '半血开E后Q', dmg: '331896.3', avg: '265081.7' }
+  { title: '半血开E重击', dmg: '134057.3', avg: '107070.0' },
+  { title: '半血开E重击蒸发', dmg: '316454.8', avg: '252748.7' },
+  { title: '半血开E后Q', dmg: '344687.8', avg: '275298.1' }
 ], '三条伤害（标题 + 暴击/期望）')
 eq(hutao?.buffs, [
   '胡桃被动：半血获得33%火伤加成',
+  '炽烈的炎之魔女4：蒸发、融化伤害提高15%，1.0层额外提高7.5%火元素伤害加成，超载、燃烧、烈绽放反应造成的伤害提升40%',
   '蝶引来生：开E获得2,858.0点攻击力加成',
   '元素精通：蒸发伤害提高42.4%',
   '护摩之杖：基于生命值上限，获得6,096.7的攻击力提升',
   '护摩之杖：角色生命低于50%时额外获得7,620.9攻击力（默认仅胡桃触发）'
-], 'buff 列表（数值已内联进标题）')
+], 'buff 列表（数值已内联进标题，含魔女4 的套装加成）')
 eq(hutao?.createdBy, '喵喵', 'calc.js 署名')
 eq(hutao?.enemyName, '小宝', '默认敌人（103 级）')
 eq(hutao?.enemyLv, 103, '敌人等级')
@@ -77,14 +82,14 @@ eq(hutao?.enemyLv, 103, '敌人等级')
 console.log('\n=== 2. 可莉：四风原典 + 魔女4（命座参数条目 + 固定值条目）===')
 const klee = await calcDamage(mkProfile('可莉', { name: '四风原典', affix: 1, level: 90 }))
 eq(klee && klee.entries.map((e) => ({ title: e.title, dmg: num(e.dmg), avg: num(e.avg) })), [
-  { title: '【魔导·秘仪】「嘭嘭轰击」伤害', dmg: '43124.2', avg: '43124.2' },
-  { title: '【魔导·秘仪】「嘭嘭轰击」蒸发伤害', dmg: '92095.8', avg: '92095.8' },
-  { title: '单次轰轰火花伤害', dmg: '6360.6', avg: '6360.6' },
-  { title: '【魔导·秘仪】6命Q后「嘭嘭轰击」伤害', dmg: '43124.2', avg: '43124.2' },
-  { title: '【魔导·秘仪】6命Q后「嘭嘭轰击」蒸发伤害', dmg: '92095.8', avg: '92095.8' }
+  { title: '【魔导·秘仪】「嘭嘭轰击」伤害', dmg: '44311.6', avg: '44311.6' },
+  { title: '【魔导·秘仪】「嘭嘭轰击」蒸发伤害', dmg: '104601.6', avg: '104601.6' },
+  { title: '单次轰轰火花伤害', dmg: '6575.1', avg: '6575.1' },
+  { title: '【魔导·秘仪】6命Q后「嘭嘭轰击」伤害', dmg: '44311.6', avg: '44311.6' },
+  { title: '【魔导·秘仪】6命Q后「嘭嘭轰击」蒸发伤害', dmg: '104601.6', avg: '104601.6' }
 ], '五条伤害（cons_4/cons_6 参数条目按 params 过滤）')
 eq(klee?.createdBy, '喵喵 & 冰翼', 'calc.js 署名')
-eq(klee?.buffs?.length, 4, 'buff 条数')
+eq(klee?.buffs?.length, 5, 'buff 条数（含魔女4）')
 
 console.log('\n=== 3. 瓦列里：没有 calc.js 的角色 → null 且不抛 ===')
 const waley = await calcDamage(mkProfile('瓦列里', { name: '护摩之杖', affix: 1, level: 90 }))

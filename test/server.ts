@@ -693,7 +693,10 @@ console.log('\n=== 10. 伤害计算接口（明细页下侧的伤害表）===')
     eq(r.data.rows.map((x: any) => x.title), ['E三段伤害', 'E三段蒸发', 'Q爆发伤害', '开Q后单次重击'], '四条伤害的标题')
     /* 数值是 miao 出图口径 Format.comma(v, 0)（千分位、取整），真值由 .tmp/dmg-parity
        与原版 ProfileDmg 的对拍背书 —— 这里钉死防回归 */
-    eq(r.data.rows[0], { title: 'E三段伤害', dmg: '7,930', avg: '5,829', unit: '' }, '第一条钉真值（暴击/期望）')
+    eq(r.data.rows[0], { title: 'E三段伤害', dmg: '9,303', avg: '6,838', unit: '' }, '第一条钉真值（暴击/期望）')
+    /* 套装效果必须出现在 buff 列表里（内核靠 profile.artis 的「套装→件数」表判断，
+       给错形状就整块消失，连带伤害少算——迪卢克这套魔女4 有 22.5% 火伤） */
+    ok(r.data.buffs.some((b: any) => b.title === '炽烈的炎之魔女4'), 'buff 列表里有魔女4')
     ok(r.data.rows.every((x: any) => x.dmg === null || /^[\d,]+$/.test(x.dmg)), '暴击伤害是千分位整数串')
     ok(r.data.rows.every((x: any) => x.avg === '' || /^[\d,]+$/.test(x.avg)), '期望伤害同上')
     ok(r.data.rows.every((x: any) => typeof x.unit === 'string'), 'unit 恒为串（没有单位就是空串）')
