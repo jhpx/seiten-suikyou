@@ -93,7 +93,7 @@ miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / ima
 
 **页面接线**（2026-10-13）：`GET /api/accounts/:uid/characters/:avatarId/damage` 出视图对象
 （`character.service.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
-明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `miao.css` 的 `.dmg-cont`）。
+明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `web/css/damage.css` 的 `.dmg-cont`）。
 两个 deliberate 的偏差：表格用 **grid 而非上游的 display:table**（上游让不吃暴击的行把
 期望值单元格设 `width:200%` 冒充跨列，自动布局下会把暴击列撑到 311px、期望列压到 56px，
 「期望伤害」表头折成两行 —— 实测截图后改的）；伤害标题列允许换行（上游出图 nowrap）。
@@ -213,7 +213,7 @@ enka 原始响应
 排序跟着它走，左边的空间留给最常用的视图切换。
 
 - 视图切换：一颗循环按钮，点一下换下一个视图，只显示「当前是哪个」—— 加第三个视图也不用改版式
-- 排序：也是**弹窗**（和筛选共用 core 的壳）。按钮文案自己说清当前排成什么样：
+- 排序：也是**弹窗**（和筛选共用 `web/features/dialog.js` 的壳）。按钮文案自己说清当前排成什么样：
   单条件「排序：评价等级 ↓」（字段 + 方向），多条件「排序：条件排序」（全铺上去按钮放不下）。
   弹窗里编辑的是草稿（升降序 / 上下移 / 移除 / +），确定才写回
 - 筛选：点漏斗弹出居中大框，稀有度 / 元素 / 圣遗物套装 / 评价等级 / 评价权重五个维度都能多选 —— 维度内 OR、维度间 AND
@@ -235,7 +235,8 @@ enka 原始响应
 
 ### 明细页（评分卡）
 
-`miao.css` 是 miao 的 `resources/character/profile-detail.css` **照抄**的移植版，不是凭印象画的。
+`web/css/detail-base.css`、`score-card.css`、`item-card.css`、`damage.css` 是 miao 的
+`resources/character/profile-detail.css` **照抄**后按模块拆开的移植版，不是凭印象画的。
 
 设计前提：miao 的那张结果图是**一张固定 600 px 宽的画布**。要长得像就不能拆成流式响应式布局
 —— 这里照搬 600 px 画布，再由前端的 `detail.js`（`fitDetailZoom`）用 `zoom` 把整张画布等比缩到屏幕宽度。

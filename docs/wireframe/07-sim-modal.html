@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 07 编辑浮层</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 07</div><h1>编辑浮层</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="06-sim.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html" class="on">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="08-inventory.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">两种表单由装备卡的「编辑」打开：武器改「武器 / 等级 / 精炼」，圣遗物改「套装 / 等级 / 主词条 / 副词条」。改动先留在假设态，确认后才更新属性对照与伤害表。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame dark">
+      <div class="modal-mask">
+        <div class="row" style="justify-content:center;gap:14px;align-items:flex-start">
+          <div class="modal" style="width:245px">
+            <div class="blk-head"><span>武器编辑</span><code>3 个选择项</code></div>
+            <div class="kv"><span class="small">武器</span><span class="field" style="flex:1">武器名 5★ ▾</span></div>
+            <div class="kv"><span class="small">等级</span><span class="field" style="flex:1">Lv.90 ▾</span></div>
+            <div class="kv"><span class="small">精炼</span><span class="field" style="flex:1">精炼 1 ▾</span></div>
+            <div class="sep"></div>
+            <div class="cell dim">主副属性与精炼描述（只读）</div>
+            <div class="row" style="justify-content:flex-end;margin-top:8px"><span class="btnx">取消</span><span class="btnx primary">确定</span></div>
+          </div>
+          <div class="modal" style="width:270px">
+            <div class="blk-head"><span>圣遗物编辑</span><code>4 项 + 词条列表</code></div>
+            <div class="kv"><span class="small">套装</span><span class="field" style="flex:1">套装名 5★ ▾</span></div>
+            <div class="kv"><span class="small">等级</span><span class="field" style="flex:1">+20 ▾</span></div>
+            <div class="kv"><span class="small">主词条</span><span class="field" style="flex:1">暴击伤害 ▾</span></div>
+            <div class="sep"></div>
+            <div class="small" style="margin-bottom:5px">副词条（每行：属性 / 数值 / 删除）</div>
+            <div class="row" style="margin-bottom:4px"><span class="field" style="flex:1">暴击率 3.9</span><span class="btnx">×</span></div>
+            <div class="row" style="margin-bottom:4px"><span class="field" style="flex:1">攻击% 5.8</span><span class="btnx">×</span></div>
+            <div class="btnx" style="width:100%">+ 添加词条</div>
+            <div class="row" style="justify-content:flex-end;margin-top:8px"><span class="btnx">取消</span><span class="btnx primary">确定</span></div>
+          </div>
+        </div>
+        <div class="small" style="text-align:center;margin-top:10px">两个表单不会同时出现；浮层之上只保留一个操作焦点</div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>表单规则</h3>
+        <ul>
+          <li>全部使用原生选择控件，选项文字由业务数据提供，界面不自带一份名称表。</li>
+          <li>主词条固定的部位显示只读文本，不摆一个点了没反应的空下拉。</li>
+          <li>副词条行数有上限，不足时用空行补齐，保证各卡片对齐。</li>
+          <li>改过的装备卡要有明确标记，并能单件或整体还原。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>浮层规范</h3>
+        <p>沿用第 03 节：同一时刻一个浮层、草稿态提交、主按钮唯一且放最右。确认后只更新受影响的内容区，不整页重画。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 07 / 编辑浮层 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

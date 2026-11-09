@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 06 模拟比对页</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 06</div><h1>模拟比对页</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="05-ysin.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html" class="on">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="07-sim-modal.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">从明细页进入，返回时回到明细页。单栏：右半部已经用「旧 → 新」表达了变化，再放一份纯旧值只是重复，所以装备清单只渲染一份。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame">
+      <div class="blk">
+        <div class="blk-head"><span>操作栏</span><code>只有返回</code></div>
+        <div class="row"><span class="btnx">← 返回</span><span class="small">角色名交给下方角色头，不重复</span></div>
+      </div>
+      <div class="blk" style="background:var(--surface2)">
+        <div class="blk-head"><span>模拟卡 · 元素主题底色铺满</span><code>宽 600px</code></div>
+        <div class="sub">
+          <div class="blk-head"><span>角色头</span><code>肖像 · 名字 · 天赋</code></div>
+          <div class="row" style="gap:12px">
+            <div class="avatar lg"></div>
+            <div style="flex:1"><div style="font-size:16px;font-weight:500">角色名 <span class="small">元素</span></div><div class="small">等级 · 命座</div><div class="row" style="margin-top:4px"><span class="chip">普攻 10</span><span class="chip">战技 9</span><span class="chip">爆发 9</span></div></div>
+            <div class="small">天赋与命座标记沿用明细页</div>
+          </div>
+        </div>
+        <div class="sub">
+          <div class="blk-head"><span>属性对照</span><code>逐行 · 旧 → 新</code></div>
+          <div class="kv"><span>攻击力</span><span>2669 <b style="color:var(--blue)">→</b> 2894</span></div>
+          <div class="kv"><span>暴击率</span><span>46.6% <b style="color:var(--blue)">→</b> 52.1%</span></div>
+          <div class="kv"><span>暴击伤害</span><span>227.5% <b style="color:var(--blue)">→</b> 227.5%</span></div>
+          <div class="kv"><span>元素精通</span><span>133.6 <b style="color:var(--blue)">→</b> 153.6</span></div>
+          <div class="small" style="margin-top:4px">每行末尾还有「白字 + 绿字」拆解；没有变化的属性不画箭头。</div>
+        </div>
+        <div class="sub">
+          <div class="blk-head"><span>装备清单（纵向单列，示意按 2 列排）</span><code>武器 + 5 件</code></div>
+          <div class="grid2">
+            <div class="cell"><b>武器名</b> <span class="chip">已改动</span><div class="small">编辑 / 还原 · 主副属性</div></div>
+            <div class="cell"><b>部位一 +20</b> <span class="chip">已改动</span><div class="small">主词条 + 副词条，逐行旧 → 新</div></div>
+            <div class="cell"><b>部位二 +20</b><div class="small">套装图标 · 强化等级角标</div></div>
+            <div class="cell"><b>部位三 +20</b><div class="small">改过名的件同时显示旧名 → 新名，不能省略</div></div>
+            <div class="cell"><b>部位四 +20</b><div class="small">副词条不足 4 条时用空行补齐对齐</div></div>
+            <div class="cell dim"><b>部位五</b><div class="small">未装备位：保留空卡，写明「未装备」</div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><span class="btnx">还原全部</span><span class="small">每张卡自带「编辑」；改动过的件要有明显标记</span></div>
+        </div>
+        <div class="sub">
+          <div class="blk-head"><span>伤害对比表（跨整卡宽）</span><code>4 列</code></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:1px;background:var(--line2);font-size:12px">
+            <div class="cell head">技能</div><div class="cell head right">当前</div><div class="cell head right">调整后</div><div class="cell head right">变化</div>
+            <div class="cell">技能 · 第一段</div><div class="cell right">38,412</div><div class="cell right">43,105</div><div class="cell right green">+12.2%</div>
+            <div class="cell">技能 · 第二段</div><div class="cell right">73,205</div><div class="cell right">79,880</div><div class="cell right green">+9.1%</div>
+          </div>
+          <div class="small" style="margin-top:5px">升用红、降用绿，与明细页同一套语义色；未算完时先占位。</div>
+        </div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>版式规范</h3>
+        <ul>
+          <li>顺序固定：返回栏 → 角色头 → 属性对照 → 装备清单 → 伤害对比。</li>
+          <li>装备卡改成纵向单列并拉满栏宽，图标缩小；不要沿用首页那种 3 列小卡。</li>
+          <li>伤害对比跨整卡宽，放在两栏内容之下；列宽不随行内容变化。</li>
+          <li>旧值与新值用同一字号，靠颜色和箭头区分，不用加粗制造假重点。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>状态</h3>
+        <p>没有选中角色时整页只给一句「无数据」。伤害结果算不出来时，表格位置给一行说明，而不是留一张空表。所有改动在确认前都只是假设，随时可整体还原。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 06 / 模拟比对页 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

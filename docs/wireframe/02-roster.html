@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 02 首页 · 角色列表</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 02</div><h1>首页 · 角色列表</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="01-shell.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html" class="on">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="03-roster-states.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">信息层级：先知道「这是谁的号」，再决定「怎么找人」，然后看角色，最后才是整号结论。刷取建议放在列表之后，因为它是「翻完人再看」的内容，放上面会把首屏的角色挤走。</p>
+  <div class="switch" data-switch="roster">
+    <button class="on" data-v="weapon">武器视图（默认）</button>
+    <button data-v="artis">套装视图</button>
+  </div>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame">
+      <div class="blk">
+        <div class="blk-head"><span>账号信息区</span><code>高 64px · 左文右数</code></div>
+        <div class="row between">
+          <div><div style="font-weight:500;font-size:14px">昵称</div><div class="small">个性签名一行，可省略</div></div>
+          <div class="grid3" style="min-width:250px"><div class="cell center"><b>42</b><div class="small">角色</div></div><div class="cell center"><b>60</b><div class="small">等级</div></div><div class="cell center"><b>AR 60</b><div class="small">世界</div></div></div>
+        </div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>工具条</span><code>三段式 · 左状态右操作</code></div>
+        <div class="row between">
+          <span class="btnx solid" id="viewSwitchLabel">武器视图</span>
+          <div class="row"><span class="btnx">排序：评价等级 ▼</span><span class="btnx">筛选 ⌄ <span class="chip on">3</span></span></div>
+        </div>
+        <div class="small" style="margin-top:6px">顺序 = 使用频率：先定怎么排，再切看什么，最后收窄。左边这颗表示「当前在看什么」，右边两颗是「点开浮层去选」，性质不同，所以分边站。</div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>角色网格</span><code>3 列 · 等宽</code></div>
+        <div class="variant on" data-roster="weapon">
+          <div class="grid3">
+            <div class="mini-card"><span class="rank">S</span><span class="score">42.6</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>武器名</span><span class="small">等级 / 精炼</span></div></div>
+            <div class="mini-card"><span class="rank">A</span><span class="score">38.1</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>武器名</span><span class="small">等级 / 精炼</span></div></div>
+            <div class="mini-card"><span class="rank">SS</span><span class="score">51.2</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>武器名</span><span class="small">等级 / 精炼</span></div></div>
+          </div>
+          <div class="small" style="margin-top:6px">卡片下半块显示武器。档位角标在左上、分数在右上，两者都比角色名弱一级。</div>
+        </div>
+        <div class="variant" data-roster="artis">
+          <div class="grid3">
+            <div class="mini-card"><span class="rank">S</span><span class="score">42.6</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>套装名</span><span class="small">×4</span></div><div class="kv"><span>套装名</span><span class="small">×2</span></div></div>
+            <div class="mini-card"><span class="rank">A</span><span class="score">38.1</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>套装名</span><span class="small">×4</span></div><div class="kv"><span class="small">未成套</span><span class="small">—</span></div></div>
+            <div class="mini-card"><span class="rank">SS</span><span class="score">51.2</span><div class="face">立绘 · 元素角标 · 等级</div><div class="kv"><span>套装名</span><span class="small">×4</span></div><div class="kv"><span>套装名</span><span class="small">×2</span></div></div>
+          </div>
+          <div class="small" style="margin-top:6px">只有下半块换成套装列表。画像区、网格、工具条全共用，切换视图不重置筛选与排序。</div>
+        </div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>刷取建议</span><code>列表之后 · 可折叠</code></div>
+        <div class="row between"><b style="font-size:13px;font-weight:500">刷取建议</b><div class="row"><span class="btnx">排序字段 ▼</span><span class="btnx">含高档位</span></div></div>
+        <div class="small" style="margin:5px 0">范围说明：当前筛选后的角色，只统计可评分的角色</div>
+        <div class="sub">
+          <div class="row between"><span class="chip">1</span><span class="avatar sm"></span><span style="flex:1">套装名称</span><span class="mono">持有 6 / 拥有者 3</span><span class="cell green center" style="min-width:86px">成色条 · 6 格</span></div>
+          <div class="sep"></div>
+          <div class="row" style="gap:4px"><span class="small">逐件格：</span><span class="chip">部位一 S</span><span class="chip">部位二 A</span><span class="chip">部位三 D</span><span class="chip">部位四 <span style="color:var(--red)">缺</span></span><span class="chip">部位五 B</span></div>
+        </div>
+        <div class="sub"><div class="row between"><span class="chip">2</span><span class="avatar sm"></span><span style="flex:1">套装名称</span><span class="mono">持有 4 / 拥有者 2</span><span class="cell center" style="min-width:86px">成色条 · 4 格</span></div></div>
+        <div class="small" style="margin-top:6px">每套一张可折叠卡：收起看热度与持有量，展开看逐件成色与缺件；成色条长度等于件数。</div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>交互规则</h3>
+        <ul>
+          <li>视图切换是单颗循环按钮，只显示「当前是哪个」，点一下换下一个；不做左右分段，方便以后加第三种视图。</li>
+          <li>按钮外观按性质区分：状态按钮用实心胶囊，打开浮层的按钮用方角，一眼能分出「点了就换」和「点了要选」。</li>
+          <li>筛选 / 排序只更新角色网格那块，工具条本身保持不变，避免展开态和选中态被打断。</li>
+          <li>建议卡用原生折叠行为；缺件要显式标出，不能留空白让用户猜。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>信息层级</h3>
+        <p>角色名与分数是第一层，档位与武器/套装信息是第二层，统计数字是第三层。工具条的说明文字比按钮再弱一级，不抢首屏注意力。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 02 / 首页 · 角色列表 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

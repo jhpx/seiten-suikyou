@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 03 首页 · 浮层与状态</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 03</div><h1>首页 · 浮层与状态</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="02-roster.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html" class="on">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="04-detail.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">两类浮层共用一套规范：同一时刻只允许一个，点遮罩 / 取消 / 关闭都能退出；浮层里的选择是草稿，按「确定」才生效，否则每点一下整页都要重画。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame dark">
+      <div class="modal-mask">
+        <div class="row" style="justify-content:center;gap:16px;align-items:flex-start">
+          <div class="modal" style="width:250px">
+            <div class="blk-head"><span>排序浮层</span><code>最多 3 条件</code></div>
+            <div class="sub"><div class="kv"><span>① 评价等级</span><span class="btnx">▼ 降序</span></div><div class="kv"><span>② 角色等级</span><span class="btnx">▲ 升序</span></div><div class="kv"><span>③ 数据时间</span><span class="chip">未选</span></div></div>
+            <div class="small" style="margin:7px 0">按优先级从上到下排；全站排序只用一种三角符号，单条件时按钮才显示方向。</div>
+            <div class="row" style="justify-content:flex-end"><span class="btnx">清空</span><span class="btnx">取消</span><span class="btnx primary">确定</span></div>
+          </div>
+          <div class="modal" style="width:270px">
+            <div class="blk-head"><span>筛选浮层</span><code>多维度多选</code></div>
+            <div class="small">元素</div><div class="row" style="margin:4px 0 7px"><span class="chip on">火</span><span class="chip on">水</span><span class="chip">冰</span><span class="chip">雷</span></div>
+            <div class="small">评价等级</div><div class="row" style="margin:4px 0 7px"><span class="chip on">SS</span><span class="chip">S</span><span class="chip">A</span></div>
+            <div class="small">权重 / 套装 / 星级</div><div class="row" style="margin:4px 0 7px"><span class="chip">吃暴击</span><span class="chip">套装四件</span><span class="chip">5★</span></div>
+            <div class="row between"><span class="small">已选 3 项（同组内「或」，不同组「且」）</span><span class="btnx primary">确定</span></div>
+          </div>
+        </div>
+        <div class="small" style="text-align:center;margin-top:10px">遮罩层示意；两个浮层不会同时出现，宽度按内容自适应</div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>占位状态</span><code>4 种 · 与内容区同宽</code></div>
+        <div class="grid2">
+          <div class="ph">首屏引导<br><span class="small">还没查过账号：给一句引导，不说「没有可评分角色」</span></div>
+          <div class="ph">无可评分角色<br><span class="small">账号存在但名单为空</span></div>
+          <div class="ph">筛选无结果<br><span class="small">只替换角色网格那一块</span></div>
+          <div class="ph">读取中 / 刷新中<br><span class="small">输入不合法时直接给提示，不进入加载态</span></div>
+        </div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>输入历史</span><code>输入框下拉</code></div>
+        <div class="row"><span class="field">UID 输入框 ▾</span><span class="chip">101242308</span><span class="chip">100558216</span><span class="small">最近用过的账号，点一下直接填入</span></div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>浮层规范</h3>
+        <ul>
+          <li>结构固定：标题 / 内容 / 底部操作。主按钮只有一个，放最右；「清空」在无选中时隐藏。</li>
+          <li>已选数量用角标报个数，不在按钮上写长句，避免把图标挤变形。</li>
+          <li>筛选维度内是「或」、维度之间是「且」，这句规则要在浮层里可见。</li>
+          <li>草稿态：取消 / 关闭一律丢弃，不产生任何页面变化。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>状态与文案</h3>
+        <ul>
+          <li>成功与提示数秒后自动收起，错误常驻直到下一次操作。</li>
+          <li>失败只给用户能看懂的友好说明，不展示原始技术错误。</li>
+          <li>空状态要说清「现在是什么情况 + 下一步能做什么」。</li>
+          <li>关键信息不依赖悬停；触屏没有稳定的悬停行为。可点区域不小于 44px。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 03 / 首页 · 浮层与状态 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

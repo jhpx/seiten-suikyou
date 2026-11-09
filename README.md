@@ -84,7 +84,10 @@ seiten-suikyou/
 ├── vendor/                   # miao 内核与多语言表（sync 生成，勿手改）
 ├── tools/                    # 同步 / 测量 / 截图工具
 ├── test/                     # 测试
-├── docs/                     # 设计、接口、部署文档
+├── docs/                     # 设计、接口、部署与专题文档
+│   ├── architecture/         # 可交互架构图（html + 数据源 json）
+│   ├── reports/              # 上游同步报告
+│   └── wireframe/            # 界面原型（按分节拆分的静态页）
 └── data/                     # 本地库（gitignore）
 ```
 
@@ -100,9 +103,9 @@ seiten-suikyou/
 | 部署 | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
 | 为什么内嵌 miao 内核、页面与多语言怎么还原 | [`docs/DESIGN.md`](docs/DESIGN.md) |
 | 数据层设计 | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
-| 架构全貌（可交互） | [`docs/seiten-suikyou-architecture.html`](docs/seiten-suikyou-architecture.html) |
-| 前端架构（可交互） | [`docs/seiten-suikyou-web-architecture.html`](docs/seiten-suikyou-web-architecture.html) |
-| 同步报告 | [`docs/reports/`](docs/reports/) |
+| 界面原型：视觉与交互规范，开发按它对照 | [`docs/wireframe/index.html`](docs/wireframe/index.html) |
+| 架构全貌（可交互） | [`docs/architecture/seiten-suikyou-architecture.html`](docs/architecture/seiten-suikyou-architecture.html) |
+| 前端架构（可交互） | [`docs/architecture/seiten-suikyou-web-architecture.html`](docs/architecture/seiten-suikyou-web-architecture.html) |
 
 ## 许可
 

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 01 全局框架</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 01</div><h1>全局框架</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="00-overview.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html" class="on">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="02-roster.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">只维护一套 600px 版式：设计基准宽度 600px，两侧各留 8px 安全边距。屏幕比它窄时整页等比缩小，版式本身不重排、不换行重排，所以不需要为手机另做一套布局。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame">
+      <div class="blk">
+        <div class="blk-head"><span>顶栏</span><code>高 96px · 三行</code></div>
+        <div class="row between">
+          <div class="row"><div class="avatar sm" style="background:var(--amber-bg);border-color:var(--amber-line)"></div><div><div style="font-size:15px;font-weight:500">✦ 星天水镜</div><div class="small">副标题：产品定位一句话</div></div></div>
+          <div class="row"><span class="field">UID　101242308</span><span class="btnx primary">刷新</span><span class="field">语言　简体中文 ▾</span></div>
+        </div>
+        <div class="sep"></div>
+        <div class="row"><span class="mono">数据源 A</span><span class="chip" style="background:var(--green-bg);border-color:var(--green-line);color:var(--green)">✓ 区服一</span><span class="chip" style="background:var(--red-bg);border-color:var(--red-line);color:var(--red)">✕ 区服二</span><span class="mono">数据源 B</span><span class="chip">○ 区服三</span><span class="small">状态用形状 + 底色双重编码，文字只留区服名</span></div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>提示条（默认隐藏）</span><code>通栏 · 三种语气</code></div>
+        <div class="row"><span class="cell green" style="flex:1">成功 · 一句话结果，数秒后自动收起</span><span class="cell red" style="flex:1">错误 · 常驻，直到下一次操作</span><span class="cell dim" style="flex:1">提示 · 数秒后自动收起</span></div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>主体（同一时刻只显示一个页面）</span><code>宽 600px</code></div>
+        <div class="grid3">
+          <div class="cell blue center">首页<br><span class="mono">当前</span></div>
+          <div class="cell center">角色明细<br><span class="mono">评分结果</span></div>
+          <div class="cell center">模拟比对<br><span class="mono">装备假设</span></div>
+        </div>
+        <div class="small" style="margin-top:7px">下面各节分别展开这三个页面；600px 是它们共同的画布宽度。</div>
+      </div>
+      <div class="blk">
+        <div class="blk-head"><span>页脚</span><code>一行 · 右对齐</code></div>
+        <div class="row between"><span class="small">数据时间：说明整份名单有多新；单个角色的时间放在明细页</span><span class="mono">scored at</span></div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>版式规范</h3>
+        <ul>
+          <li>单一基准宽度，任何设备上看到的都是同一张版面，只是倍率不同。</li>
+          <li>顶栏固定在画布之外，不参与画布内部的缩放。</li>
+          <li>内容高度变化后要重新匹配外框高度，避免底部留一段空白。</li>
+          <li>圆角、描边、间距统一走第 09 节的设计规格。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>状态编码</h3>
+        <p>在线 / 断线不能只靠颜色区分：同时给形状标记（✓ / ✕ / ○）和底色，文字只保留区服名。错误提示常驻，成功与提示自动收起。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 01 / 全局框架 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

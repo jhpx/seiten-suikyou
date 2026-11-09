@@ -587,13 +587,17 @@ console.log('\n=== 8. 静态文件 ===')
   ok(html.includes('星天水镜'), '页面里有标题')
   /* 引用写成**相对路径**（不是 /bootstrap.js）：GitHub Pages 的项目站挂在 /<repo>/ 下，
      写成根绝对路径会指到域名根去，页面直接白屏。这条钉住这个部署前提。 */
-  ok(html.includes('src="bootstrap.js"') && html.includes('href="style.css"'), '页面引了脚本和样式（相对路径）')
+  ok(html.includes('src="bootstrap.js"') && html.includes('href="css/base.css"'), '页面引了脚本和样式（相对路径）')
+  /* 样式拆成多个文件后，<link> 的顺序就是层叠顺序；这里钉住「全是相对路径 + 首尾模块没被调走」 */
+  const cssHrefs = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(m => m[1])
+  ok(cssHrefs.length > 0 && cssHrefs.every(h => !h.startsWith('/')), '样式引用全是相对路径')
+  ok(cssHrefs[0] === 'css/base.css' && cssHrefs.at(-1) === 'css/damage.css', '样式按层叠契约顺序加载')
 
   const js = await get('/bootstrap.js')
   ok((js.headers.get('content-type') || '').includes('javascript'), 'js 的 content-type 对')
   ok((await js.text()).length > 500, 'js 不是空文件')
 
-  const css = await get('/style.css')
+  const css = await get('/css/base.css')
   ok((css.headers.get('content-type') || '').includes('text/css'), 'css 的 content-type 对')
 
   /* 越界（目录穿越）与不存在的文件一律 404 —— 顺带就没有目录穿越这回事 */
