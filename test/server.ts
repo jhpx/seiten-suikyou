@@ -152,6 +152,18 @@ let chsView = null
        同目录 2~5.webp 是建议面板的部位小图，advice.js 把 1.webp 末段换成部位号来推。 */
     ok(diluc.sets.every((s: any) => /^assets\/meta-gs\/artifact\/thumbs\/\d+\/1\.webp$/.test(s.icon || '')),
       '每个套装都带预处理代表图', JSON.stringify(diluc.sets.map((s: any) => s.icon)))
+    /* 头像同理走预处理件 character/thumbs/<avatarId>/face.webp（196px，见 tools/gen_flower.py）。
+       目录形状照圣遗物那套：id 当文件夹、文件名说清是哪张（以后要加圆框版/方卡版就收在同一目录）。
+       紧跟着的两条钉住「只输出小图、不再输出 card/banner」：那两张 840×400 / 845×140 的图
+       前端一处都没引用过，2026-11-09 连同仓库里 262 张一起删了。 */
+    ok(/^assets\/meta-gs\/character\/thumbs\/\d+\/face\.webp$/.test(diluc.imgs?.face || ''),
+      '头像走预处理小图', diluc.imgs?.face)
+    /* 原来拿不到 avatarId 时会拼 imgs/face.webp，那张原图 2026-11-09 已删 —— 现在干脆不输出字段，
+       别再出现指向已删文件的路径（拼出来必然 404，前端只能靠 onerror 显示占位）。 */
+    ok(r.data.avatars.every((a: any) => !/\/imgs\/face\.webp$/.test(a.imgs?.face || '')),
+      '没有头像指向已删的 imgs/face.webp')
+    ok(!('card' in (diluc.imgs || {})) && !('banner' in (diluc.imgs || {})),
+      'imgs 里不再有 card / banner')
     const withSubs = diluc.artifacts.filter((a: any) => !a.empty && a.subs.length)
     ok(withSubs.length > 0, '圣遗物带副词条')
     ok(withSubs.every((a: any) => a.subs.every((s: any) => s.upNum >= 1)),

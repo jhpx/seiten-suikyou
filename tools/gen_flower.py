@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""生成首页用的两类缩略图：圣遗物部位小图 + 武器小图（都缩到 96px 的 webp）。
+"""生成首页用的三类小图：圣遗物部位、武器、角色头像。
 
 产物是**本地加工件**，落在 web/assets/meta-gs/ 下各自的 thumbs/ 目录里，
 和上游原图分开：原图是 tools/sync_assets.py 从 miao 全量复制的，一个字节不改；
 混在一起就分不清哪些是同步来的。
+
+三种图的边长不是同一个数，因为**「缩略图」的意思是缩到显示尺寸**，不是一律 96：
+圣遗物图标显示 17~28px、武器 28×38px → 96px 就够；角色头像首页画到 107px、
+2 倍屏要 214px → 得 196px（见下面「角色头像」那段）。
 
 圣遗物：artifact/thumbs/<setId>/1~5.webp
 ----------------------------------------
@@ -25,6 +29,29 @@ data.json 里的武器 id 命名，**不按类型分目录** —— id 全局唯
 ⚠️ 明细页仍走上游原图（圣遗物 imgs/、武器 icon.webp）：那里显示 100px，
    96px 的小图会糊；而且明细页点进去才加载，不占首屏。
 
+角色头像：character/thumbs/<avatarId>/face.webp
+--------------------------------------------
+上游是 character/<中文名>/imgs/face.webp，256×256、平均 46.5KB —— 编码得非常保守，
+同样 256px 用 q0.82 重编就只剩 18.7KB。为什么它也要单独出一份：
+全站用到 face 的地方只有三处（首页两种卡片 + 模拟器圆框），最大只画到 107px
+（卡片 112px 宽 → .cc-face 是 120%×92% contain，正方形源图落到 min(134,107)=107）。
+明细页那张立绘走 splash.webp（1400px 宽），跟 face 无关 —— 所以 face 在站内
+**只有小图这一个身份**，不像圣遗物/武器那样明细页还要原图，可以直接出缩略图。
+
+边长 196 是算出来的，不是拍的：107 CSS px 在 2 倍屏要 214 设备像素，196 只是 1.09 倍
+放大（肉眼看不出）；手机 3 倍屏因为整页 fitShell 缩放，实际也落在 218 上下，同样够。
+⚠️ 别照抄 96 —— 那是给显示 17~38px 的图标用的，套到头像上等于拿小图撑大。
+
+目录形状跟圣遗物一套：`character/thumbs/<avatarId>/face.webp`，**id 是文件夹、文件名说清是哪张**。
+不写成平铺的 `<avatarId>.webp` 是因为头像以后可能不止一张（圆框用的、方卡用的、大一点的），
+同一角色的衍生图收在自己目录里，不用再造 `<id>-round.webp` 这种一眼看不出关系的名字。
+
+⚠️ 头像的**源图直接读 miao-plugin**（`../miao-plugin/resources/meta-gs/character/`，
+环境变量 MIAO_PLUGIN_PATH 可改），不读 web/assets —— 那儿原本有一份 face 副本，2026-11-09
+删掉了：站内只有小图这一个用途，同一批像素没必要存两份。所以跑本脚本得让 miao-plugin 在
+旁边（跟 tools/sync_assets.py 一个要求）。顺带说明：上游新增角色时，头像这边**不用**先
+sync assets，直接跑本脚本就行。
+
 为什么用无头浏览器
 ------------------
 项目零构建、不装 Pillow / sharp / ffmpeg；而 Chrome 的 canvas 本来就会编 webp。
@@ -34,12 +61,13 @@ data.json 里的武器 id 命名，**不按类型分目录** —— id 全局唯
 
 用法
 ----
-    python tools/gen_flower.py            # 只补缺图（两类都查）
+    python tools/gen_flower.py            # 只补缺图（三类都查）
     python tools/gen_flower.py --force    # 全部重生成（换尺寸 / 换画质时用）
-    python tools/gen_flower.py --edge 128 # 改边长（默认 96）
+    python tools/gen_flower.py --edge 128      # 改圣遗物/武器的边长（默认 96）
+    python tools/gen_flower.py --char-edge 192 # 改头像的边长（默认 196）
 
-上游新增素材？先 python tools/sync.py assets 把原图拷过来，再跑本脚本补图；
-`python tools/sync.py --check` 会报出缺哪些缩略图。
+上游新增素材？新套装 / 新武器先 python tools/sync.py assets 把原图拷过来（头像不用，
+脚本直接读 miao-plugin），再跑本脚本补图；`python tools/sync.py --check` 会报出缺哪些缩略图。
 """
 from __future__ import annotations
 
@@ -47,12 +75,13 @@ import argparse
 import base64
 import http.server
 import json
+import os
 import re
 import subprocess
 import sys
 import threading
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 IMGS = ROOT / "web" / "assets" / "meta-gs" / "artifact" / "imgs"
@@ -60,6 +89,17 @@ THUMBS = ROOT / "web" / "assets" / "meta-gs" / "artifact" / "thumbs"
 WEAPON_META = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "weapon"
 WEAPON_IMGS = ROOT / "web" / "assets" / "meta-gs" / "weapon"
 WEAPON_THUMBS = WEAPON_IMGS / "thumbs"
+CHAR_META = ROOT / "vendor" / "miao" / "resources" / "meta-gs" / "character" / "data.json"
+CHAR_IMGS = ROOT / "web" / "assets" / "meta-gs" / "character"  # 产物落点，thumbs/ 在它下面
+CHAR_THUMBS = CHAR_IMGS / "thumbs"
+CHAR_EDGE = 196
+
+# 头像**原图**只从 miao-plugin 取：web/assets 里那份副本 2026-11-09 删了（站内只有小图这一个
+# 用途，留着等于同一批像素存两份）。定位规则跟 tools/sync_assets.py 一样：环境变量优先，其次 sibling。
+_env = os.environ.get("MIAO_PLUGIN_PATH")
+MIAO = Path(_env).resolve() if _env else (ROOT.parent / "miao-plugin").resolve()
+MIAO_RES = MIAO / "resources"
+CHAR_SRC = MIAO_RES / "meta-gs" / "character"
 CHROME = ROOT / ".tmp" / "chs" / "chrome-headless-shell-win64" / "chrome-headless-shell.exe"
 
 # 页面里的 JS 用的是 {{EDGE}} / {{ITEMS}} 两个占位符，别用 f-string —— JS 里全是花括号
@@ -69,9 +109,10 @@ const ITEMS = {{ITEMS}}, EDGE = {{EDGE}}, Q = 0.82;
 const out = {};
 let done = 0;
 function finish () { document.getElementById('out').textContent = JSON.stringify(out); document.title = 'done'; }
-/* key 是产物相对路径：圣遗物「<setId>/<部位>.webp」、武器「weapon/<itemId>.webp」；
-   trim 决定要不要先裁透明边 —— 圣遗物留白不统一要裁，武器原图几乎满格不用裁 */
-ITEMS.forEach(([key, u, trim]) => {
+/* key 是产物相对路径：圣遗物「<setId>/<部位>.webp」、武器 / 头像「weapon|character/<id>.webp」；
+   trim 决定要不要先裁透明边 —— 圣遗物留白不统一要裁，武器和头像基本满格不用裁；
+   edge 是这个条目自己的边长，缺省用全局 EDGE（头像要 196，图标只要 96，只能一条一条给） */
+ITEMS.forEach(([key, u, trim, edge]) => {
   const im = new Image();
   im.onload = () => {
     try {
@@ -93,7 +134,7 @@ ITEMS.forEach(([key, u, trim]) => {
         sx = l / w * W; sy = t / h * H;
         sw = (r - l + 1) / w * W; sh = (b - t + 1) / h * H;
       }
-      const k = EDGE / Math.max(sw, sh);
+      const k = (edge || EDGE) / Math.max(sw, sh);
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(sw * k)); c.height = Math.max(1, Math.round(sh * k));
       c.getContext('2d').drawImage(im, sx, sy, sw, sh, 0, 0, c.width, c.height);
@@ -148,10 +189,31 @@ def weapon_ids() -> list[tuple[str, str, str]]:
     return rows
 
 
+def char_ids() -> list[tuple[str, str]]:
+    """miao 角色 data.json 的清单：[(avatarId, 中文名)]，127 条。
+
+    用它当映射是因为**上游目录名和 id 正好 1:1**（127 个 id ↔ 127 个目录，
+    含「旅行者」自己那条）—— 不用猜、也不用合并别名。
+    id 就是后端 `Character.avatarId`（enka 的 avatarId），小图文件名也用它，
+    和武器 thumbs/<itemId>.webp 一个套路：id 稳定，不绑中文译名。
+    ⚠️ 角色目录名沿用上游的中文名（就是 miao-plugin 里那个），这里只拿它拼源路径；
+    产物一律按 avatarId 命名。
+    """
+    if not CHAR_META.is_file():
+        return []
+    rows: list[tuple[str, str]] = []
+    for aid, row in json.loads(CHAR_META.read_text(encoding="utf-8")).items():
+        rows.append((str(aid), row["name"]))
+    return rows
+
+
 def serve_once(html: str) -> tuple[int, threading.Thread, http.server.ThreadingHTTPServer]:
     """起一个只在本次生成期间活着的静态服务，根目录 = 仓库根。
 
     不能直接用 file:// —— 跨源会把 canvas 弄脏，toDataURL 直接抛错。
+
+    `/__miao/...` 单独映射到 miao-plugin 的 resources 目录：头像原图在仓库外（web/assets
+    那份副本已经删了），不挂这个前缀就取不到。
     """
     root = str(ROOT)
 
@@ -161,6 +223,12 @@ def serve_once(html: str) -> tuple[int, threading.Thread, http.server.ThreadingH
 
         def log_message(self, *a):
             pass
+
+        def translate_path(self, path):
+            if path.startswith("/__miao/"):
+                rel = unquote(path.split("?", 1)[0][len("/__miao/"):]).split("/")
+                return str(MIAO_RES.joinpath(*[p for p in rel if p not in ("", ".", "..")]))
+            return super().translate_path(path)
 
         def do_GET(self):
             if self.path.startswith("/__gen_flower.html"):
@@ -180,9 +248,10 @@ def serve_once(html: str) -> tuple[int, threading.Thread, http.server.ThreadingH
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="生成圣遗物 / 武器缩略图（缩到 96px 的 webp）")
+    ap = argparse.ArgumentParser(description="生成圣遗物 / 武器 / 角色头像小图（webp）")
     ap.add_argument("--force", action="store_true", help="已有的也重新生成")
-    ap.add_argument("--edge", type=int, default=96, help="最长边像素（默认 96）")
+    ap.add_argument("--edge", type=int, default=96, help="圣遗物/武器的最长边像素（默认 96）")
+    ap.add_argument("--char-edge", type=int, default=CHAR_EDGE, help=f"头像的边长像素（默认 {CHAR_EDGE}）")
     args = ap.parse_args()
 
     if not CHROME.exists():
@@ -194,11 +263,19 @@ def main() -> int:
     if not WEAPON_META.is_dir():
         print(f"找不到 miao 武器元数据：{WEAPON_META}\n先跑 python tools/sync.py miao", file=sys.stderr)
         return 1
+    if not CHAR_META.is_file():
+        print(f"找不到 miao 角色元数据：{CHAR_META}\n先跑 python tools/sync.py miao", file=sys.stderr)
+        return 1
+    if not CHAR_SRC.is_dir():
+        print(f"找不到 miao-plugin 的角色原图：{CHAR_SRC}\n"
+              f"头像要直接从原件缩，设 MIAO_PLUGIN_PATH 指到 miao-plugin 目录", file=sys.stderr)
+        return 1
 
-    # 一条 todo = (产物相对路径, 源图 URL, 要不要裁透明边)。
+    # 一条 todo = (产物相对路径, 源图 URL, 要不要裁透明边, 边长)。
+    # 边长给 None 表示用 --edge；头像是方形 256 源图，只缩不裁，边长走 --char-edge。
     # 圣遗物一套五个文件 1~5.webp（1 号花同时当代表图），源图在 imgs/<中文套装名>/ 下。
     ids = set_ids()
-    todo: list[tuple[str, str, int]] = []
+    todo: list[tuple[str, str, int, int | None]] = []
     for set_dir in sorted(p.parent for p in IMGS.glob("*/1.webp")):
         name = set_dir.name
         sid = ids.get(name)
@@ -212,7 +289,7 @@ def main() -> int:
                 continue                      # 上游这套本来就缺这个部位，别凭空造
             if args.force or not (THUMBS / sid / out_name).exists():
                 url = "/web/assets/meta-gs/artifact/imgs/" + quote(name) + f"/{pos}.webp"
-                todo.append((sid + "/" + out_name, url, 1))
+                todo.append((sid + "/" + out_name, url, 1, None))
     # 武器：按 itemId 命名、不按类型分目录；原图几乎满格，只缩不裁。
     for iid, wtype, wname in weapon_ids():
         if not (WEAPON_IMGS / wtype / wname / "icon.webp").exists():
@@ -220,9 +297,18 @@ def main() -> int:
         out_name = iid + ".webp"
         if args.force or not (WEAPON_THUMBS / out_name).exists():
             url = "/web/assets/meta-gs/weapon/" + quote(wtype) + "/" + quote(wname) + "/icon.webp"
-            todo.append(("weapon/" + out_name, url, 0))
+            todo.append(("weapon/" + out_name, url, 0, None))
+    # 角色头像：源图在 miao-plugin 的 character/<中文名>/imgs/face.webp，产物放 thumbs/<avatarId>/face.webp。
+    # 源不读 web/assets —— 那份副本已经删了，直接读原件（少一层中转，也不会因为删图而断）。
+    for aid, cname in char_ids():
+        src = CHAR_SRC / cname / "imgs" / "face.webp"
+        if not src.exists():
+            continue                          # 上游没给这张脸的，别凭空造
+        if args.force or not (CHAR_THUMBS / aid / "face.webp").exists():
+            url = "/__miao/meta-gs/character/" + quote(cname) + "/imgs/face.webp"
+            todo.append((f"character/{aid}/face.webp", url, 0, args.char_edge))
     if not todo:
-        print("artifact/thumbs 和 weapon/thumbs 都齐了，没活干（要重生成加 --force）")
+        print("三类 thumbs 都齐了，没活干（要重生成加 --force）")
         return 0
 
     html = PAGE.replace("{{ITEMS}}", json.dumps(todo, ensure_ascii=False)).replace("{{EDGE}}", str(args.edge))
@@ -254,6 +340,8 @@ def main() -> int:
         raw = base64.b64decode(v.split(",", 1)[1])
         if key.startswith("weapon/"):
             out_file = WEAPON_THUMBS / key[len("weapon/"):]
+        elif key.startswith("character/"):
+            out_file = CHAR_THUMBS / key[len("character/"):]
         else:
             sid, out_name = key.split("/", 1)
             out_file = THUMBS / sid / out_name

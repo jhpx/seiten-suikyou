@@ -272,6 +272,7 @@
 | `level` / `cons` / `fetter` | 等级 / 命座 / 好感 |
 | `elem` / `elemText` / `elemBg` / `elemIcon` | 元素 key / 元素名 / 元素底图 / 元素图标（响应里的相对路径 `assets/...`） |
 | `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`） |
+| `imgs.face` | 头像小图 `assets/meta-gs/character/thumbs/<avatarId>/face.webp`（缩到 **196px**、不裁边），给**首页两种卡片（画到 107px）和模拟器 96px 圆框**用。本地预处理件，生成入口 `tools/gen_flower.py`；目录形状照圣遗物：**id 当文件夹、文件名说清是哪张**，id 不用中文名（官方改译名换不掉）。原图那份 `imgs/face.webp` 已删（全站只当小图用），所以**拿不到 `avatarId` 时这个字段不输出**（不拼假路径），前端 `imgs.face \|\| imgs.splash` 自然退回立绘。`imgs` 里还有 `splash`（上游原图，明细页立绘按 1400px 宽摆，必须用原图）、`cons1~6`、`talent-e/q`、`a`；`imgs.card` / `imgs.banner` 已移除（前端从未引用） |
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
 | `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon, thumb(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |
 | `weapon.icon` / `weapon.thumb` | 两张图按显示尺寸分：`icon` 是上游原图 `assets/meta-gs/weapon/<类型>/<中文名>/icon.webp`（256px），只给**明细页那张 100px 武器卡**用；`thumb` 是 `assets/meta-gs/weapon/thumbs/<itemId>.webp`（缩到 96px、不裁边，武器原图几乎满格），给**首页卡片 28×38px 和模拟器 40px 小格**用。目录按 itemId 命名，不分武器类型、不用中文名，id 不会重复也不会随译名变。本地预处理件，生成入口 `tools/gen_flower.py`；未装备或查不到武器时两者都是 `null`（前端回退到通用类型图） |

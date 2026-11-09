@@ -235,12 +235,12 @@ def do_check() -> int:
     print(f"  {'vendor/i18n/':34} {'名字数据（enka 原样）':26} "
           f"{'存在' if has_i18n else RED + '不存在' + RESET}")
 
-    # 两类缩略图都是**本地预处理件**，上游目录比对根本看不见，得单独查漏。
-    # 映射规则只在 gen_flower.py 里写一份（set_ids / weapon_ids），这里加载来用，免得两处漂移。
+    # 三类缩略图都是**本地预处理件**，上游目录比对根本看不见，得单独查漏。
+    # 映射规则只在 gen_flower.py 里写一份（set_ids / weapon_ids / char_ids），这里加载来用，免得两处漂移。
     # 那个脚本模块级只有常量和函数定义，exec 一下没有副作用。
     spec = importlib.util.spec_from_file_location("gen_thumbs_check", TOOLS / "gen_flower.py")
     if spec is None or spec.loader is None:
-        raise ImportError("无法加载 tools/gen_flower.py 的 set_ids() / weapon_ids()")
+        raise ImportError("无法加载 tools/gen_flower.py 的 set_ids() / weapon_ids() / char_ids()")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
@@ -286,6 +286,24 @@ def do_check() -> int:
         flag = f"{YELLOW}缺 {len(miss)} 张{RESET}" if miss else f"{GREEN}齐全{RESET}"
         print(f"  {'weapon/thumbs/*.webp':34} {'武器小图（本地预处理）':26} "
               f"{len(wids)} 把 / {flag}")
+        if miss:
+            print(f"{DIM}    缺图 id：{'、'.join(miss[:8])}{'…' if len(miss) > 8 else ''}{RESET}")
+            print(f"{DIM}    补图：python tools/gen_flower.py{RESET}")
+
+    # 角色头像：产物放 thumbs/<avatarId>/face.webp（目录形状跟圣遗物一套，id 当文件夹）；
+    # **源图要问 miao-plugin**，不是 web/assets —— 那边 imgs/face.webp 2026-11-09 已删，
+    # 拿它当判据会一张都查不出来。
+    char_imgs = ROOT / "web/assets/meta-gs/character"
+    char_thumbs = char_imgs / "thumbs"
+    cids = mod.char_ids()
+    src_root = mod.CHAR_SRC
+    if cids and src_root.is_dir():
+        miss = [aid for aid, cname in cids
+                if (src_root / cname / "imgs/face.webp").exists()
+                and not (char_thumbs / aid / "face.webp").exists()]
+        flag = f"{YELLOW}缺 {len(miss)} 张{RESET}" if miss else f"{GREEN}齐全{RESET}"
+        print(f"  {'character/thumbs/*/face.webp':34} {'头像小图（本地预处理）':26} "
+              f"{len(cids)} 个 / {flag}")
         if miss:
             print(f"{DIM}    缺图 id：{'、'.join(miss[:8])}{'…' if len(miss) > 8 else ''}{RESET}")
             print(f"{DIM}    补图：python tools/gen_flower.py{RESET}")

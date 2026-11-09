@@ -41,8 +41,13 @@ web/assets/ 里已有的其他图原样保留（复制不是清空）。
 id 全局唯一，也不会随译名变。首页卡片 28×38px、模拟器 40px 用 thumb；
 **明细页那张 100px 武器卡仍走原图**。同理放在独立 thumbs/ 目录、本脚本不生成。
 
-两类小图的生成入口都是 tools/gen_flower.py —— 同步完发现新套装 / 新武器就跑一次补图；
-`python tools/sync.py --check` 会分别报两类缺图。
+**角色头像同理**：`character/thumbs/<avatarId>/face.webp`，196px（目录形状照圣遗物：id 当文件夹、
+文件名说清是哪张）。face 原图站内只有「小图」这一个
+用途（首页卡片画到 107px、模拟器圆框 96px），明细页立绘走 splash —— 所以原件不必进仓库，
+只拷 splash、头像由 tools/gen_flower.py 直接从 miao-plugin 取。
+
+三类小图的生成入口都是 tools/gen_flower.py —— 同步完发现新套装 / 新武器 / 新角色就跑一次补图；
+`python tools/sync.py --check` 会分别报三类缺图。
 """
 import argparse
 import json
@@ -92,13 +97,20 @@ WEAPON_TYPES = ["sword", "claymore", "bow", "catalyst", "polearm"]
 TRAVELER_ELEMS = ["anemo", "geo", "electro", "dendro", "hydro", "pyro", "cryo"]
 
 """
-角色要拷哪些图 —— 与 src/service/view.ts 的 charImgs() 一一对应。
+角色要拷哪些图 —— 与 src/service/assembler/character.assembler.ts 的 charImgs() 一一对应。
+
+只拷 splash。另外三张（2026-11-09 起不再拷，合计 18.3MB）：
+- face.webp（256×256）站内只有「小图」一个用途，已由本地预处理件
+  character/thumbs/<avatarId>/face.webp 顶替；原件留在 miao-plugin 里给 gen_flower.py 当母版，
+  进仓库等于同样的像素存两份。
+- card.webp（840×400）、banner.webp（845×140）前端一处引用都没有，从来没人用。
+别再把它们加回来 —— 加回来就是又白同步一遍。
 
 talent-e / talent-q 是**可选**的：miao 的规则是「哪个命座提升这个天赋就用哪个命座图标，
 否则才用 talent-{e,q}.webp」，所以绝大多数角色目录里根本没有这俩文件（121/126 都没有）。
 源端没有就跳过，不算错误。
 """
-CHAR_IMGS = ["splash.webp", "face.webp", "card.webp", "banner.webp"]
+CHAR_IMGS = ["splash.webp"]
 CHAR_ICONS = [f"cons-{i}.webp" for i in range(1, 7)] + ["talent-e.webp", "talent-q.webp"]
 
 # 元素符号 common/elem/{元素}.png miao 仓库里没有（星穹铁道那套 meta-sr/icons/elem-*.webp 不是原神的），
@@ -175,7 +187,7 @@ def sync_common(res: Path, out: Path, stats):
 
 
 def sync_chars(res: Path, out: Path, stats):
-    """全角色：立绘 / 头像 / 卡片 / 横幅 + 6 个命座图标（+ 可选的 talent-e/q）。"""
+    """全角色：立绘 + 6 个命座图标（+ 可选的 talent-e/q）。头像和卡片类图不再拷贝。"""
     n = 0
     for d in char_dirs(res):
         rel_dir = d.relative_to(res).as_posix()  # meta-gs/character/瓦雷莎 或 .../旅行者/anemo

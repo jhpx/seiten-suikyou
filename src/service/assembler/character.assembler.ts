@@ -54,16 +54,28 @@ export function panelText (attr: Record<string, number> | null | undefined, loca
   return panelOf(attr, locale).map(p => `${p.label} ${p.text}`).join('  ')
 }
 
-/* 角色图像资源 —— 参照 miao 的图片资源结构，前端自行拼 assets/ 路径。 */
-function charImgs (char: any): Record<string, string> {
+/* 角色图像资源 —— 参照 miao 的图片资源结构，前端自行拼 assets/ 路径。
+ *
+ * face 是这里面唯一走本地小图的一张。全站用到它的就三处：首页两种卡片 + 模拟器圆框，
+ * 最大只画到 107px（卡片 112px 宽 → .cc-face 是 120%×92% 的 contain，正方形源图落到 107）。
+ * 上游那张 256×256、平均 46KB，编码得很保守 —— 一个 57 角色的账号首页光头像就要拉 2.6MB。
+ * character/thumbs/<avatarId>/face.webp 是缩到 196px、q0.82 重编的本地件（见 tools/gen_flower.py）：
+ * 196 对 2 倍屏要的 214 设备像素只是 1.09 倍放大，看不出来；57 个角色降到 0.75MB。
+ * splash 反过来必须用原图 —— 明细页立绘按 1400px 宽摆，小图在那儿是糊的。
+ * ⚠️ 小图用 avatarId 定位（不是中文名）：官方改译名换不掉 id，跟武器 thumbs 一个套路。
+ * 目录形状照圣遗物：`thumbs/<avatarId>/face.webp`，id 当文件夹、文件名说清是哪张。
+ * 返回里原本还有 card / banner 两张（840×400、845×140），前端一处都没引用过，
+ * 已连同仓库里那 262 张图一起删掉（2026-11-09）。要加回来得先有页面真的用它。 */
+function charImgs (char: any, avatarId: number | null | undefined): Record<string, string> {
   const base = `assets/meta-gs/character/${assetSeg(char.name)}/`
   const talentCons = char.talentCons || {}
   const imgs: Record<string, string> = {
-    splash: `${base}imgs/splash.webp`,
-    face: `${base}imgs/face.webp`,
-    card: `${base}imgs/card.webp`,
-    banner: `${base}imgs/banner.webp`
+    splash: `${base}imgs/splash.webp`
   }
+  /* 头像只有 thumbs 这一种。avatarId 是主键，实际永远有；万一没有就别拼一条假路径
+     （原来兜底拼的是 imgs/face.webp，那张原图 2026-11-09 已删，拼出来必然 404）。
+     前端是 `imgs.face || imgs.splash`，字段缺了自然退回立绘。 */
+  if (avatarId) imgs.face = `assets/meta-gs/character/thumbs/${avatarId}/face.webp`
   for (let i = 1; i <= 6; i++) imgs[`cons${i}`] = `${base}icons/cons-${i}.webp`
   imgs.a = `assets/common/item/atk-${char.weaponType || 'sword'}.webp`
   for (const t of ['e', 'q']) {
@@ -281,7 +293,7 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     ? `assets/meta-gs/weapon/thumbs/${ch.weapon.itemId}.webp`
     : wIcon
 
-  const imgs = charImgs(char)
+  const imgs = charImgs(char, ch.avatarId)
   const elem = profile.elem || char.elem || ''
 
   return {
