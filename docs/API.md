@@ -271,7 +271,8 @@
 | `avatarId` / `name` / `nameZh` / `star` | 角色 id、本地化名、中文名、星级 |
 | `level` / `cons` / `fetter` | 等级 / 命座 / 好感 |
 | `elem` / `elemText` / `elemBg` / `elemIcon` | 元素 key / 元素名 / 元素底图 / 元素图标（响应里的相对路径 `assets/...`） |
-| `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`） |
+| `splash` / `imgs` | 立绘及命座、天赋图（相对路径 `assets/...`）。上游没给立绘的角色（奇偶·男/女）**不输出** `splash`，前端拿到空值就不铺图 |
+| `imgs.cons1~6` / `imgs.e` / `imgs.q` | 命座与天赋图标。普通角色是 `assets/meta-gs/character/<角色名>/icons/cons-N.webp`；**主角（旅行者 / 空 / 荧）按元素分目录**：`assets/meta-gs/character/旅行者/<元素>/icons/cons-N.webp` —— 上游把三种叫法的图标都收在 `旅行者/` 下按七元素拆开，`空/` 和 `荧/` 自己的目录里只有 `imgs/splash.webp`，按角色名拼必然 404。元素取**运行时解析出来的那个**（`profile.elem`，从技能表推），miao 静态表里主角的 `elem` 是 `multi`，拿它拼同样 404。`e` / `q` 有两条路：命座提升该天赋时（miao 的 `talentCons`，主角是 e←5、q←3）直接复用对应命座图的 URL，否则用同目录的 `icons/talent-e.webp`。**上游没给美术资源的角色，这组字段直接不输出**：奇偶·男性 / 女性（`avatarId` 10000117 / 10000118，4 星人偶）目录里只有 `icons/talent-e.webp` 和 `talent-q.webp`，`splash` 与 `cons1~6` 硬拼就是 7 个 404 —— 所以按 avatarId 列进 `CHAR_WITHOUT_ART`，命中就不给这两组，前端 `setBg` 没图不铺、命座整块不画（天赋 e/q 是真图，照旧给） |
 | `imgs.face` | 头像小图 `assets/meta-gs/character/thumbs/<avatarId>/face.webp`（缩到 **196px**、不裁边），给**首页两种卡片（画到 107px）和模拟器 96px 圆框**用。本地预处理件，生成入口 `tools/gen_flower.py`；目录形状照圣遗物：**id 当文件夹、文件名说清是哪张**，id 不用中文名（官方改译名换不掉）。原图那份 `imgs/face.webp` 已删（全站只当小图用），所以**拿不到 `avatarId` 时这个字段不输出**（不拼假路径），前端 `imgs.face \|\| imgs.splash` 自然退回立绘。`imgs` 里还有 `splash`（上游原图，明细页立绘按 1400px 宽摆，必须用原图）、`cons1~6`、`talent-e/q`、`a`；`imgs.card` / `imgs.banner` 已移除（前端从未引用） |
 | `rarityBg` | 星级底色图（相对路径 `assets/...`） |
 | `weapon` | `{ state:'none'|'unknown'|'ok', itemId, name, nameZh, sName, icon, thumb(相对路径 assets/...), level, affix, promote, star, attrs, desc }` |

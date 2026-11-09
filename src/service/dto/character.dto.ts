@@ -50,7 +50,11 @@ export interface CharacterDto {
   elemBg: string
   rarityBg: string
   elemIcon: string
-  splash: string
+  /**
+   * 明细页立绘（上游 1400px 原图）。上游没给立绘的角色（奇偶·男/女）不输出这个字段 ——
+   * 前端 setBg 拿到空值就不铺图，会露出元素底色，别再造一条必然 404 的路径。
+   */
+  splash?: string
   imgs: Record<string, string>
   talent: Record<string, { level: number; original: number; plus: boolean; crown: boolean }>
   weapon: {

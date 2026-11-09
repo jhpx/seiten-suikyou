@@ -66,20 +66,49 @@ export function panelText (attr: Record<string, number> | null | undefined, loca
  * 目录形状照圣遗物：`thumbs/<avatarId>/face.webp`，id 当文件夹、文件名说清是哪张。
  * 返回里原本还有 card / banner 两张（840×400、845×140），前端一处都没引用过，
  * 已连同仓库里那 262 张图一起删掉（2026-11-09）。要加回来得先有页面真的用它。 */
-function charImgs (char: any, avatarId: number | null | undefined): Record<string, string> {
+/* 主角的三个叫法（同一个人的男女两版 + 通用名）。上游把它们的命座 / 天赋图标
+ * 收在一个 `旅行者/` 目录下**按七元素拆开**，角色名那层只是个壳。
+ * ⚠️ `空/` 和 `荧/` 自己的目录里只有 `imgs/splash.webp`，没有 icons/ ——
+ * 拿角色名拼 `空/icons/cons-1.webp` 必然 404（2026-11-09 实测，6 个命座 + e/q 全空）。 */
+const TRAVELER_NAMES = new Set(['旅行者', '空', '荧'])
+
+/* 上游只给了天赋图标、没给命座图和立绘的角色 ——「奇偶·男性 / 女性」（10000117 / 10000118）。
+ * 这两只是 4 星人偶（Manekin），玩家抽不到，data.json 里 `talentCons` 全 0、也没有任何字段
+ * 能说明「这个角色没有美术资源」。它们的目录里只有 `icons/talent-e.webp`、`talent-q.webp`，
+ * 硬拼 splash / cons1~6 就是 7 个 404（2026-11-09 实测）。
+ * 所以按 avatarId 列出来，命中就不输出这两组字段 —— 前端 setBg 没图就不铺，天然退回空底。
+ * ⚠️ 只按 id、不按名字：官方改译名换不掉 id（跟 thumbs 目录一个道理）。 */
+const CHAR_WITHOUT_ART = new Set([10000117, 10000118])
+
+/* 图标目录（命座 + 天赋共用）：普通角色是 `<角色名>/`，主角是 `旅行者/<元素>/`。
+ * 元素要传**解析后**的那个（profile.elem，从技能表推出来的），不能读 char.elem ——
+ * miao 静态表里主角的 elem 是 'multi'，拿去拼路径一样是 404。
+ * 万一元素没解析出来，就按角色名拼：跟改动前行为一致，不额外造新路径。
+ * 导出只为让测试能直接钉住这条分支（test/server.ts），业务侧别在外面调它。 */
+export function iconDir (char: any, elem: string): string {
+  if (TRAVELER_NAMES.has(char.name) && ELEM_BG.has(elem)) return `assets/meta-gs/character/旅行者/${elem}/`
+  return `assets/meta-gs/character/${assetSeg(char.name)}/`
+}
+
+/* 导出只为让测试能直接钉住「无美术资源角色不输出 splash / cons」（test/server.ts），
+   业务侧别在外面调它。 */
+export function charImgs (char: any, avatarId: number | null | undefined, elem: string): Record<string, string> {
   const base = `assets/meta-gs/character/${assetSeg(char.name)}/`
+  const icons = iconDir(char, elem)
   const talentCons = char.talentCons || {}
-  const imgs: Record<string, string> = {
-    splash: `${base}imgs/splash.webp`
+  const imgs: Record<string, string> = {}
+  /* 命座图 + 立绘：只有上游真的给了才输出（奇偶那两只没有，见 CHAR_WITHOUT_ART） */
+  if (!CHAR_WITHOUT_ART.has(Number(avatarId))) {
+    imgs.splash = `${base}imgs/splash.webp`
+    for (let i = 1; i <= 6; i++) imgs[`cons${i}`] = `${icons}icons/cons-${i}.webp`
   }
   /* 头像只有 thumbs 这一种。avatarId 是主键，实际永远有；万一没有就别拼一条假路径
      （原来兜底拼的是 imgs/face.webp，那张原图 2026-11-09 已删，拼出来必然 404）。
      前端是 `imgs.face || imgs.splash`，字段缺了自然退回立绘。 */
   if (avatarId) imgs.face = `assets/meta-gs/character/thumbs/${avatarId}/face.webp`
-  for (let i = 1; i <= 6; i++) imgs[`cons${i}`] = `${base}icons/cons-${i}.webp`
   imgs.a = `assets/common/item/atk-${char.weaponType || 'sword'}.webp`
   for (const t of ['e', 'q']) {
-    imgs[t] = talentCons[t] > 0 ? imgs[`cons${talentCons[t]}`] : `${base}icons/talent-${t}.webp`
+    imgs[t] = talentCons[t] > 0 ? imgs[`cons${talentCons[t]}`] : `${icons}icons/talent-${t}.webp`
   }
   return imgs
 }
@@ -293,8 +322,9 @@ export function shapeCharacter (ch: CharacterDbo, profile: MiaoProfile, result: 
     ? `assets/meta-gs/weapon/thumbs/${ch.weapon.itemId}.webp`
     : wIcon
 
-  const imgs = charImgs(char, ch.avatarId)
+  /* elem 先算：图标目录要靠它分支（主角按元素分目录），不能等 imgs 拼完 */
   const elem = profile.elem || char.elem || ''
+  const imgs = charImgs(char, ch.avatarId, elem)
 
   return {
     uid: profile.uid,

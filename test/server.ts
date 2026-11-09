@@ -21,6 +21,8 @@ import { character as characterT, fetchLog as fetchLogT } from '../src/config/sc
 import { ingestPayload } from '../src/gateway/enka/enka.service.ts'
 import { simCatalog } from '../src/gateway/miao/simulate.ts'
 import { buildAdvice, ADVICE_RULES, ADVICE_SORTS } from '../src/service/advice.ts'
+import { iconDir, charImgs } from '../src/service/assembler/character.assembler.ts'
+import { assetSeg } from '../src/service/artifact.service.ts'
 import type { EnkaPayload } from '../src/gateway/enka/enka.dto.ts'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -164,6 +166,29 @@ let chsView = null
       '没有头像指向已删的 imgs/face.webp')
     ok(!('card' in (diluc.imgs || {})) && !('banner' in (diluc.imgs || {})),
       'imgs 里不再有 card / banner')
+    /* 主角（旅行者 / 空 / 荧）的命座、天赋图标在上游是**按元素分目录**的：
+       旅行者/<七元素>/icons/cons-N.webp。空/ 和 荧/ 自己的目录里只有 imgs/splash.webp，
+       按角色名拼 空/icons/cons-1.webp 必然 404（2026-11-09 实测：6 个命座 + e/q 全空）。
+       ⚠️ 主角的 char.elem 在 miao 静态表里是 'multi'，必须用运行时解析出的元素（profile.elem），
+       拿 'multi' 去拼一样 404 —— 所以这条断言里特意用 cryo/pyro 而不是 char.elem。 */
+    eq(iconDir({ name: '空' }, 'cryo'), 'assets/meta-gs/character/旅行者/cryo/', '主角图标走 旅行者/<元素>/')
+    eq(iconDir({ name: '荧' }, 'pyro'), 'assets/meta-gs/character/旅行者/pyro/', '荧 同样按元素分目录')
+    eq(iconDir({ name: '神里绫华' }, 'cryo'), `assets/meta-gs/character/${assetSeg('神里绫华')}/`,
+      '普通角色图标仍走 <角色名>/')
+    eq(iconDir({ name: '空' }, 'multi'), `assets/meta-gs/character/${assetSeg('空')}/`,
+      '主角元素没解析出来时退回角色名（不造新路径）')
+    /* 奇偶·男/女（10000117 / 10000118）是 4 星人偶，上游只给了 icons/talent-e.webp、
+       talent-q.webp，**命座图和立绘都没有**。接口不能硬拼这 7 条必然 404 的路径，
+       所以 splash / cons1~6 直接不输出；头像和天赋（e/q 是真图、a 是通用武器图）照旧。 */
+    const manekin = charImgs({ name: '奇偶·男性', talentCons: { a: 0, e: 0, q: 0 } }, 10000117, 'pyro')
+    ok(!('splash' in manekin) && !('cons1' in manekin) && !('cons6' in manekin),
+      '没有命座图 / 立绘的角色不输出 splash 与 cons1~6', JSON.stringify(manekin))
+    eq(manekin.face, 'assets/meta-gs/character/thumbs/10000117/face.webp', '没有命座图也照样给头像')
+    eq(manekin.e, `assets/meta-gs/character/${assetSeg('奇偶·男性')}/icons/talent-e.webp`,
+      '天赋 e 图标照旧给（上游确实有这张）')
+    const normalImgs = charImgs({ name: '神里绫华', talentCons: { a: 0, e: 3, q: 5 } }, 10000002, 'cryo')
+    ok(!!normalImgs.splash && !!normalImgs.cons1 && !!normalImgs.cons6,
+      '普通角色立绘 / 命座照旧输出')
     const withSubs = diluc.artifacts.filter((a: any) => !a.empty && a.subs.length)
     ok(withSubs.length > 0, '圣遗物带副词条')
     ok(withSubs.every((a: any) => a.subs.every((s: any) => s.upNum >= 1)),
