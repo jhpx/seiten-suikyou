@@ -89,8 +89,22 @@ const TABLE: Record<string, Record<string, string>> = {
     simSet: '套装', simLevel: '等级', simRefine: '精炼', simMainStat: '主词条', simSubStats: '副词条', simAddStat: '加一条',
     /* 右栏是**手填的最终数值**，不是真实装备的「若干次 roll 之和」两种口径对不上，所以不显示评分 */
     simCalculating: '重算中…', simEmpty: '改一改右边的武器或圣遗物，这里就会跟着变。',
+    /* 模拟页 Buff 列表里相对「当前配装」的变动标记（新增 / 失效），描述变了则直接写「旧 → 新」 */
+    simBuffNew: '新增', simBuffGone: '失效',
     /* 明细页「分享/下载」失败时的那句提示。以前失败只进 console，页面看着像「按钮没反应」 */
-    shareFail: '截图失败，没生成图片。换个浏览器或稍后再试。'
+    shareFail: '截图失败，没生成图片。换个浏览器或稍后再试。',
+    /* 评定报告单：把当前账号的评分榜排成一张纸面报告单，首页一点直接导出图片。
+       单子上的字尽量复用已有键：元素列用 filterElem、评级/评分两列用明细页的
+       artisRank / artisTotal（本来就是同一份 score.mark / markClass）、
+       导出失败用 shareFail、按钮直接用 reportTitle —— 这里只留报告单独有的那几行。 */
+    reportTitle: '圣遗物评定报告',
+    reportSubtitle: '评价等级 · 角色圣遗物总分排序',
+    reportRank: '名次', reportChar: '评定角色',
+    reportDate: '评定日期',
+    reportRegion: '区服',
+    reportNote: '评定依据喵喵版评分内核，分数与喵喵版一致。',
+    reportNoteSub: '评分结果仅供参考与娱乐。',
+    reportStamp: '圣遗物\n评定专用'
   },
   cht: {
     title: '星天水鏡', subtitle: '聖遺物評分',
@@ -152,7 +166,16 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '改武器', simWeaponType: '型號',
     simSet: '套裝', simLevel: '等級', simRefine: '精煉', simMainStat: '主詞條', simSubStats: '副詞條', simAddStat: '加一條',
     simCalculating: '重算中…', simEmpty: '改一下右邊的武器或聖遺物，這裡就會跟著變。',
-    shareFail: '截圖失敗，沒生成圖片。換一個瀏覽器或稍後再試。'
+    simBuffNew: '新增', simBuffGone: '失效',
+    shareFail: '截圖失敗，沒生成圖片。換一個瀏覽器或稍後再試。',
+    reportTitle: '聖遺物評定報告',
+    reportSubtitle: '評價等級 · 角色聖遺物總分排序',
+    reportRank: '名次', reportChar: '評定角色',
+    reportDate: '評定日期',
+    reportRegion: '區服',
+    reportNote: '評定依據喵喵版評分內核，分數與喵喵版一致。',
+    reportNoteSub: '評分結果僅供參考與娛樂。',
+    reportStamp: '聖遺物\n評定專用'
   },
   en: {
     title: 'Seiten Suikyou', subtitle: 'Artifact Scoring',
@@ -217,7 +240,16 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: 'Weapon', simWeaponType: 'Model',
     simSet: 'Set', simLevel: 'Level', simRefine: 'Refinement', simMainStat: 'Main stat', simSubStats: 'Substats', simAddStat: 'Add',
     simCalculating: 'Recalculating…', simEmpty: 'Change the weapon or an artifact on the right and this updates.',
-    shareFail: 'Screenshot failed, no image was produced. Try another browser or retry later.'
+    simBuffNew: 'New', simBuffGone: 'Lost',
+    shareFail: 'Screenshot failed, no image was produced. Try another browser or retry later.',
+    reportTitle: 'Artifact Appraisal Report',
+    reportSubtitle: 'Ranked by total artifact score',
+    reportRank: 'Rank', reportChar: 'Characters rated',
+    reportDate: 'Report date',
+    reportRegion: 'Server',
+    reportNote: 'Scored with the same engine as the Miao plugin, so scores match exactly.',
+    reportNoteSub: 'For reference and entertainment only.',
+    reportStamp: 'Artifact\nAppraisal'
   },
   ja: {
     title: '星天水鏡', subtitle: '聖遺物スコア',
@@ -280,7 +312,16 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '武器', simWeaponType: '種類',
     simSet: 'セット', simLevel: 'レベル', simRefine: '精錬', simMainStat: 'メイン', simSubStats: 'サブ', simAddStat: '追加',
     simCalculating: '再計算中…', simEmpty: '右の武器か聖遺物を変えると、ここも変わります。',
-    shareFail: 'スクリーンショットに失敗し、画像が作れませんでした。別のブラウザか、時間をおいて再度お試しください。'
+    simBuffNew: '追加', simBuffGone: '失効',
+    shareFail: 'スクリーンショットに失敗し、画像が作れませんでした。別のブラウザか、時間をおいて再度お試しください。',
+    reportTitle: '聖遺物評価レポート',
+    reportSubtitle: 'キャラクター別の聖遺物スコア順',
+    reportRank: '順位', reportChar: '評価キャラクター',
+    reportDate: '評価日',
+    reportRegion: 'サーバー',
+    reportNote: '喵喵版と同じ評価エンジンで算出しています。スコアも一致します。',
+    reportNoteSub: '評価結果は娯楽・参考用途のみです。',
+    reportStamp: '聖遺物\n評価専用'
   },
   ko: {
     title: '성천수경', subtitle: '성유물 점수',
@@ -343,7 +384,16 @@ const TABLE: Record<string, Record<string, string>> = {
     simWeaponTitle: '무기', simWeaponType: '종류',
     simSet: '세트', simLevel: '레벨', simRefine: '재련', simMainStat: '주 옵션', simSubStats: '부 옵션', simAddStat: '추가',
     simCalculating: '다시 계산 중…', simEmpty: '오른쪽의 무기나 성유물을 바꾸면 여기도 따라 바뀝니다.',
-    shareFail: '스크린샷에 실패해 이미지가 만들어지지 않았습니다. 다른 브라우저에서 다시 시도해 주세요.'
+    simBuffNew: '추가', simBuffGone: '소멸',
+    shareFail: '스크린샷에 실패해 이미지가 만들어지지 않았습니다. 다른 브라우저에서 다시 시도해 주세요.',
+    reportTitle: '성유물 평가 리포트',
+    reportSubtitle: '캐릭터별 성유물 총점 순위',
+    reportRank: '순위', reportChar: '평가 캐릭터',
+    reportDate: '평가일',
+    reportRegion: '서버',
+    reportNote: '미오 버전과 같은 평가 엔진으로 계산해 점수가 일치합니다.',
+    reportNoteSub: '평가 결과는 참고와 오락 목적입니다.',
+    reportStamp: '성유물\n평가 전용'
   }
 }
 
