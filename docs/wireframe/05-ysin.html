@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 05 YSIN 评分板块</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 05</div><h1>YSIN 评分板块</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="04-detail.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html" class="on">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="06-sim.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">与现有评分完全独立：不换算、不共用评级、不共用档位配色。标题条写明评估的是哪个技能，左卡放分数与汇总，右卡放词条对照与该技能的伤害读数，右下只留一句规则声明。数值均为示意，用来定版式。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame">
+      <div class="blk is-new">
+        <div class="blk-head"><span>YSIN 评分</span><span style="font-size:12px;font-weight:400;color:var(--blue)">评估对象：霜华矢·二段合计　·　普攻 Lv.9</span></div>
+        <div class="row" style="align-items:stretch;gap:8px">
+          <div class="sub" style="width:185px;flex:none;background:#fff;border-color:var(--blue-line)">
+            <div class="mono" style="margin-bottom:6px">左卡　185px</div>
+            <div class="row" style="text-align:center;margin-bottom:8px">
+              <div style="flex:1"><div class="small" style="color:var(--blue)">词条分</div><div class="hero-num">161.0</div></div>
+              <div style="flex:1;border-left:1px solid var(--blue-soft)"><div class="small" style="color:var(--blue)">数据分</div><div class="hero-num">98.6</div></div>
+            </div>
+            <div style="border-top:1px solid var(--blue-soft);padding-top:6px">
+              <div class="kv"><span style="color:var(--blue)">总词条</span><span>51.7</span></div>
+              <div class="kv"><span style="color:var(--blue)">计分词条</span><span>40.2</span></div>
+              <div class="kv"><span style="color:var(--blue)">基准词条</span><span>25.0</span></div>
+            </div>
+            <div class="btnx blue" style="margin-top:10px;width:100%;justify-content:space-between"><span>流派</span><span>角色-流派 ▾</span></div>
+            <div class="mono" style="margin-top:5px">底部细条　26px</div>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+            <div class="mono">右卡　约 387px / 4 列各约 96px</div>
+            <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;gap:1px;background:var(--line2);font-size:12px">
+              <div class="cell head">属性</div><div class="cell head right">你的</div><div class="cell head right">其中武器</div><div class="cell head right">基准</div>
+              <div class="cell">攻击%</div><div class="cell right">20.7</div><div class="cell right">9.9</div><div class="cell right">8.0</div>
+              <div class="cell">精通</div><div class="cell right">6.7</div><div class="cell right dim">—</div><div class="cell right">3.0</div>
+              <div class="cell">暴击率</div><div class="cell right">12.6</div><div class="cell right dim">—</div><div class="cell right">16.6 <span class="small">原始 9.0</span></div>
+              <div class="cell">爆伤</div><div class="cell right">11.7</div><div class="cell right dim">—</div><div class="cell right">1.4 <span class="small">原始 9.0</span></div>
+              <div class="cell dim" style="grid-column:1 / span 4;display:flex;justify-content:space-between"><span>未计入　充能 / 生命 / 防御</span><span>0.9</span></div>
+            </div>
+            <div class="small" style="margin-bottom:4px">同一技能的期望伤害 · 随流派与技能等级变化</div>
+            <div class="grid3">
+              <div class="cell center"><div class="small">你的</div>99,972</div>
+              <div class="cell center"><div class="small">基准</div>62,095</div>
+              <div class="cell center"><div class="small">默认整套</div>62,095</div>
+            </div>
+            <div style="text-align:right;font-size:12px;color:var(--ink2);padding-top:2px">评分为 <b style="font-weight:500;color:var(--ink)">YSIN 规则</b>，仅供参考与娱乐。</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>评估对象必须写明</h3>
+        <ul>
+          <li>两个分数与三个读数都来自<strong>同一个核心输出技能</strong>的期望伤害，不是全角色总伤；不写清楚会被当成整套输出。</li>
+          <li>标注放在标题条右侧，一行给全：具体技能名 + 所属天赋槽（普攻 / 战技 / 爆发）+ 当前等级。</li>
+          <li>技能等级只从那一个天赋槽取，升其他技能不会改动这个分数；把槽位和等级一起写出来，用户才知道该升哪个。</li>
+          <li>切换流派时评估的技能可能不同，这一行要跟着一起换，不能写成静态文案。</li>
+          <li>技能名按当前语言显示，界面不自带一份名称表。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>信息层级决策</h3>
+        <ul>
+          <li>只保留一个「基准词条」汇总值，不再另设表尾合计行 —— 同一屏出现两个相同合计是重复。</li>
+          <li>不显示极限分、达成率与极限基准列；这些指标口径偏粗，展示出来会误导对比。</li>
+          <li>同屏只出现一套分数，避免两个来源不同、数值接近的分数互相打架。</li>
+          <li>三个汇总值同排一行，方便横向比较：你的总量 / 参与计分的量 / 尺子的基准。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>列设计理由</h3>
+        <ul>
+          <li><b>其中武器</b>：武器贡献单独列，与「你的」是包含关系，表头必须写明「其中」，否则会被当成要相加的另一份来源。没有贡献时画破折号，不写 0.0。</li>
+          <li><b>基准</b>：显示配平后的值，才与用户在外面看到的读数一致；原始值只用弱化小字标在暴击 / 爆伤两行。</li>
+          <li><b>不设「配平 / 不配平」两列</b>：配平只是把词条在双爆之间搬动，合计不变，两列并列会出现两个一样的合计；而且只有两行的数字会变，其余全等。</li>
+          <li><b>「你的」保持原样</b>：评分用的是真实面板，展示一个「假如重分双爆」的假设值会混淆读数。</li>
+          <li>只有 4 项有基准可对照，其余属性合成一行「未计入」，不铺空格；以后多了含充能的流派，行数自然增加。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>视觉与交互</h3>
+        <ul>
+          <li>用中性蓝，不碰现有评分的金色档位色；不出现档位字母，避免读成「另一套评级」。</li>
+          <li>流派切换即时换数据、不重新加载整页；切换后重新匹配画布高度。</li>
+          <li>右下只写规则归属与「仅供参考与娱乐」，不写任何计算公式 —— 这套规则是闭源的。</li>
+          <li>弱化小字在深色卡底上要保证至少 4.5:1 对比度；辅助信息也不能只靠颜色区分。</li>
+          <li>设计稿里的数值一律示意；实现时数值保持全精度，只在最外层展示时统一保留 1 位小数。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 05 / YSIN 评分板块 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

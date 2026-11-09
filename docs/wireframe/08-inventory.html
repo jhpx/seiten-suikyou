@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 08 交付清单</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 08</div><h1>交付清单</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="07-sim-modal.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html" class="on">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="09-tokens.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">按页面与状态列全，供开发排期与逐项验收。这里只写「要做出什么」，不写怎么做；视觉规格见下一节。</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>#</th><th>页面 / 状态</th><th>主要区块</th><th>交互</th><th>视觉规格</th><th>状态覆盖</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>全局框架</td><td>顶栏、提示条、主体、页脚</td><td>输入、刷新、切换语言</td><td>600px 基准 · 等比缩放</td><td>提示三态</td></tr>
+        <tr><td>2</td><td>未查询</td><td>一句引导</td><td>输入 UID</td><td>居中占位</td><td>空状态</td></tr>
+        <tr><td>3</td><td>首页 · 武器视图</td><td>账号信息、工具条、角色网格、建议区</td><td>点卡片进明细</td><td>3 列等宽卡片</td><td>加载 / 失败 / 空</td></tr>
+        <tr><td>4</td><td>首页 · 套装视图</td><td>卡片下半块换套装列表</td><td>单颗循环按钮切换</td><td>与武器视图共用网格</td><td>同上</td></tr>
+        <tr><td>5</td><td>排序浮层</td><td>条件列表、方向、底部操作</td><td>草稿态提交</td><td>最多 3 条件</td><td>无选中 / 已选中</td></tr>
+        <tr><td>6</td><td>筛选浮层</td><td>多组选项、已选计数、底部操作</td><td>草稿态提交</td><td>组间用分隔标题</td><td>无选中 / 已选中 / 无结果</td></tr>
+        <tr><td>7</td><td>刷取建议</td><td>标题、范围、工具、套装折叠卡</td><td>展开看逐件格</td><td>成色条长度 = 件数</td><td>空结果</td></tr>
+        <tr><td>8</td><td>角色明细页</td><td>操作栏、角色信息、评分卡、装备、伤害表</td><td>返回、进模拟、分享</td><td>600px 画布 · 整卡导出</td><td>骨架 / 失败 / 无数据</td></tr>
+        <tr><td>9</td><td>规则选择</td><td>评分卡底部细条</td><td>有多套规则时可切换</td><td>就地替换，不另起大块</td><td>单套 / 多套</td></tr>
+        <tr><td>10</td><td>伤害与增益</td><td>标题条、三列表格、页脚、说明表</td><td>无</td><td>斑马纹 · 数值右对齐</td><td>骨架 / 失败 / 无数据</td></tr>
+        <tr><td>11</td><td>YSIN 评分板块 <span class="wip">新增</span></td><td>标题条评估对象、左卡分数与汇总、右卡四列对照、右下声明</td><td>流派切换即时更新</td><td>独立配色 · 不共评级</td><td>加载 / 失败 / 无数据</td></tr>
+        <tr><td>12</td><td>模拟比对页</td><td>返回栏、角色头、属性对照、装备、伤害对比</td><td>编辑、还原、返回明细</td><td>单栏 · 旧 → 新</td><td>无数据 / 计算中</td></tr>
+        <tr><td>13</td><td>编辑浮层</td><td>武器表单 / 圣遗物表单</td><td>草稿态提交、增删词条</td><td>原生选择控件</td><td>只读项 / 可编辑项</td></tr>
+        <tr><td>14</td><td>提示与占位</td><td>提示条、各处占位</td><td>错误常驻，其余自动收</td><td>与所在内容区同宽</td><td>成功 / 错误 / 提示 / 加载</td></tr>
+        <tr><td>15</td><td>导出与分享</td><td>明细页右上角纯图标</td><td>整卡导出、生成直达链接</td><td>图标本身表意，不配文字</td><td>导出中 / 完成</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note" style="margin-top:14px">
+    <h3>这份稿子的用法</h3>
+    <p>它只回答三个问题：<strong>长什么样</strong>（区块、层级、尺寸、颜色）、<strong>怎么点</strong>（入口、出口、浮层、状态流转）、<strong>什么状态</strong>（加载、失败、空、成功）。结构标签、模块划分、接口、数据字段与文件位置都不在本稿范围内，由实现方案自行决定。线框内的角色、名称与数字全部是示意内容，不代表任何真实数据。</p>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 08 / 交付清单 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

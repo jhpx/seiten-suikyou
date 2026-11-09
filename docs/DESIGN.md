@@ -93,7 +93,7 @@ miao-plugin 下的 stub `node_modules`（原版链路 import 得到 moment / ima
 
 **页面接线**（2026-10-13）：`GET /api/accounts/:uid/characters/:avatarId/damage` 出视图对象
 （`character.service.ts` 的 `damageOf`：`Format.comma(v, 0)` 格式化 + buff 串按「：」拆两列），
-明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `miao.css` 的 `.dmg-cont`）。
+明细页在圣遗物卡下方异步拉它、画一张 miao 同款表（`detail.js` + `web/css/damage.css` 的 `.dmg-cont`）。
 两个 deliberate 的偏差：表格用 **grid 而非上游的 display:table**（上游让不吃暴击的行把
 期望值单元格设 `width:200%` 冒充跨列，自动布局下会把暴击列撑到 311px、期望列压到 56px，
 「期望伤害」表头折成两行 —— 实测截图后改的）；伤害标题列允许换行（上游出图 nowrap）。
@@ -235,7 +235,8 @@ enka 原始响应
 
 ### 明细页（评分卡）
 
-`miao.css` 是 miao 的 `resources/character/profile-detail.css` **照抄**的移植版，不是凭印象画的。
+`web/css/detail-base.css`、`score-card.css`、`item-card.css`、`damage.css` 是 miao 的
+`resources/character/profile-detail.css` **照抄**后按模块拆开的移植版，不是凭印象画的。
 
 设计前提：miao 的那张结果图是**一张固定 600 px 宽的画布**。要长得像就不能拆成流式响应式布局
 —— 这里照搬 600 px 画布，再由前端的 `detail.js`（`fitDetailZoom`）用 `zoom` 把整张画布等比缩到屏幕宽度。

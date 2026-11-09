@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 04 角色明细页</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 04</div><h1>角色明细页</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><a class="edge" href="03-roster-states.html">← 上一节</a><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html" class="on">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="05-ysin.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">一张完整的评分结果图，可整体导出为图片。画布按可用宽度等比缩放，所以内容高度直接影响成图清晰度：能收起的内容默认收起，不要做成第二屏长表。</p>
+  <div class="stage">
+    <div class="frame-scroll"><div class="frame">
+      <div class="blk">
+        <div class="blk-head"><span>操作栏（画布之外，不跟着缩放）</span><code>左右两组</code></div>
+        <div class="row between"><span class="btnx">← 返回</span><div class="row"><span class="btnx">模拟比对</span><span class="btnx">↓ 分享（纯图标）</span></div></div>
+        <div class="small" style="margin-top:5px">这行不放角色名：画布顶部已有更大一号，重复会分走按钮的分量。</div>
+      </div>
+      <div class="blk" style="background:var(--surface2)">
+        <div class="blk-head"><span>600px 画布 · 元素主题底色铺满整张卡</span><code>整卡导出</code></div>
+
+        <div class="sub">
+          <div class="blk-head"><span>角色基本信息</span><code>左图右表</code></div>
+          <div class="grid2">
+            <div class="ph" style="min-height:118px">主图立绘</div>
+            <div>
+              <div style="font-size:16px;font-weight:500">角色名</div>
+              <div class="small">UID - 等级 · 命座</div>
+              <div class="row" style="margin:6px 0"><span class="chip">普攻 10</span><span class="chip">战技 9</span><span class="chip">爆发 9</span><span class="small">被命座提升 / 满级要有标记</span></div>
+              <div class="cell dim" style="font-size:11px;line-height:1.9">攻击　权重 100　总值　白字 + 绿字<br>暴击率　权重 100　总值　白字 + 绿字<br>暴击伤害　权重 100　总值　白字 + 绿字<br>元素精通　权重 75　总值　白字 + 绿字<br>…… 8~9 行；多出一行时才撑高，不给短面板留空白</div>
+              <div class="grid6" style="margin-top:6px"><div class="cell center">1</div><div class="cell center dim">2</div><div class="cell center dim">3</div><div class="cell center dim">4</div><div class="cell center dim">5</div><div class="cell center dim">6</div></div>
+              <div class="small" style="text-align:right;margin-top:5px">评分为 <b>喵喵版规则</b>，仅供参考与娱乐。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub">
+          <div class="blk-head"><span>评分卡（左右结构）</span><code>185px + 剩余宽度</code></div>
+          <div class="row" style="align-items:stretch;gap:6px">
+            <div class="sub" style="width:185px;flex:none;background:var(--surface3)">
+              <div class="row" style="text-align:center"><div style="flex:1"><div class="small">圣遗物总分</div><div style="font-size:22px;font-weight:500">42.6</div></div><div style="flex:1;border-left:1px solid var(--line2)"><div class="small">评级</div><div style="font-size:22px;font-weight:500;color:var(--amber)">S</div></div></div>
+              <div class="sep"></div>
+              <div class="small">评分规则：角色-流派 ▾</div>
+              <div class="small" style="margin-top:4px">有多套规则时，这行就地换成下拉；选完整个页面一起更新</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div class="grid3" style="gap:1px;background:var(--line2)">
+                <div class="cell head">攻击 8.0</div><div class="cell head">暴击 12.6</div><div class="cell head">爆伤 11.7</div>
+                <div class="cell">精通 6.7</div><div class="cell">充能 3.1</div><div class="cell">生命 2.0</div>
+                <div class="cell">防御 1.4</div><div class="cell">治疗 0.0</div><div class="cell">物伤 0.0</div>
+                <div class="cell">有效词条 37.4</div><div class="cell">无效词条 4.6</div><div class="cell">第 10 词条</div>
+              </div>
+              <div class="small" style="margin-top:5px">3 列等宽、26px 行高、两端对齐。汇总格是脚注：字号和字重都要比「评分规则」那行弱一级，数值不加粗。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sub">
+          <div class="blk-head"><span>武器与 5 件圣遗物</span><code>3 列 · 6 张卡</code></div>
+          <div class="grid3">
+            <div class="cell" style="min-height:66px"><b>武器名</b><div class="small">精炼 · 等级</div><div class="small">主属性 / 副属性</div></div>
+            <div class="cell" style="min-height:66px"><b>部位一</b><div class="small">+20 · 主词条</div><div class="small">副词条 ×4</div></div>
+            <div class="cell" style="min-height:66px"><b>部位二</b><div class="small">+20 · 主词条</div><div class="small">副词条 ×4</div></div>
+            <div class="cell" style="min-height:66px"><b>部位三</b><div class="small">+20 · 主词条</div><div class="small">副词条 ×4</div></div>
+            <div class="cell" style="min-height:66px"><b>部位四</b><div class="small">+20 · 主词条</div><div class="small">副词条 ×4</div></div>
+            <div class="cell" style="min-height:66px"><b>部位五</b><div class="small">+20 · 主词条</div><div class="small">副词条 ×4</div></div>
+          </div>
+          <div class="small" style="margin-top:5px">右上角套装图标斜切淡出；逐件成色角标共用一套档位色。未装备的位保留空卡，不整卡消失。</div>
+        </div>
+
+        <div class="sub is-new">
+          <div class="blk-head"><span>YSIN 评分板块 <span class="wip">新增</span></span><code>整卡通栏</code></div>
+          <div class="small">插在「装备」与「伤害计算」之间；标题条注明评估的是哪个技能，避免三个伤害读数被当成全角色总伤。详细版式见下一节。</div>
+        </div>
+
+        <div class="sub">
+          <div class="blk-head"><span>伤害计算（固定真值）</span><code>标题条 + 表格 + 页脚</code></div>
+          <div class="grid3" style="gap:1px;background:var(--line2)">
+            <div class="cell head">伤害类型</div><div class="cell head center">暴击伤害</div><div class="cell head center">期望伤害</div>
+            <div class="cell">技能 · 第一段</div><div class="cell right">62,095</div><div class="cell right">38,412</div>
+            <div class="cell">技能 · 第二段</div><div class="cell right">118,340</div><div class="cell right">73,205</div>
+          </div>
+          <div class="row between" style="margin-top:5px"><span class="small">页脚：敌人等级 / 名称；右端浮「计算来源」</span><span class="mono">footer</span></div>
+          <div class="small" style="margin-top:4px">另有增益说明（两列：来源 / 描述），以及加载中 / 失败 / 无数据三种单行占位。</div>
+        </div>
+
+        <div class="sub"><div class="row between"><span class="small">数据时间（不再重复评级 / 规则名）</span><span class="mono">一行</span></div></div>
+      </div>
+    </div></div>
+    <div>
+      <div class="note">
+        <h3>阅读顺序</h3>
+        <p>装备 → 这把尺子怎么量（新板块）→ 实际打多少（伤害表）。新板块里的伤害是随流派与配置变的推导量，下面那张表是固定真值；把固定值压在最后当锚，逻辑才顺。</p>
+      </div>
+      <div class="note">
+        <h3>版式规范</h3>
+        <ul>
+          <li>左侧评分卡与右侧网格等高，底缘落在同一行；高低差会看起来像多出一截。</li>
+          <li>长文案要能收进固定宽度，宁可缩字号也不要溢出到隔壁卡片。</li>
+          <li>同组字号必须一起降档，不能出现「词条小、汇总大」这种半套压缩。</li>
+          <li>整张画布导出为图片，所有新增区块都会进图，加高前先想清楚代价。</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>状态</h3>
+        <p>伤害与增益内容就绪前显示骨架占位，失败给一行说明，无数据时不出表；三种状态都占同样的位置，避免页面跳动。</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 04 / 角色明细页 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>

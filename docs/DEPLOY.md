@@ -69,7 +69,7 @@ npm run server -- --port 8787 --trust-proxy \
 
 ### 2.3 为什么不需要任何图片改写
 
-页面和图片**都用相对路径**（`style.css`、`assets/common/elem/anemo.png`，都不带前导 `/`）。
+页面和图片**都用相对路径**（`css/base.css`、`assets/common/elem/anemo.png`，都不带前导 `/`）。
 相对路径由浏览器**按页面所在目录**解析：
 
 - 本地根路径 `http://host:8787/` → `http://host:8787/assets/...`

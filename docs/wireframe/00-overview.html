@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星天水镜 · 界面原型 — 00 页面关系</title>
+<link rel="stylesheet" href="assets/wireframe.css">
+</head>
+<body>
+<div class="doc">
+<header class="doc-head"><div class="kicker">星天水镜 · 界面原型　/　分节 00</div><h1>页面关系</h1><p class="lede">本页是独立分节文件，改这一节只需要编辑这一个文件。<a href="index.html">返回目录</a>　·　<a href="09-tokens.html">通用设计规格</a></p><div class="meta">2026-11-09 · 设计基准宽度 600px · 浅色线框 · 离线可看</div></header>
+<nav class="pager"><span class="edge off">← 上一节</span><a class="edge" href="index.html">目录</a><span class="nums"><a href="00-overview.html" class="on">00</a><a href="01-shell.html">01</a><a href="02-roster.html">02</a><a href="03-roster-states.html">03</a><a href="04-detail.html">04</a><a href="05-ysin.html">05</a><a href="06-sim.html">06</a><a href="07-sim-modal.html">07</a><a href="08-inventory.html">08</a><a href="09-tokens.html">09</a></span><a class="edge" href="01-shell.html">下一节 →</a></nav>
+<main class="pagemain">
+
+  <p class="sec-desc">全站三个页面，同一时刻只显示一个；切换页面时全局框架保持不动。首页负责找人，明细页看单个角色，模拟页做装备假设。任何页面都要能回到上一页。</p>
+  <div class="flow">
+    <div class="node"><strong>未查询</strong><span>引导状态</span></div><div class="arw">→</div>
+    <div class="node"><strong>读取 / 刷新</strong><span>输入端动作</span></div><div class="arw">→</div>
+    <div class="node"><strong>首页</strong><span>角色列表</span></div><div class="arw">→</div>
+    <div class="node"><strong>角色明细</strong><span>评分结果</span></div><div class="arw">→</div>
+    <div class="node"><strong>模拟比对</strong><span>装备假设</span></div>
+  </div>
+  <div class="note" style="margin-top:12px">
+    <h3>贯穿全站的支路</h3>
+    <ul>
+      <li>顶栏切换语言后，当前页面内容整体换成对应语言，筛选与选中状态保留。</li>
+      <li>顶栏刷新会重新取一次账号数据；成功给出完成提示，失败给出友好错误说明。</li>
+      <li>分享链接可以直接定位到某个角色的明细页，不必先经过首页。</li>
+      <li>每个页面都有加载中、失败、无数据三种状态，位置与对应内容区一致。</li>
+    </ul>
+  </div>
+
+</main>
+<div class="foot">星天水镜 · 界面原型 · 分节 00 / 页面关系 · 2026-11-09</div>
+</div>
+<script src="assets/wireframe.js"></script>
+</body>
+</html>
