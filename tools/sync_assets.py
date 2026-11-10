@@ -72,13 +72,12 @@ COMMON_ASSETS = [
     "common/cont/card-bg.png",
     # 属性表那一行的小图标 2026-10-07 起改用仓库自带的 assets/character/svgs/*.svg（CSS mask 上色），
     # miao 侧的 character/imgs/icon.png / icon-new.png 已不再需要，别再列进来（会把这张死资源拷回去）。
-    "character/imgs/star.png",
-    "character/imgs/up-num-icon0.png",
-    "character/imgs/up-num-icon1.png",
-    "character/imgs/up-num-icon2.png",
     "character/imgs/crown.png",
-    "character/imgs/main-01.png",
-    "character/imgs/main-02.png",
+    # 下面这 6 张 2026-11-10 删了（全仓零引用），别再列回来：
+    #   character/imgs/star.png          星级图，页面改用 common/item/star.png
+    #   character/imgs/up-num-icon0~2.png 强化箭头雪碧图，5.3 起换成 SVG 镂空数字（见 item-card.css）
+    #   character/imgs/main-01/02.png    角色横版插画，没有任何页面用过
+    # character/imgs/exploration.webp（地区探索度雪碧图）同样无用，本来就不在清单里。
     # 武器卡的星级图（miao common.css 里 .artis .weapon .star 用的）
     "common/item/star.png",
     # 首页角色卡的星级底色：五星 bg5、四星 bg4，就是游戏里那张橙/紫底
