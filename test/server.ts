@@ -60,16 +60,39 @@ const json = async (p: string): Promise<any> => readJson(await get(p))
 
 console.log('=== 1. 元信息与健康检查 ===')
 {
+  /* /api/health：纯存活探针，证明后端能响应；不含数据源 / uid 信息 */
   const h = await json('/api/health')
   eq(h.ok, true, '/api/health 返回 ok')
-  eq(h.data.uids, 1, '/api/health 报出 1 个 uid')
-  eq(Array.isArray(h.data.regions), true, '/api/health 含 regions 数组（各区分服明细）')
-  eq(Array.isArray(h.data.microggServers), true, '/api/health 含 microggServers 数组（镜像两服）')
+  eq(h.data.status, 'ok', '/api/health 后端存活（status=ok）')
+  eq(h.data.regions, undefined, '/api/health 不含 regions（数据源状态已移到 /api/region）')
+  eq(h.data.uids, undefined, '/api/health 不含 uids（uid 统计在 /api/stats）')
+
+  /* /api/region：数据源在线状态（enka 官方区服 + MicroGG 镜像两服） */
+  const rg = await json('/api/region')
+  eq(rg.ok, true, '/api/region 返回 ok')
+  eq(Array.isArray(rg.data.regions), true, '/api/region 含 regions 数组（各区分服明细）')
+  eq(Array.isArray(rg.data.microggServers), true, '/api/region 含 microggServers 数组（镜像两服）')
   /* 状态页抓取是异步的，断言只查「有数据时字段形状对」，不依赖网络时序 */
   const shapeOk = (list: any) => Array.isArray(list) && list.every((r: any) =>
     typeof r.name === 'string' && ['up', 'down', 'unknown'].includes(r.status) && /^#[0-9a-fA-F]{3,8}$/.test(r.color))
-  eq(shapeOk(h.data.regions), true, '/api/health 各区服带合法状态与身份色')
-  eq(shapeOk(h.data.microggServers), true, '/api/health microgg 两服带合法状态与身份色')
+  eq(shapeOk(rg.data.regions), true, '/api/region 各区服带合法状态与身份色')
+  eq(shapeOk(rg.data.microggServers), true, '/api/region microgg 两服带合法状态与身份色')
+
+  /* /api/stats：uid 使用统计（只读 fetch_log 现算，不改表）。
+     夹具只种了 1 个 uid、1 次成功抓取（2026-09-13），故下面都是确定值。 */
+  const s = await json('/api/stats')
+  eq(s.ok, true, '/api/stats 返回 ok')
+  eq(s.data.totalUids, 1, '/api/stats 当前已使用 1 个 uid')
+  eq(Array.isArray(s.data.newUidsByDay) && s.data.newUidsByDay.length === 1, true, '/api/stats 新增按日分桶、共 1 天')
+  eq(s.data.newUidsByDay[0].count, 1, '/api/stats 该天新增 1 个 uid')
+  eq(s.data.returningUids, 0, '/api/stats 无回头客（仅 1 次抓取）')
+  eq(s.data.multiDayUids, 0, '/api/stats 无跨日留存')
+  /* 播种时间 2026-09-13，离现在远超 30 天，近期活跃必为 0（断言与时点无关） */
+  eq(s.data.activeLast7d, 0, '/api/stats 近 7 天活跃 0')
+  eq(s.data.activeLast30d, 0, '/api/stats 近 30 天活跃 0')
+  eq(s.data.avgFetchesPerUid, 1, '/api/stats 人均抓取 1 次')
+  ok(typeof s.data.earliestFetch === 'string' && s.data.earliestFetch.endsWith('Z'),
+    '/api/stats 最早抓取是 ISO UTC 字符串')
 
   const m = await json('/api/meta')
   const codes = m.data.locales.map((l: any) => l.code)

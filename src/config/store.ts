@@ -12,7 +12,7 @@
 import type { Conn, Db } from './db.ts'
 import * as accountBo from '../repository/account.repo.ts'
 import * as characterBo from '../repository/character.repo.ts'
-import type { AccountRow } from '../repository/account.repo.ts'
+import type { AccountRow, UidUsageRaw } from '../repository/account.repo.ts'
 import type { ArtifactRow, CharacterRow, WeaponRow } from '../repository/character.repo.ts'
 import { account as accountT, artifact as artifactT, character as characterT, characterRubric as characterRubricT, weapon as weaponT } from './schema.ts'
 import { AccountDbo } from '../repository/dbo/account.ts'
@@ -218,6 +218,11 @@ export function lastFetch (db: Conn, uid: number): FetchLogRow | null {
 /** 库里用到的官方文案 key 清单（跨三张表去重，见 repository/character.repo.ts） */
 export function listTextKeys (db: Conn): characterBo.TextKeys {
   return characterBo.collectTextKeys(db)
+}
+
+/** uid 使用统计（只读 fetch_log 现算，不改表结构）。service 层再整成对外 DTO */
+export function uidUsageRaw (db: Conn): UidUsageRaw {
+  return accountBo.uidUsageRaw(db)
 }
 
 /* ─────────────── 评分规则偏好 ─────────────── */

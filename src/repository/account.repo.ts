@@ -73,3 +73,94 @@ export function lastOkFetch (db: Conn, uid: number): FetchLogRow | null {
     .where(and(eq(fetchLog.uid, uid), eq(fetchLog.ok, 1)))
     .orderBy(desc(fetchLog.id)).limit(1).get() ?? null
 }
+
+/* ---------------- uid 使用统计（只读 fetch_log，不改表结构） ---------------- */
+
+/** uidUsageRaw 的返回形状 —— 与 service/dto/stats.dto.ts 的 UidStats 一一对应，
+ *  只是这里多带一个 okFetchTotal（算人均用），最终整成 UidStats 是 service 的活。 */
+export interface UidUsageRaw {
+  totalUids: number
+  earliestFetch: string | null
+  newUidsByDay: DailyNewUid[]
+  returningUids: number
+  multiDayUids: number
+  activeLast7d: number
+  activeLast30d: number
+  okFetchTotal: number
+}
+
+/** newUidsByDay 一行：某本地日的新增 uid 数 */
+export interface DailyNewUid {
+  date: string
+  count: number
+}
+
+/**
+ * uid 使用统计。全部从 fetch_log（只增不改的抓取账本）现算，不新增任何表 / 列。
+ * 口径：只认 ok=1（成功抓取），失败的尝试不计入「使用」。
+ *
+ * 自然日按机器本地时区算（与出口 fmtTime 同口径，不写死 +8）：ISO 里的尾随 Z 先去掉，
+ * 再让 strftime 的 'localtime' 修饰符转本地 —— 避免 SQLite 对 `…Z` 解析不一致。
+ */
+export function uidUsageRaw (db: Conn): UidUsageRaw {
+  /* 当前已使用过的 uid 总数（成功抓取过去重） */
+  const totalUids = Number(
+    (db.get(sql`SELECT COUNT(DISTINCT "uid") AS n FROM "fetch_log" WHERE "ok" = 1`) as { n: number } | undefined)?.n ?? 0)
+
+  /* 最早一条成功抓取（库龄起点，给前端做上下文） */
+  const earliestFetch = (db.get(sql`SELECT MIN("fetched_at") AS t FROM "fetch_log" WHERE "ok" = 1`) as { t: string | null } | undefined)?.t ?? null
+
+  /* 每日新增：先取每个 uid 首次成功抓取的本地日，再按日汇总。
+     ⚠️ 必须用 MIN("fetched_at") 包住 strftime —— SQLite 的「裸列」规则下，
+     只写 strftime("fetched_at") 会取组内「任意一行」的日期（通常是先插入那行），
+     不一定是首次抓取日。 */
+  const dayRows = db.all(sql`
+    SELECT day, COUNT(*) AS count FROM (
+      SELECT "uid", strftime('%Y-%m-%d', replace(MIN("fetched_at"), 'Z', ''), 'localtime') AS day
+      FROM "fetch_log" WHERE "ok" = 1 GROUP BY "uid"
+    ) GROUP BY day ORDER BY day
+  `) as Array<{ day: string, count: number }>
+  const newUidsByDay: DailyNewUid[] = dayRows.map(r => ({ date: r.day, count: Number(r.count) }))
+
+  /* 回头客：成功抓取 ≥ 2 次（多次使用、长期留存） */
+  const returningUids = Number(
+    (db.get(sql`
+      SELECT COUNT(*) AS n FROM (
+        SELECT "uid" FROM "fetch_log" WHERE "ok" = 1 GROUP BY "uid" HAVING COUNT(*) >= 2
+      )`) as { n: number } | undefined)?.n ?? 0)
+
+  /* 跨日留存：在 ≥ 2 个不同本地自然日有成功抓取 */
+  const multiDayUids = Number(
+    (db.get(sql`
+      SELECT COUNT(*) AS n FROM (
+        SELECT "uid" FROM "fetch_log" WHERE "ok" = 1
+        GROUP BY "uid"
+        HAVING COUNT(DISTINCT strftime('%Y-%m-%d', replace("fetched_at", 'Z', ''), 'localtime')) >= 2
+      )`) as { n: number } | undefined)?.n ?? 0)
+
+  /* 近 7 / 30 天活跃：这段时间内有成功抓取的去重 uid 数 */
+  const since = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString()
+  const activeLast7d = countActiveSince(db, since(7))
+  const activeLast30d = countActiveSince(db, since(30))
+
+  /* 成功抓取总次数 / 去重 uid 数 = 人均抓取次数 */
+  const totals = db.get(sql`SELECT COUNT(*) AS total, COUNT(DISTINCT "uid") AS uids FROM "fetch_log" WHERE "ok" = 1`) as { total: number, uids: number } | undefined
+  const okFetchTotal = Number(totals?.total ?? 0)
+
+  return {
+    totalUids,
+    earliestFetch,
+    newUidsByDay,
+    returningUids,
+    multiDayUids,
+    activeLast7d,
+    activeLast30d,
+    okFetchTotal
+  }
+}
+
+/** 某时间点之后有成功抓取的去重 uid 数（cutoff 为 ISO UTC，与 fetched_at 同格式可字典序比） */
+function countActiveSince (db: Conn, cutoff: string): number {
+  return Number(
+    (db.get(sql`SELECT COUNT(DISTINCT "uid") AS n FROM "fetch_log" WHERE "ok" = 1 AND "fetched_at" >= ${cutoff}`) as { n: number } | undefined)?.n ?? 0)
+}

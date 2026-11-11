@@ -29,7 +29,7 @@ import type { MiddlewareHandler } from 'hono'
 
 import { i18n } from '../index.ts'
 import { openDb } from '../config/db.ts'
-import { accountView, countAccounts, createIngestService, listAccounts } from '../service/account.service.ts'
+import { accountView, countAccounts, createIngestService, listAccounts, uidStats } from '../service/account.service.ts'
 import { createHealthService } from '../service/health.service.ts'
 import type { FetchImpl } from '../service/account.service.ts'
 import { characterDamage, weightFilterOptions, listRubrics, selectRubric } from '../service/character.service.ts'
@@ -100,8 +100,14 @@ export function createApp ({
     },
     ingest: ingest.fetch,
     health: {
+      live: () => true
+    },
+    region: {
       regions: () => health.get().regions,
       microggServers: () => health.get().microggServers
+    },
+    stats: {
+      uidStats: () => uidStats(db)
     }
   }
 

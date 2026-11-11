@@ -39,7 +39,7 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
   const profile = toMiaoProfile(ch)
   if (!profile) return null
   const charName = profile.char.name
-  const group = schoolsFor(charName)
+  const group = schoolsFor(profile.id)
   if (!group || !group.schools.length) return null
 
   const ysin = evaluateCharacter(ch)
@@ -65,7 +65,7 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
   }
 
   const schools: YsinSchoolView[] = group.schools.map(seed => {
-    const preset = presetOf(charName, seed)
+    const preset = presetOf(profile.id, seed)
     /* 分数由网关 evaluateCharacter 用同一份 basis / rolls / preset 预先算好，
        这里直接取，避免两条计算路径出现漂移。详见 ysin.ts 的 scores 字段。 */
     const result = ysin.scores[seed.id]

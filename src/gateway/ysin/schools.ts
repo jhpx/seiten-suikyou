@@ -38,20 +38,23 @@ function load (): SchoolsFile {
 }
 
 const DATA = load()
-const BY_NAME = new Map(DATA.characters.map(c => [c.name, c]))
+const BY_ID = new Map(DATA.characters.map(c => [c.id, c]))
 
 /** 没有等级倍率表时用常数：倍率在词条分里约掉，数据分只在 9 级等价配置下精确 */
 const FLAT_SCALE: readonly number[] = Array(15).fill(1)
 
-/** 找出这个角色在 YSIN 网页里有哪些流派；名字对不上就返回空数组 */
-export function schoolsFor (charName: string): CharacterSeed | null {
-  return BY_NAME.get(charName) ?? null
+/** 找出这个角色在 YSIN 网页里有哪些流派；id 对不上就返回 null */
+export function schoolsFor (avatarId: number): CharacterSeed | null {
+  return BY_ID.get(avatarId) ?? null
 }
 
+/** 甘雨的 avatarId —— 唯一逐位对拍过的「融化」流派挂在她身上 */
+const GAN_YU_ID = 10000037
+
 /** 种子 → 计算用的预设 */
-export function presetOf (charName: string, seed: SchoolSeed): SchoolPreset {
+export function presetOf (avatarId: number, seed: SchoolSeed): SchoolPreset {
   /* 唯一逐位对拍过的流派，用精确表（含 YSIN v4.8 实测倍率比与 1 命抗性） */
-  if (charName === '甘雨' && seed.name === '融化') return GAN_YU_MELT
+  if (avatarId === GAN_YU_ID && seed.name === '融化') return GAN_YU_MELT
   return {
     name: seed.name,
     bench: seed.bench,

@@ -87,11 +87,11 @@ const sign = (n: number): string => (n >= 0 ? '+' : '') + n
  * 其余默认按 9/9/9 等价配置算（技能等级 ≠ 9 时数据分会偏差，见 docs）。
  */
 function primaryScore (r: CharacterYsin): { school: string, sub: number, gear: number } | null {
-  const group = schoolsFor(r.charName)
+  const group = schoolsFor(r.avatarId)
   if (!group || !group.schools.length) return null
   let pick = group.schools[0]
   for (const s of group.schools) {
-    if (presetOf(r.charName, s).talentRatioOverride) { pick = s; break }
+    if (presetOf(r.avatarId, s).talentRatioOverride) { pick = s; break }
   }
   const res = r.scores[pick.id]
   if (!res) return null

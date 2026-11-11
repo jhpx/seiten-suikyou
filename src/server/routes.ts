@@ -23,7 +23,12 @@ import * as meta from '../rest/meta.rest.ts'
 export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   /* —— 系统：语言表 / 界面文案 / 探活（不碰业务数据，故意不限流） —— */
   app.get('/api/meta', meta.meta(ctx))
+  /* 后端是否存活 */
   app.get('/api/health', meta.health(ctx))
+  /* 数据源是否正常：从 health 独立出来，与「后端是否存活」是两件事 */
+  app.get('/api/region', meta.region(ctx))
+  /* uid 使用统计：与 region 无关，单独成接口（只读 fetch_log 现算，不加表） */
+  app.get('/api/stats', meta.stats(ctx))
 
   /* —— 账号：列表 → 单账号 → 刷新 → 其下的角色 —— */
   app.get('/api/accounts', guard('read'), account.list(ctx))

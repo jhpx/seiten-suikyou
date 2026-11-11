@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `fetch` | `POST /api/accounts/:uid/refresh`（另加全局总闸 `fetchAll` 30） | 每 IP 20 | `429` + `Retry-After` |
 | `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/characters/:avatarId/damage`、`/api/accounts/:uid/characters/:avatarId/ysin` | 每 IP 300 | `429` + `Retry-After` |
-| `none` | `/api/meta`、`/api/health` | 不限（状态探针被限会误报故障） | — |
+| `none` | `/api/meta`、`/api/health`、`/api/region`、`/api/stats` | 不限（状态探针被限会误报故障） | — |
 
 静态页与素材图**故意不限流**。本地调试可加 `--no-rate-limit` 关掉。
 
@@ -73,7 +73,9 @@
 | 方法 | 路径 | 作用 |
 |---|---|---|
 | GET | `/api/meta` | 语言表、界面文案、权重筛选项 |
-| GET | `/api/health` | 存活探针 + 数据源状态快照 |
+| GET | `/api/health` | 后端存活探针（进程能响应即活着） |
+| GET | `/api/region` | 数据源在线状态（enka 各区分服 + MicroGG 镜像两服） |
+| GET | `/api/stats` | uid 使用统计（当前 uid 数 + 新增 / 留存 / 活跃） |
 | GET | `/api/accounts` | 账号列表 |
 | GET | `/api/accounts/:uid` | 一个账号的完整视图 |
 | GET | `/api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算 |
@@ -110,12 +112,24 @@
 
 ### 2.2 `GET /api/health`
 
-存活探针 / 部署自检用，同时给主页的「数据源在线状态」指示灯供数。
+**后端存活探针**：只要进程能回这个接口，就说明后端活着。不碰数据库、不查上游，
+所以数据源故障不会把它带成失败（数据源状态见 `/api/region`）。
 
 **响应 `data`：**
 ```jsonc
 {
-  "uids": 12,                          // 库里现有 uid 数
+  "status": "ok"                      // ok = 后端存活；degraded 预留（当前恒为 ok）
+}
+```
+
+### 2.3 `GET /api/region`
+
+**数据源在线状态**：Enka 官方 Genshin 各区分服 + MicroGG 镜像节点自己的两个服。
+与「后端是否存活」分开 —— 后端活着不代表上游数据源正常。
+
+**响应 `data`：**
+```jsonc
+{
   "regions": [                        // Enka 官方 Genshin 各区分服
     { "name": "euro", "status": "up", "color": "#e67e22" }
   ],
@@ -129,7 +143,33 @@
 `status.enka.network` 缓存在内存，前端进页面读一次；拉不到时 `regions` 为空数组、
 `microggServers` 两服以 `unknown` 占位。
 
-### 2.3 `GET /api/accounts`
+### 2.4 `GET /api/stats`
+
+uid 使用统计。**只读 `fetch_log`（抓取账本）现算，不改任何表 / 列**，与数据源 region 无关。
+适合做运营看板：看目前用了多少 uid、每天新增多少、哪些 uid 长期留存。
+
+口径统一为「成功抓取（`ok=1`）才算使用」，失败的尝试不计入。
+
+**响应 `data`：**
+```jsonc
+{
+  "totalUids": 12,                    // 当前已使用过的 uid 总数
+  "earliestFetch": "2026-09-13T00:00:00.000Z",  // 最早一条成功抓取（ISO UTC）；库空时 null
+  "newUidsByDay": [                   // 每日新增：每个 uid 首次成功抓取落在本日，再按日汇总，升序
+    { "date": "2026-09-13", "count": 1 },
+    { "date": "2026-09-20", "count": 3 }
+  ],
+  "returningUids": 4,                 // 回头客：成功抓取 ≥ 2 次的 uid 数（多次使用、长期留存）
+  "multiDayUids": 3,                  // 跨日留存：在 ≥ 2 个不同本地自然日有成功抓取
+  "activeLast7d": 5,                  // 近 7 天内有成功抓取的去重 uid 数
+  "activeLast30d": 9,                 // 近 30 天内有成功抓取的去重 uid 数
+  "avgFetchesPerUid": 1.33            // 人均成功抓取次数（总次数 / 去重 uid 数，两位小数）
+}
+```
+
+自然日按机器本地时区计算（与出口时间文本 `fmtTime` 同口径），不再另写时区偏移。
+
+### 2.5 `GET /api/accounts`
 
 列表页「切换账号」下拉的数据。
 

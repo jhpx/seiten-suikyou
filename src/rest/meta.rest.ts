@@ -1,6 +1,8 @@
 /*
- * 系统信息控制器：/api/meta（语言表 + 界面文案 + 权重筛选项）、/api/health（账号数 + 数据源状态快照）。
- * 这两条不碰业务数据，故意不挂限流 —— 状态探针被限会误报故障。
+ * 系统信息控制器：/api/meta（语言表 + 界面文案 + 权重筛选项）、
+ * /api/health（后端存活探针）、/api/region（数据源在线状态快照）、
+ * /api/stats（uid 使用统计）。
+ * 这几条不碰业务数据，故意不挂限流 —— 状态探针被限会误报故障。
  */
 import type { Context, Handler } from 'hono'
 
@@ -24,10 +26,19 @@ export const meta = (ctx: ApiContext): Handler => (c) => {
   })
 }
 
+/* 「看后端是否正常」—— 纯存活探针：能回这个接口就说明后端活着。
+   不碰数据库、不查上游，所以数据源挂了也不影响它（数据源状态见 /api/region）。 */
 export const health = (ctx: ApiContext): Handler => (c) => ok(c, {
-  uids: ctx.accounts.count(),
-  /* 后端每 5 分钟同步一次 status.enka.network 的快照，前端进页面读一次铺成指示灯。
-     不在用户点刷新时查 —— 这是「一眼看见」用的常驻标识。 */
-  regions: ctx.health.regions(),
-  microggServers: ctx.health.microggServers()
+  status: ctx.health.live() ? 'ok' : 'degraded'
 })
+
+/* 「看数据源是否正常」—— Enka 官方各区分服 + MicroGG 镜像两服的在线状态。
+   后端每 5 分钟同步一次 status.enka.network 的快照，前端进页面读一次铺成指示灯。
+   不在用户点刷新时查 —— 这是「一眼看见」用的常驻标识。 */
+export const region = (ctx: ApiContext): Handler => (c) => ok(c, {
+  regions: ctx.region.regions(),
+  microggServers: ctx.region.microggServers()
+})
+
+/* uid 使用统计 —— 与 region 无关，单独成接口。只读 fetch_log 现算，不新增表 / 列。 */
+export const stats = (ctx: ApiContext): Handler => (c) => ok(c, ctx.stats.uidStats())

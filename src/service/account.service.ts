@@ -24,6 +24,7 @@ import type { AdviceBundle } from './advice.ts'
 import { shapeCharacter } from './assembler/character.assembler.ts'
 import type { MarkDetail } from './dto/character.dto.ts'
 import type { AccountSummary, AccountView } from './dto/account.dto.ts'
+import type { UidStats } from './dto/stats.dto.ts'
 
 export type { AccountSummary, AccountView }
 
@@ -45,6 +46,26 @@ export function listAccounts (db: Db): AccountSummary[] {
 /** 库里有多少个账号 —— 探活用，不拼整包视图 */
 export function countAccounts (db: Db): number {
   return repo.listUids(db).length
+}
+
+/**
+ * uid 使用统计 —— 只读 fetch_log 现算，不改表结构。
+ * 把仓储给的原始聚合（UidUsageRaw）补上「人均抓取次数」整成对外 DTO。
+ * 人均 = 成功抓取总次数 / 去重 uid 数，两位小数（纯展示指标，这里做一次舍入）。
+ */
+export function uidStats (db: Db): UidStats {
+  const raw = repo.uidUsageRaw(db)
+  const avg = raw.totalUids > 0 ? Math.round((raw.okFetchTotal / raw.totalUids) * 100) / 100 : 0
+  return {
+    totalUids: raw.totalUids,
+    earliestFetch: raw.earliestFetch,
+    newUidsByDay: raw.newUidsByDay,
+    returningUids: raw.returningUids,
+    multiDayUids: raw.multiDayUids,
+    activeLast7d: raw.activeLast7d,
+    activeLast30d: raw.activeLast30d,
+    avgFetchesPerUid: avg
+  }
 }
 
 /** 一整包 → 视图对象（页面/接口的最终形状），内部把 materialize + 打分 + 本地化串起来。

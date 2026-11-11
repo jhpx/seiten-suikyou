@@ -10,6 +10,7 @@
 import type { MiddlewareHandler } from 'hono'
 
 import type { AccountSummary, AccountView } from './dto/account.dto.ts'
+import type { UidStats } from './dto/stats.dto.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
 import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
 import type { YsinResult } from './dto/ysin.dto.ts'
@@ -31,8 +32,12 @@ export interface ApiContext {
     /** 权重筛选项，按语言给名字 */
     weightOptions: (locale: string) => WeightOption[]
   }
-  /** 数据源在线状态（/api/health 用）：后端周期同步 status.enka.network，前端进页面读一次。只暴露只读快照 */
+  /** 后端存活探针（/api/health 用）：进程能响应就是活着，不碰数据库、不查上游 */
   health: {
+    live: () => boolean
+  }
+  /** 数据源在线状态（/api/region 用）：后端周期同步 status.enka.network，前端进页面读一次。只暴露只读快照 */
+  region: {
     /** Enka 官方 Genshin 各区分服状态（逐个铺开显示，带状态页配色） */
     regions: () => Array<{ name: string; status: 'up' | 'down' | 'unknown'; color: string }>
     /** MicroGG 镜像节点的两个服（china / bilibili），与官方区分列 */
@@ -45,6 +50,11 @@ export interface ApiContext {
     count: () => number
     /** 整包视图；库里没有 → null */
     view: (uid: number, locale: string) => AccountView | null
+  }
+  /** uid 使用统计（/api/stats 用）：只读 fetch_log 现算，不改表结构 */
+  stats: {
+    /** 当前已使用 uid 数 + 新增 / 留存 / 活跃等指标 */
+    uidStats: () => UidStats
   }
   characters: {
     /** 伤害视图；判别「账号没数据 / 没这个角色 / 算不出来」 */

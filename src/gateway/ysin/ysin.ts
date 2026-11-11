@@ -386,7 +386,7 @@ export function evaluateCharacter (character: CharacterDbo): CharacterYsin | nul
   /* 每个流派的正确分数（伤害比）。basis 与 rolls 跟上面完全一致，保证和网站同口径。
      没有匹配流派时 scores 为空，不影响上面的条数统计。 */
   const scores: Record<string, ScoreResult> = {}
-  const group = schoolsFor(charName)
+  const group = schoolsFor(profile.id)
   if (group) {
     const rolls: Rolls = {
       atk: byKey.get('atk') ?? 0,
@@ -396,7 +396,7 @@ export function evaluateCharacter (character: CharacterDbo): CharacterYsin | nul
     }
     for (const seed of group.schools) {
       scores[seed.id] = computeScores({
-        preset: presetOf(charName, seed),
+        preset: presetOf(profile.id, seed),
         basis,
         rolls,
         talents,
