@@ -1100,6 +1100,44 @@ console.log('\n=== 13. 模拟比对目录 ===')
     `4★ +16 的主词条比 5★ +20 低（${four.main.value} < ${five.main.value}）`)
 }
 
+/* ---------------- 14. YSIN 分数摘要（首页卡片用） ---------------- */
+/*
+ * 首页切到「YSIN 评分」时，每张卡只画两个数（左下词条分、右下数据分）。
+ * 走角色那条接口要发几十次请求，所以账号级一次给齐 —— 这里钉住两件事：
+ *   ① 形状：每个角色一行，没流派的两个分数是 null（前端画破折号）；
+ *   ② 口径：摘要的数与明细页那条接口给的**第一个流派**逐字相同（两处不能各说各话）。
+ */
+console.log('\n=== 14. YSIN 分数摘要 ===')
+{
+  const r = await json(`/api/accounts/${UID}/ysin`)
+  eq(r.ok, true, '账号级 YSIN 摘要返回 ok')
+  const scores = r.data.scores as Array<{ avatarId: number, subScore: number | null, gearScore: number | null }>
+  ok(Array.isArray(scores), 'data.scores 是数组')
+  eq(scores.length, chsView.avatars.length, '每个角色一行（与账号视图里的角色数一致）')
+
+  /* 没有适用流派的角色也在列表里，两个分数都是 null */
+  const none = scores.find(s => s.avatarId === 10000043)
+  ok(!!none, '没有流派的角色也在列表里')
+  eq([none?.subScore, none?.gearScore], [null, null], '没有适用流派 → 两个分数都是 null')
+
+  /* 有流派的角色：两个分数都得是数 */
+  const dilucId = chsView.avatars.find((a: any) => a.nameZh === '迪卢克')!.avatarId
+  const hit = scores.find(s => s.avatarId === dilucId)
+  ok(typeof hit?.subScore === 'number' && typeof hit?.gearScore === 'number',
+    '有流派的角色给出两个分数', JSON.stringify(hit))
+
+  /* 与明细页那条接口对拍：两边都取第一个流派，数必须逐字相同 */
+  const detail = (await json(`/api/accounts/${UID}/characters/${dilucId}/ysin?locale=chs`)).data
+  ok(!!detail?.schools?.length, '明细页的 YSIN 板块有流派')
+  eq(hit?.subScore, detail.schools[0].subScore, '摘要的词条分 = 明细页第一个流派的词条分')
+  eq(hit?.gearScore, detail.schools[0].gearScore, '摘要的数据分 = 明细页第一个流派的数据分')
+
+  /* 库里没有的 uid → 404 no_data */
+  const r404 = await get('/api/accounts/999999999/ysin')
+  eq(r404.status, 404, '库里没有的 uid → 404')
+  eq((await readJson(r404)).error.code, 'no_data', '错误码 no_data')
+}
+
 /* ---------------- 收尾 ---------------- */
 
 app.server.close()

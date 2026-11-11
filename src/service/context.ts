@@ -13,7 +13,7 @@ import type { AccountSummary, AccountView } from './dto/account.dto.ts'
 import type { UidStats } from './dto/stats.dto.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
 import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
-import type { YsinResult } from './dto/ysin.dto.ts'
+import type { AccountYsinResult, YsinResult } from './dto/ysin.dto.ts'
 import type { IngestResult } from '../gateway/enka/enka.dto.ts'
 import { weightFilterOptions, type RubricList, type SelectRubricResult } from './character.service.ts'
 
@@ -50,6 +50,8 @@ export interface ApiContext {
     count: () => number
     /** 整包视图；库里没有 → null */
     view: (uid: number, locale: string) => AccountView | null
+    /** 账号级 YSIN 分数摘要（首页卡片用）：每个角色一行，没有适用流派的两个分数是 null */
+    ysinScores: (uid: number) => AccountYsinResult
   }
   /** uid 使用统计（/api/stats 用）：只读 fetch_log 现算，不改表结构 */
   stats: {

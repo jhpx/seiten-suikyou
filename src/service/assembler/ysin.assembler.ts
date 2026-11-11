@@ -14,7 +14,7 @@ import { presetOf, schoolsFor } from '../../gateway/ysin/schools.ts'
 import * as i18n from '../../common/i18n.ts'
 import { statLabel } from '../artifact.service.ts'
 import type { CharacterDbo } from '../../repository/dbo/character.ts'
-import type { YsinRow, YsinSchoolView, YsinView } from '../dto/ysin.dto.ts'
+import type { YsinRow, YsinSchoolView, YsinScoreView, YsinView } from '../dto/ysin.dto.ts'
 
 /* 表格四行的顺序，也是 Rolls 的字段顺序。stat 是词条名查表用的键 */
 const ROWS: Array<{ key: keyof Rolls, stat: string }> = [
@@ -108,5 +108,25 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
     counted: ysin.score.rolls,
     schools,
     current: schools[0]?.id ?? ''
+  }
+}
+
+/**
+ * 一个角色 → 分数摘要（首页卡片那一小块用）。
+ *
+ * 只取**第一个流派**的词条分 / 数据分 —— 明细页默认选中的也是第一个（见上面的 current），
+ * 两边得对上同一个数，不然首页和明细页会各说各话。
+ * 没有适用流派（网站没有这个角色的流派数据）或 miao 不认识这个角色 → 两个分数都是 null，
+ * 前端画破折号。这里不做任何换算，也不共用 miao 的评级。
+ */
+export function ysinScoreOf (ch: CharacterDbo): YsinScoreView {
+  const avatarId = ch.avatarId!
+  const ysin = evaluateCharacter(ch)
+  const seed = ysin ? schoolsFor(avatarId)?.schools[0] : null
+  const result = seed ? ysin?.scores[seed.id] : null
+  return {
+    avatarId,
+    subScore: result ? result.subScore : null,
+    gearScore: result ? result.gearScore : null
   }
 }

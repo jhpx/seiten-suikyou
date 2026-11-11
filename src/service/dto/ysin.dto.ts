@@ -68,3 +68,20 @@ export type YsinResult =
   | { kind: 'ok', view: YsinView | null }
   | { kind: 'no_data' }
   | { kind: 'no_character' }
+
+/**
+ * 一个角色的 YSIN 分数摘要（首页卡片用）—— 只取分数，不带词条对照与伤害。
+ * 取的是**第一个流派**的读数，与明细页默认选中的流派一致，两边得对上。
+ */
+export interface YsinScoreView {
+  avatarId: number
+  /** 词条分；这个角色没有适用流派时为 null */
+  subScore: number | null
+  /** 数据分；同上 */
+  gearScore: number | null
+}
+
+/** 账号级分数摘要：账号没数据 / 有数据（角色可能一个都没有） */
+export type AccountYsinResult =
+  | { kind: 'ok'; scores: YsinScoreView[] }
+  | { kind: 'no_data' }

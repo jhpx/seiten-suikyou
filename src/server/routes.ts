@@ -34,6 +34,9 @@ export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
   app.get('/api/accounts', guard('read'), account.list(ctx))
   app.get('/api/accounts/:uid{[0-9]+}', guard('read'), account.detail(ctx))
 
+  /* YSIN 分数摘要（首页卡片用）：一次给全账号的角色，不按角色再发请求 */
+  app.get('/api/accounts/:uid{[0-9]+}/ysin', guard('read'), account.ysinScores(ctx))
+
   /* 唯一会联网写库的接口，走抓取档 */
   app.post('/api/accounts/:uid{[0-9]+}/refresh', guard('fetch'), account.refresh(ctx))
 

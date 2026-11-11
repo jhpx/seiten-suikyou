@@ -47,7 +47,7 @@
 | 档 | 用在哪些接口 | 默认限额（每分钟） | 命中返回 |
 |---|---|---|---|
 | `fetch` | `POST /api/accounts/:uid/refresh`（另加全局总闸 `fetchAll` 30） | 每 IP 20 | `429` + `Retry-After` |
-| `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/characters/:avatarId/damage`、`/api/accounts/:uid/characters/:avatarId/ysin` | 每 IP 300 | `429` + `Retry-After` |
+| `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/ysin`、`/api/accounts/:uid/characters/:avatarId/damage`、`/api/accounts/:uid/characters/:avatarId/ysin` | 每 IP 300 | `429` + `Retry-After` |
 | `none` | `/api/meta`、`/api/health`、`/api/region`、`/api/stats` | 不限（状态探针被限会误报故障） | — |
 
 静态页与素材图**故意不限流**。本地调试可加 `--no-rate-limit` 关掉。
@@ -79,6 +79,7 @@
 | GET | `/api/stats` | uid 使用统计（当前 uid 数 + 新增 / 留存 / 活跃） |
 | GET | `/api/accounts` | 账号列表 |
 | GET | `/api/accounts/:uid` | 一个账号的完整视图 |
+| GET | `/api/accounts/:uid/ysin` | 账号级 YSIN 分数摘要（首页卡片用） |
 | GET | `/api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算 |
 | GET | `/api/accounts/:uid/characters/:avatarId/ysin` | YSIN 独立评分板块：全流派一次给齐 |
 | GET | `/api/accounts/:uid/characters/:avatarId/rubrics` | 该角色可用的 miao 评分规则 + 当前选中项 |
@@ -351,6 +352,35 @@ uid 使用统计。**只读 `fetch_log`（抓取账本）现算，不改任何�
 - `400 bad_request` — 缺 `rubric` 字段，或 `rubric` 不是字符串 / null。
 - `404 no_data` / `404 no_character` — 同 2.7。
 - `404 bad_rubric` — `rubric` 不在该角色可用规则里。
+
+### 2.10 `GET /api/accounts/:uid/ysin` —— 账号级 YSIN 分数摘要
+
+首页卡片切到「YSIN 评分」时用：每张卡只画两个数（左下词条分、右下数据分），
+走 2.8 那条按角色发请求要发几十次，所以这里**一次给全账号的角色**。
+
+**请求：** `uid` 在路径里。没有 query 参数 —— 这份摘要只有两个数字，不含任何文案，
+所以不需要 `locale`（分数本身与语言无关）。
+
+**成功响应（200）：**
+```jsonc
+{
+  "ok": true,
+  "data": {
+    "scores": [
+      { "avatarId": 10000037, "subScore": 161.0, "gearScore": 194.3 },  // 词条分 / 数据分
+      { "avatarId": 10000046, "subScore": null,  "gearScore": null }    // 没有适用流派
+    ]
+  }
+}
+```
+- 口径与 2.8 一致：取**第一个流派**的读数（明细页默认选中的也是第一个），两处得对上同一个数。
+- `subScore` / `gearScore` 为 `null` = 这个角色在 YSIN 网站里没有可评分流派（或 miao 不认识它），
+  页面画破折号。
+- 数值一律全精度，前端展示时才保留 1 位小数。
+
+**错误码：**
+- `400 bad_uid` — uid 格式不对；
+- `404 no_data` — 库里没有该 uid。
 
 ---
 

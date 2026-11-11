@@ -22,6 +22,18 @@ export const detail = (ctx: ApiContext): Handler => (c) => {
   return view ? ok(c, view) : fail(c, 404, 'no_data', noData(uid))
 }
 
+/*
+ * 账号级 YSIN 分数摘要 —— 首页卡片要一次看全所有角色的分数。
+ * 走明细页那条路得每个角色发一次请求，所以这里一次算齐；口径与明细页一致（取第一个流派）。
+ */
+export const ysinScores = (ctx: ApiContext): Handler => (c) => {
+  const uid = uidParam(c)
+  if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
+  const result = ctx.accounts.ysinScores(uid)
+  if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
+  return ok(c, { scores: result.scores })
+}
+
 /* 唯一会联网写库的接口，单独走抓取档（每 IP + 全局两道，保护 enka 上游）。
    请求体用不上 —— uid 在路径里、locale 在 query 里。 */
 export const refresh = (ctx: ApiContext): Handler => async (c) => {
