@@ -1,20 +1,28 @@
 # 星天水镜 / seiten-suikyou
 
-> 「只要百川奔流，雨露不休，水就不会消失。」
-> ——纯水精灵·洛蒂娅（《原神》）
+> 「只要百川奔流，雨露不休，水就不会消失。」  
+> —水精灵·洛蒂娅（《原神》）
 
 原神角色养成评估器。评分算法不做二次实现，直接内嵌 [miao-plugin](https://github.com/yoimiya-kokomi/miao-plugin) 的计算内核，分数与上游逐字一致。
 
 名字取自莫娜的称号「星天水镜」：以水为镜映照星象，从幻象里读出真实。
 
+## 界面预览
+
+| 角色总览 | 刷圣遗物建议 |
+| --- | --- |
+| ![角色总览](screenshot/01.webp) | ![刷圣遗物建议](screenshot/02.webp) |
+| 角色详情 | 伤害模拟对比 |
+| ![角色详情](screenshot/03.webp) | ![伤害模拟对比](screenshot/04.webp) |
+
 ## 能力
 
-| 能力 | 入口 |
-|---|---|
-| 按 UID 抓展柜 → 存本地库 → 用 miao 规则打分 | `npm run score -- --uid <uid>` |
-| 网页：角色网格 + 角色明细页 | `npm run server` |
-| 多语言：简 / 繁 / EN / JA / KO | 页面右上角，或 `--locale` |
-| JSON 接口 | `GET /api/accounts/:uid?locale=en` |
+| 能力                             | 入口                                 |
+| ------------------------------ | ---------------------------------- |
+| 按 UID 抓展柜 → 存本地库 → 用 miao 规则打分 | `npm run score -- --uid <uid>`     |
+| 网页：角色网格 + 角色明细页                | `npm run server`                   |
+| 多语言：简 / 繁 / EN / JA / KO       | 页面右上角，或 `--locale`                 |
+| JSON 接口                        | `GET /api/accounts/:uid?locale=en` |
 
 ## 快速开始
 
@@ -97,15 +105,16 @@ seiten-suikyou/
 
 ## 相关文档
 
-| 想了解 | 看哪 |
-|---|---|
-| 接口请求 / 响应、错误码、限流与跨域 | [`docs/API.md`](docs/API.md) |
-| 部署 | [`docs/DEPLOY.md`](docs/DEPLOY.md) |
-| 为什么内嵌 miao 内核、页面与多语言怎么还原 | [`docs/DESIGN.md`](docs/DESIGN.md) |
-| 数据层设计 | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md) |
-| 界面原型：视觉与交互规范，开发按它对照 | [`docs/wireframe/index.html`](docs/wireframe/index.html) |
-| 架构全貌（可交互） | [`docs/architecture/seiten-suikyou-architecture.html`](docs/architecture/seiten-suikyou-architecture.html) |
-| 前端架构（可交互） | [`docs/architecture/seiten-suikyou-web-architecture.html`](docs/architecture/seiten-suikyou-web-architecture.html) |
+| 想了解                      | 看哪                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 接口请求 / 响应、错误码、限流与跨域      | [`docs/API.md`](docs/API.md)                                                                                       |
+| 部署                       | [`docs/DEPLOY.md`](docs/DEPLOY.md)                                                                                 |
+| 为什么内嵌 miao 内核、页面与多语言怎么还原 | [`docs/DESIGN.md`](docs/DESIGN.md)                                                                                 |
+| 数据层设计                    | [`docs/DESIGN-DATA-MODEL.md`](docs/DESIGN-DATA-MODEL.md)                                                           |
+| 界面原型：视觉与交互规范，开发按它对照      | [`docs/wireframe/index.html`](docs/wireframe/index.html)                                                           |
+| 架构全貌（可交互）                | [`docs/architecture/seiten-suikyou-architecture.html`](docs/architecture/seiten-suikyou-architecture.html)         |
+| 前端架构（可交互）                | [`docs/architecture/seiten-suikyou-web-architecture.html`](docs/architecture/seiten-suikyou-web-architecture.html) |
+
 
 ## 许可
 
