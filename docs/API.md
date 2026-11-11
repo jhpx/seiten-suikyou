@@ -21,8 +21,9 @@
 { "ok": false, "error": { "code": "no_data", "message": "库里没有 uid 101242308。先抓一次：POST /api/accounts/101242308/refresh" } }
 ```
 
-前端 `api()` 在 `res.ok === false` 或 `body.ok === false` 时抛错，
-错误信息用 `error.message`（服务端已给可读文本）。
+前端 `api()` 在 `res.ok === false` 或 `body.ok === false` 时抛错，并带上 `error.code`。
+界面只对认识的 code 使用本地化文案（例如 `no_data` 提示点「刷新」），不把服务端的
+`message` 原样展示；`message` 主要留给接口调用方和排查。
 
 ### 1.2 路径与参数
 
