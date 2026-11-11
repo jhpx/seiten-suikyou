@@ -617,6 +617,10 @@ console.log('\n=== 8. 静态文件 ===')
   const cssHrefs = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(m => m[1])
   ok(cssHrefs.length > 0 && cssHrefs.every(h => !h.startsWith('/')), '样式引用全是相对路径')
   ok(cssHrefs[0] === 'css/base.css' && cssHrefs.at(-1) === 'css/damage.css', '样式按层叠契约顺序加载')
+  /* YSIN 板块的样式必须排在 damage.css 前面：damage 是层叠契约里的最后一环 */
+  ok(cssHrefs.includes('css/ysin.css') &&
+    cssHrefs.indexOf('css/item-card.css') < cssHrefs.indexOf('css/ysin.css') &&
+    cssHrefs.indexOf('css/ysin.css') < cssHrefs.indexOf('css/damage.css'), 'YSIN 样式夹在装备卡与伤害表之间')
 
   const js = await get('/bootstrap.js')
   ok((js.headers.get('content-type') || '').includes('javascript'), 'js 的 content-type 对')

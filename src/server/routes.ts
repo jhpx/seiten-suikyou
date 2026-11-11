@@ -49,4 +49,8 @@ export function mountRoutes (app: Hono, ctx: ApiContext, guard: Guard): void {
     guard('read'), character.rubrics(ctx))
   app.post('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/rubric',
     guard('read'), character.selectRubric(ctx))
+
+  /* —— YSIN 独立评分：与 miao 规则不换算、不共用评级，只读一档 —— */
+  app.get('/api/accounts/:uid{[0-9]+}/characters/:avatarId{[0-9]+}/ysin',
+    guard('read'), character.ysin(ctx))
 }

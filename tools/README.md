@@ -83,3 +83,10 @@ sync.py ─┬─► sync_miao.py  ──► vendor/miao/          （内核 + �
 
 - `test/*.ts` 是测试，`npm test` 统一跑，不归 tools 管
 - `.tmp/` 是开发残留（chrome、截图、表达式文件、`asset-list.json`），已 gitignore
+- **YSIN 数学研究工具已迁出**：`ysin-data` `ysin-web` `ysin-schools` `ysin-schools-gen`
+  `ysin-verify` `ysin-reverse` `ysin-score-opt` `ysin-score-probe` `analyze-diff` `webprobe`
+  `build-math-doc` `mobile-check` `check-md` 以及 `tools/vendor/`、产品仓库根目录的 `ysin/`
+  推导文档，全部搬到同级独立项目 `../ysin-math/`（见其 README.md）。
+  其中 `ysin-reverse` `ysin-score-opt` `ysin-score-probe` `analyze-diff` 仍 `import`
+  `../seiten-suikyou/src/...` 产品代码，需从本目录 `node ../ysin-math/tools/<工具>.ts` 跑
+  （DB 路径 `data/gs.db` 是 cwd 相对的，cwd 必须在 seiten-suikyou）。

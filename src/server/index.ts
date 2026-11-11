@@ -33,6 +33,7 @@ import { accountView, countAccounts, createIngestService, listAccounts } from '.
 import { createHealthService } from '../service/health.service.ts'
 import type { FetchImpl } from '../service/account.service.ts'
 import { characterDamage, weightFilterOptions, listRubrics, selectRubric } from '../service/character.service.ts'
+import { characterYsin } from '../service/ysin.service.ts'
 import { characterSim, simCatalogOf } from '../service/simulator.service.ts'
 import { argValue, errMessage, parseArgs } from '../common/util.ts'
 import { DEFAULT_DB_FILE, DEFAULT_HOST, DEFAULT_PORT, LOCAL_HOST } from '../config/constants.ts'
@@ -94,7 +95,8 @@ export function createApp ({
       simCatalog: (uid, avatarId, locale) => simCatalogOf(db, uid, avatarId, locale),
       simulate: (uid, avatarId, req, locale) => characterSim(db, uid, avatarId, req, locale),
       rubrics: (uid, avatarId, locale) => listRubrics(db, uid, avatarId, locale),
-      selectRubric: (uid, avatarId, rubric) => selectRubric(db, uid, avatarId, rubric)
+      selectRubric: (uid, avatarId, rubric) => selectRubric(db, uid, avatarId, rubric),
+      ysin: (uid, avatarId, locale) => characterYsin(db, uid, avatarId, locale)
     },
     ingest: ingest.fetch,
     health: {

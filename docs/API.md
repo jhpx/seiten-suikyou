@@ -46,7 +46,7 @@
 | 档 | 用在哪些接口 | 默认限额（每分钟） | 命中返回 |
 |---|---|---|---|
 | `fetch` | `POST /api/accounts/:uid/refresh`（另加全局总闸 `fetchAll` 30） | 每 IP 20 | `429` + `Retry-After` |
-| `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/characters/:avatarId/damage` | 每 IP 300 | `429` + `Retry-After` |
+| `read` | `GET /api/accounts`、`/api/accounts/:uid`、`/api/accounts/:uid/characters/:avatarId/damage`、`/api/accounts/:uid/characters/:avatarId/ysin` | 每 IP 300 | `429` + `Retry-After` |
 | `none` | `/api/meta`、`/api/health` | 不限（状态探针被限会误报故障） | — |
 
 静态页与素材图**故意不限流**。本地调试可加 `--no-rate-limit` 关掉。
@@ -77,6 +77,7 @@
 | GET | `/api/accounts` | 账号列表 |
 | GET | `/api/accounts/:uid` | 一个账号的完整视图 |
 | GET | `/api/accounts/:uid/characters/:avatarId/damage` | 单个角色的伤害计算 |
+| GET | `/api/accounts/:uid/characters/:avatarId/ysin` | YSIN 独立评分板块：全流派一次给齐 |
 | GET | `/api/accounts/:uid/characters/:avatarId/rubrics` | 该角色可用的 miao 评分规则 + 当前选中项 |
 | POST | `/api/accounts/:uid/characters/:avatarId/rubric` | 选 / 清一个评分规则（请求体 `{ rubric }`） |
 | POST | `/api/accounts/:uid/refresh` | 从 enka 抓一份新的并入库 |
@@ -241,7 +242,58 @@
 - `404 no_data` — 库里没有该 uid。
 - `404 no_character` — uid 下没有该 avatarId。
 
-### 2.8 `POST /api/accounts/:uid/characters/:avatarId/rubric` —— 选 / 清评分规则
+### 2.8 `GET /api/accounts/:uid/characters/:avatarId/ysin` —— YSIN 独立评分板块
+
+明细页里夹在装备卡与伤害计算之间的板块。**与 miao 那套完全独立**：不换算分数、不共用评级与档位色。
+规则本身是 YSIN 闭源口径，界面只展示读数与一句「仅供参考与娱乐」，不暴露算法。
+
+**请求：** `uid` / `avatarId` 在路径里，`locale` 在 query 里（`?locale=chs`，可选，默认走服务端默认语言）。
+**一次返回该角色的全部流派**，前端切流派只重画数字、不再发请求。
+
+**成功响应（200）：**
+```jsonc
+{
+  "ok": true,
+  "data": {
+    "charName": "甘雨",
+    "total": 51.7,          // 总词条（与流派无关）
+    "counted": 40.2,        // 计分词条（与流派无关）
+    "current": "ganyuR",    // 默认选中的流派 id
+    "schools": [
+      {
+        "id": "ganyuR",
+        "name": "融化",
+        "skillName": "霜华矢（两段）期望",  // 按 locale 翻译，查不到就给中文原文
+        "talentSlot": "普攻",               // 按 locale 给
+        "talentLevel": 9,                   // 只取该天赋槽的等级
+        "subScore": 161.0,                 // 词条分
+        "gearScore": 98.6,                 // 数据分
+        "benchTotal": 25.0,                // 基准词条合计
+        "rows": [
+          { "key": "atk",  "label": "攻击力", "yours": 20.7, "weapon": 9.9, "bench": 8.0, "originalBench": null },
+          { "key": "cpct", "label": "暴击率", "yours": 12.6, "weapon": null, "bench": 16.6, "originalBench": 9.0 }
+        ],
+        "uncounted": 0.9,   // 生命 / 防御 / 充能词条合计，不进当前模型
+        "dmgYou": 99972, "dmgBench": 62095, "dmgDefault": 62095,  // 同一技能的期望伤害
+        "wText": "阿莫斯之弓1精", "aText": "冰风4件"               // 默认整套装备说明
+      }
+    ]
+  }
+}
+```
+- `data` 为 `null` = 这个角色在 YSIN 网页里没有可评分流派（或搭不出面板），页面出一行小字而不是空卡。
+- `rows` 固定四项 `atk / em / cpct / cdmg`；`weapon` 是 `yours` 的**包含部分**，没有贡献给 `null`。
+- `bench` 是配平后的基准，双爆两行另给 `originalBench`（其余行 `null`）。
+- 数值一律全精度，前端展示时才统一保留 1 位小数 / 取整。
+- 两个分数与三个伤害读数都来自 `skillName` 那**一个核心输出技能**的期望伤害，不是全角色总伤；
+  `skillName` / `talentSlot` / `talentLevel` 随流派变化，标题条要跟着换。
+
+**错误码：**
+- `400 bad_uid` — uid 格式不对；
+- `404 no_data` — 库里没有该 uid；
+- `404 no_character` — uid 下没有这个 avatarId。
+
+### 2.9 `POST /api/accounts/:uid/characters/:avatarId/rubric` —— 选 / 清评分规则
 
 **请求体（JSON）：** `{ "rubric": "纯辅" }` 选某个规则；`{ "rubric": null }` 清回 miao 自动选。
 `rubric` 必须是 2.7 列表里某个 `name`，否则判 `bad_rubric`。

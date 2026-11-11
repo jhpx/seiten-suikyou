@@ -12,6 +12,7 @@ import type { MiddlewareHandler } from 'hono'
 import type { AccountSummary, AccountView } from './dto/account.dto.ts'
 import type { DamageResult } from './dto/damage.dto.ts'
 import type { SimCatalog, SimRequest, SimResult } from './dto/sim.dto.ts'
+import type { YsinResult } from './dto/ysin.dto.ts'
 import type { IngestResult } from '../gateway/enka/enka.dto.ts'
 import { weightFilterOptions, type RubricList, type SelectRubricResult } from './character.service.ts'
 
@@ -56,6 +57,8 @@ export interface ApiContext {
     rubrics: (uid: number, avatarId: number, locale: string) => RubricList
     /** 选 / 清一个评分规则（rubric 为 null = 退回 miao 自动选）；判别同上 + 规则名不存在 */
     selectRubric: (uid: number, avatarId: number, rubric: string | null) => SelectRubricResult
+    /** YSIN 独立评分板块：一次给全流派，data 为 null 表示这个角色没有网站流派 */
+    ysin: (uid: number, avatarId: number, locale: string) => YsinResult
   }
   /** 抓一次并落库（并发同 uid 会合并） */
   ingest: (uid: number) => Promise<IngestResult>
