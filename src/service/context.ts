@@ -51,7 +51,7 @@ export interface ApiContext {
     /** 整包视图；库里没有 → null */
     view: (uid: number, locale: string) => AccountView | null
     /** 账号级 YSIN 分数摘要（首页卡片用）：每个角色一行，没有适用流派的两个分数是 null */
-    ysinScores: (uid: number) => AccountYsinResult
+    ysinScores: (uid: number) => Promise<AccountYsinResult>
   }
   /** uid 使用统计（/api/stats 用）：只读 fetch_log 现算，不改表结构 */
   stats: {
@@ -70,7 +70,7 @@ export interface ApiContext {
     /** 选 / 清一个评分规则（rubric 为 null = 退回 miao 自动选）；判别同上 + 规则名不存在 */
     selectRubric: (uid: number, avatarId: number, rubric: string | null) => SelectRubricResult
     /** YSIN 独立评分板块：一次给全流派，data 为 null 表示这个角色没有网站流派 */
-    ysin: (uid: number, avatarId: number, locale: string) => YsinResult
+    ysin: (uid: number, avatarId: number, locale: string) => Promise<YsinResult>
   }
   /** 抓一次并落库（并发同 uid 会合并） */
   ingest: (uid: number) => Promise<IngestResult>

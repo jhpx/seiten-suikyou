@@ -39,6 +39,8 @@ export interface YsinSchoolView {
   gearScore: number
   /** 基准词条合计 */
   benchTotal: number
+  /** 网站那一格「词条」数：按流派的有效属性，已扣掉武器与套装加成 */
+  tagTotal: number
   /** 词条对照（只列有基准的 4 项） */
   rows: YsinRow[]
   /** 未计入的属性词条合计（充能 / 生命 / 防御） */
@@ -47,6 +49,8 @@ export interface YsinSchoolView {
   dmgYou: number
   dmgBench: number
   dmgDefault: number
+  /** 你的那一发打出暴击时的伤害（网站另列的一格，不是期望值） */
+  dmgCrit: number
   /** 默认整套的装备说明，来自网站 */
   wText: string
   aText: string
@@ -55,8 +59,9 @@ export interface YsinSchoolView {
 /** 整个板块 */
 export interface YsinView {
   charName: string
-  /** 总词条 / 计分词条，与流派无关 */
+  /** 总词条（整装口径，含武器与套装），与流派无关 */
   total: number
+  /** 计分词条 = 整装有效词条 − 武器副词条（保留兼容；界面显示各流派的 tagTotal） */
   counted: number
   schools: YsinSchoolView[]
   /** 默认选中的流派 id */

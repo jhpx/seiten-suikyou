@@ -1,44 +1,33 @@
 /*
- * YSIN 词条分 / 数据分 —— 纯计算实现，不跑战斗引擎、不连网页
+ * YSIN 词条分 / 数据分。
  *
- * ── 算的是什么 ────────────────────────────────────────────────────────────
- * 两个分数都是「同一个核心输出技能的期望伤害」在相除，分子完全相同：
+ * 词条分 T = 100·D(P)/D(P*)：P* 与 P 共用骨架，只把副词条换成标准词条并配平双爆；
+ * 骨架因子约掉，剩下四个面板比 T = 100·(A/A*)·(C/C*)·(R/R*)·(f_u/f_u*)，C = 1 + min(p,1)·q。
+ * 数据分 G = 100·D(P)/D0：P0 是流派默认整套，跨骨架；有 D(P) 时直接算，否则走近似。
  *
- *   词条分 = 100 × D_default(你的副词条) / D_default(配平后的 bench)
- *   数据分 = 100 × D(你的实际配置) / D(默认整套，写死技能 999)
- *
- * 词条分的分子分母都用「默认整套」基线（defaultBasis），把玩家当前配置约掉——
- * 同一套副词条无论玩家实际带什么武器 / 套装 / 天赋，词条分都给同一分（基准 161）。
- * 这正是 YSIN「词条分只衡量副词条」的口径。技能倍率在词条分里上下同乘、约掉；
- * 在数据分里分母写死 999，约不掉。
- * 详细的推导与网页实测见 docs/词条分的数学模型.md §3.4、§7.3。
- *
- * ── 为什么能不跑伤害模拟器 ──────────────────────────────────────────────
- * 伤害写成 D = K·A·(1+p·q)·R(E)。三个伤害共用同一个 K，取比值时约掉，
- * 只剩攻击、双爆、反应三项各自成比。K 里唯一会随配置变的是技能倍率，
- * 单独提出来叫 configRatio，其余武器 / 命座等配置倍率由调用方给。
- *
- * ── 精度 ──────────────────────────────────────────────────────────────────
- * 全程全精度，不中途取整；取整只发生在展示层（本模块的调用方 / 测试）。
+ * 双爆用 V = 2p+q 表示预算，配平取 p=V/4、q=V/2；f_u 合并充能转攻击 / 转增伤两条渠道。
+ * 全程全精度，取整只在展示层。
  */
 
-/** 参与评分的四类副词条数，顺序固定为「攻、精、暴、爆」 */
+/** 参与评分的四条面板副词条；recharge 只有充能机制的角色才用得到 */
 export interface Rolls {
   atk: number
   em: number
   cpct: number
   cdmg: number
+  recharge?: number
 }
 
-/** 面板上真正进伤害公式的四个数。暴击与爆伤一律写小数（66.58% 写成 0.6658） */
+/** 面板上真正进伤害公式的五个数。暴击与爆伤一律写小数（66.58% 写成 0.6658） */
 export interface Panel {
   atk: number
   cpct: number
   cdmg: number
   mastery: number
+  recharge: number
 }
 
-/** 不含副词条时的装备基线：白字、武器与主词条的攻击、羽毛固定攻击、天生双爆与精通 */
+/** 不含副词条时的装备基线：白字、武器与主词条的攻击、羽毛固定攻击、天生双爆/精通/充能 */
 export interface GearBasis {
   baseAtk: number
   /** 武器攻击% + 沙漏攻击%，写小数 */
@@ -47,17 +36,46 @@ export interface GearBasis {
   baseCpct: number
   baseCdmg: number
   baseMastery: number
+  /** 不含圣遗物副词条时的充能（小数，100% 写 1）。缺省按 1 处理 */
+  baseRecharge?: number
+}
+
+/**
+ * 充能转换模型：u 先加上 uBonus（薙草在爆发期间的 30%），再按两条渠道转伤害。
+ * 数值全部来自游戏数据 / 逆向确认，不是拟合参数；没有该机制时整个对象缺省。
+ */
+export interface RechargeModel {
+  /** 武器在爆发期间的充能加成，薙草 = 0.30 */
+  uBonus: number
+  /** 充能 → 攻击%（白字口径）的每点转换率，薙草 = 0.28 */
+  etaRate: number
+  /** 攻击% 上限，薙草 = 0.8 */
+  etaCap: number
+  /** 充能 → 增伤的每点转换率，雷神天赋 = 0.4 */
+  thetaRate: number
+  /** 套装（绝缘四）充能 → 增伤的每点转换率，= 0.25 */
+  thetaFlatRate: number
+  /** 套装增伤上限，= 0.75 */
+  thetaFlatCap: number
+  /** 与充能无关的伤害加成总和 Φ0，雷神 = 0.27 + 0.4662 = 0.7362 */
+  phi0: number
 }
 
 /** 角色·流派的预设数据，与你的账号无关 */
 export interface SchoolPreset {
   name: string
   bench: Rolls
+  /** 标准词条的充能条数 t_u；缺省 0 */
+  benchRecharge?: number
+  /** 技能自带暴击 β（甘雨重击 0.2，Q 0）；缺省 0 */
+  passiveCpct?: number
+  /** 充能转换模型；缺省表示该流派不吃充能，f_u ≡ 1 */
+  rechargeModel?: RechargeModel
   /** 核心输出技能挂在哪个天赋上；技能等级只从这一维取 */
   coreTalent: 'a' | 'e' | 'q'
   /** 核心输出技能各等级的倍率之和，数组下标 = 显示等级 − 1 */
   talentScale: readonly number[]
-  /** YSIN 引擎实测的等级倍率比（相对 9 级）；有它时优先用它，覆盖上面的游戏倍率表 */
+  /** 等级倍率比（相对 9 级）；有它时覆盖上面的游戏倍率表 */
   talentRatioOverride?: Readonly<Record<number, number>>
   /** 默认敌人对该元素的抗性，写小数；YSIN / miao 默认小宝 10% */
   enemyRes?: number
@@ -73,11 +91,9 @@ export interface SchoolPreset {
 
 export interface ScoreInput {
   preset: SchoolPreset
-  /** 你的装备基线，仅供展示面板（panel）使用。词条分与数据分的算分都按预设的
-     defaultBasis 进行（数据分再乘核心天赋 / 命座 / 精炼等配置倍率）；玩家实际装备相对
-     默认整套的强弱已经折算进 rolls 与配置倍率，不再单独读这里的 basis。 */
+  /** 你的装备基线（玩家骨架：白字、主词条、武器/套装/被动等非圣遗物副词条的量） */
   basis: GearBasis
-  /** 你的副词条数，原始值、不配平 */
+  /** 你的圣遗物副词条数（已扣掉武器 / 套装 / 被动等来源），原始值、不配平 */
   rolls: Rolls
   /** 你的天赋等级，游戏里显示的值 1..15 */
   talents: { a: number, e: number, q: number }
@@ -85,6 +101,8 @@ export interface ScoreInput {
   cons?: number
   /** 武器精炼 / 命座之外的其他配置倍率，默认 1 */
   configMultiplier?: number
+  /** 引擎给出的当前伤害；给了直接算数据分，不给走无引擎近似 */
+  dmgYou?: number
 }
 
 export interface ScoreResult {
@@ -93,13 +111,19 @@ export interface ScoreResult {
   maxScore: number
   reach: number
   gearScore: number
-  /** 三个绝对伤害，由 dmgDefault 标定 */
+  /** 三个绝对伤害：当前 / 参考 / 默认整套 */
   dmgYou: number
   dmgBench: number
   dmgDefault: number
-  /** 中间量，方便对拍 */
+  /** 同一发技能打出暴击时的伤害（网站另列的一格） */
+  dmgCrit: number
+  /** 当前真实面板（不含技能被动暴击 β，β 只在评分时叠加） */
   panel: Panel
+  /** 真正拿去算分的词条数。恒等于 input.rolls —— 扣减只在 ysin.ts 的账本里做一次 */
+  scoringRolls: Rolls
+  /** 参考侧面板（已配平；同样不含 β） */
   benchPanel: Panel
+  /** 参考侧配平后的词条数（atk/em/cpct/cdmg） */
   balancedBench: Rolls
   balanceK: number
   configRatio: number
@@ -107,23 +131,24 @@ export interface ScoreResult {
   resistanceRatio: number
 }
 
-/** 一条词条值多少：四档强化的均值。爆伤正好是暴击的两倍 */
-export const ROLL = { atk: 0.05, em: 20, cpct: 0.033, cdmg: 0.066 } as const
+/** 一条词条值多少：四档强化的均值。爆伤正好是暴击的两倍，充能 5.5% */
+export const ROLL = { atk: 0.05, em: 20, cpct: 0.033, cdmg: 0.066, recharge: 0.055 } as const
 
 /** 默认整套的技能等级写死 9（引擎内部 [8,8,8] 是 0 基） */
 const DEFAULT_TALENT_LEVEL = 9
 
-/** 词条数 → 面板 */
+/** 词条数 → 面板（不含技能被动 β；β 在评分时单独叠加） */
 export function panelOf (rolls: Rolls, basis: GearBasis): Panel {
   return {
     atk: basis.baseAtk * (1 + basis.atkPct + ROLL.atk * rolls.atk) + basis.flatAtk,
     cpct: basis.baseCpct + ROLL.cpct * rolls.cpct,
     cdmg: basis.baseCdmg + ROLL.cdmg * rolls.cdmg,
-    mastery: basis.baseMastery + ROLL.em * rolls.em
+    mastery: basis.baseMastery + ROLL.em * rolls.em,
+    recharge: (basis.baseRecharge ?? 1) + ROLL.recharge * (rolls.recharge ?? 0)
   }
 }
 
-/** 精通给反应伤害的加成：1 + 2.78E/(E+1400) */
+/** 精通给反应伤害的加成：1 + 2.78E/(E+1400)；不打反应时恒为 1 */
 export function reactionOf (mastery: number, enabled: boolean): number {
   return enabled ? 1 + 2.78 * mastery / (mastery + 1400) : 1
 }
@@ -140,21 +165,46 @@ export function resistanceOf (res: number): number {
   return 1 - kx / 200
 }
 
+/** 双爆因子 C = 1 + min(p,1)·q；p>1 时按 1 截断 */
+export function critOf (p: number, q: number): number {
+  return 1 + Math.min(p, 1) * q
+}
+
+/** 参考侧双爆配平：p* = clamp(V/4, γ, λ) 再截到 1，q* = V − 2p*。γ 是基线暴击，λ 是上限 */
+export function balanceCrit (V: number, gamma: number, lambda = 1): { p: number, q: number } {
+  let p = Math.min(Math.max(V / 4, gamma), lambda)
+  p = Math.min(p, 1)
+  return { p, q: V - 2 * p }
+}
+
+/** 充能残差因子 f_u：攻击渠道按白字展开（η·a0/A），增伤渠道按 Φ0 展开 */
+export function fuOf (u: number, A: number, baseAtk: number, model: RechargeModel): number {
+  const ue = u + model.uBonus
+  const over = Math.max(ue - 1, 0)
+  const eta = Math.min(model.etaRate * over, model.etaCap)
+  const theta = model.thetaRate * over + Math.min(model.thetaFlatRate * ue, model.thetaFlatCap)
+  return (1 + eta * baseAtk / A) * (1 + theta / (1 + model.phi0))
+}
+
 /** 去掉 K 之后的伤害；取比值时 K 会约掉，所以这里不需要它 */
 export function damageOf (panel: Panel, reaction: boolean): number {
-  return panel.atk * (1 + panel.cpct * panel.cdmg) * reactionOf(panel.mastery, reaction)
+  return panel.atk * critOf(panel.cpct, panel.cdmg) * reactionOf(panel.mastery, reaction)
 }
 
 const clamp = (x: number, lo: number, hi: number): number => Math.min(Math.max(x, lo), hi)
 
-/** 配平：把 k 条爆伤搬成暴击，搬到 q = 2p。只动 cpct / cdmg 两项 */
-export function balanceOf (rolls: Rolls, basis: GearBasis): { rolls: Rolls, k: number } {
+/**
+ * 把 k 条爆伤搬成暴击，搬到 q = 2p，只动 cpct / cdmg 两项。
+ * 保留给测试与旧调用；computeScores 用 balanceCrit。beta 是技能自带暴击。
+ */
+export function balanceOf (rolls: Rolls, basis: GearBasis, beta = 0): { rolls: Rolls, k: number } {
   const p = panelOf(rolls, basis)
-  const V = 2 * p.cpct + p.cdmg
+  const pEff = p.cpct + beta
+  const V = 2 * pEff + p.cdmg
   const k = clamp(
-    (V / 4 - p.cpct) / ROLL.cpct,
+    (V / 4 - pEff) / ROLL.cpct,
     -rolls.cpct,
-    Math.min(rolls.cdmg, (1 - p.cpct) / ROLL.cpct)
+    Math.min(rolls.cdmg, (1 - pEff) / ROLL.cpct)
   )
   return {
     rolls: { ...rolls, cpct: rolls.cpct + k, cdmg: rolls.cdmg - k },
@@ -169,11 +219,12 @@ export function limitOf (bench: Rolls): Rolls {
     atk: scale(bench.atk),
     em: scale(bench.em),
     cpct: scale(bench.cpct),
-    cdmg: scale(bench.cdmg)
+    cdmg: scale(bench.cdmg),
+    recharge: bench.recharge === undefined ? undefined : scale(bench.recharge)
   }
 }
 
-/** 技能等级倍率：优先用 YSIN 引擎实测标定，没有标定的等级回退到游戏倍率表 */
+/** 技能等级倍率：优先用覆盖表，没覆盖的等级回退到游戏倍率表 */
 function talentRatioOf (preset: SchoolPreset, level: number): number {
   const override = preset.talentRatioOverride?.[level]
   if (override !== undefined) return override
@@ -192,11 +243,7 @@ function shredOf (preset: SchoolPreset, cons: number): number {
   return sum
 }
 
-/**
- * 配置倍率 = 技能倍率 × 抗性倍率 × 其他配置倍率。
- * 三项都在「你的配置」和「默认整套」之间取比，所以直接进入数据分；
- * 词条分的分子分母都带这三项，会约掉。
- */
+/** 配置因子 ρ_K 中与「天赋 + 命座」有关的部分：技能倍率比 × 抗性比 × 额外倍率 */
 function configRatioOf (preset: SchoolPreset, input: ScoreInput): { ratio: number, resistanceRatio: number } {
   const level = input.talents[preset.coreTalent]
   const enemyRes = preset.enemyRes ?? 0.1
@@ -205,57 +252,129 @@ function configRatioOf (preset: SchoolPreset, input: ScoreInput): { ratio: numbe
   return { ratio, resistanceRatio }
 }
 
+/** 一套词条在某个骨架上产生的 φ(x) = A·C·R；f_u 另算，因为它依赖充能模型 */
+function phiOf (rolls: Rolls, basis: GearBasis, beta: number, reaction: boolean): number {
+  const A = basis.baseAtk * (1 + basis.atkPct + ROLL.atk * rolls.atk) + basis.flatAtk
+  const p = basis.baseCpct + beta + ROLL.cpct * rolls.cpct
+  const q = basis.baseCdmg + ROLL.cdmg * rolls.cdmg
+  const E = basis.baseMastery + ROLL.em * rolls.em
+  return A * critOf(p, q) * reactionOf(E, reaction)
+}
+
 /**
  * 一次算出四个分数和三个绝对伤害。
- *
- * 两分的「玩家副词条」侧都套在预设的 defaultBasis 上，把玩家当前配置约掉：
- *  · 词条分 = 100 × D_default(你的副词条) / D_default(配平后的 bench) —— 纯副词条质量，
- *    同一套副词条无论玩家带什么武器 / 套装 / 天赋都给同一分（161 基准点）。
- *  · 数据分 = 词条分 × 配置倍率（技能等级 / 命座降抗 / 武器精炼）。「玩家装备 = 默认整套」
- *    时配置倍率 = 1，数据分与词条分同值（网站实测 161 / 161）；武器精炼 / 命座 / 技能等级
- *    只进数据分，不进词条分。
- *
- * 这与 YSIN 网站口径一致：网站在默认整套下 D(你的副词条)=100189、D(配平 bench)=62095，
- * 数据分 = 100189/62095×100 = 161；换武器精炼到 5 精 D(你的副词条)=122492、D(配平 bench)
- * 随配置倍率放大到 75917，数据分 = 122492/62095×100 = 197，词条分仍是 161。
+ * 词条分的分子分母共用骨架，K(σ) 约掉，只剩 A、C、R、f_u 四个比。
+ * 数据分有 input.dmgYou 时按定义式算；否则用 G = T·ρ_K·φ(x*)/φ(x0) 近似，
+ * 骨架与默认不同时该近似缺 Φ0（武器/套装增伤）。
  */
 export function computeScores (input: ScoreInput): ScoreResult {
-  const { preset, basis, rolls } = input
+  const { preset, basis } = input
+  /* rolls 已是圣遗物副词条（调用方扣过武器 / 套装 / 被动），本模块不再扣一次 */
+  const rolls = input.rolls
+  const beta = preset.passiveCpct ?? 0
+  const t: Rolls = {
+    atk: preset.bench.atk,
+    em: preset.bench.em,
+    cpct: preset.bench.cpct,
+    cdmg: preset.bench.cdmg,
+    recharge: preset.benchRecharge ?? 0
+  }
 
-  /* 基准词条固定按 defaultBasis 配平，不随玩家当前面板漂移——否则同一个角色不同玩家
-     看到的「基准双爆」会不一样（之前曾算出 16.6/1.4 这种极端分裂），词条分也会随配置飘。 */
-  const benchBalanced = balanceOf(preset.bench, preset.defaultBasis)
-  const limitBalanced = balanceOf(limitOf(preset.bench), preset.defaultBasis)
+  /* ── 当前侧：玩家骨架 + 玩家副词条 ── */
+  const A = basis.baseAtk * (1 + basis.atkPct + ROLL.atk * rolls.atk) + basis.flatAtk
+  const p = basis.baseCpct + beta + ROLL.cpct * rolls.cpct
+  const q = basis.baseCdmg + ROLL.cdmg * rolls.cdmg
+  const E = basis.baseMastery + ROLL.em * rolls.em
+  const u = (basis.baseRecharge ?? 1) + ROLL.recharge * (rolls.recharge ?? 0)
 
-  /* ── 两分共用 defaultBasis 的「玩家副词条」面板：把当前配置约掉 ── */
-  const panelDefault = panelOf(rolls, preset.defaultBasis)
-  const benchPanelDefault = panelOf(benchBalanced.rolls, preset.defaultBasis)
-  const limitPanelDefault = panelOf(limitBalanced.rolls, preset.defaultBasis)
-  const dSub = damageOf(panelDefault, preset.reaction)
-  const dBench = damageOf(benchPanelDefault, preset.reaction)
-  const dLimit = damageOf(limitPanelDefault, preset.reaction)
-  const subScore = 100 * dSub / dBench
-  const maxScore = 100 * dLimit / dBench
+  /* 参考侧：同一骨架 + 标准词条，再配平 */
+  const Astar = basis.baseAtk * (1 + basis.atkPct + ROLL.atk * t.atk) + basis.flatAtk
+  const pRaw = basis.baseCpct + beta + ROLL.cpct * t.cpct
+  const qRaw = basis.baseCdmg + ROLL.cdmg * t.cdmg
+  const Vstar = 2 * pRaw + qRaw
+  const gamma = basis.baseCpct + beta
+  const bal = balanceCrit(Vstar, gamma)
+  const Estar = basis.baseMastery + ROLL.em * t.em
+  const ustar = (basis.baseRecharge ?? 1) + ROLL.recharge * (t.recharge ?? 0)
+
+  const C = critOf(p, q)
+  const Cstar = critOf(bal.p, bal.q)
+  const rRatio = reactionOf(E, preset.reaction) / reactionOf(Estar, preset.reaction)
+  const fuRatio = preset.rechargeModel
+    ? fuOf(u, A, basis.baseAtk, preset.rechargeModel) / fuOf(ustar, Astar, basis.baseAtk, preset.rechargeModel)
+    : 1
+
+  const subScore = 100 * (A / Astar) * (C / Cstar) * rRatio * fuRatio
+
+  /* 极限分：bench × 5/3，同样按参考侧配平 */
+  const lim = limitOf(t)
+  const limA = basis.baseAtk * (1 + basis.atkPct + ROLL.atk * lim.atk) + basis.flatAtk
+  const limP = basis.baseCpct + beta + ROLL.cpct * lim.cpct
+  const limQ = basis.baseCdmg + ROLL.cdmg * lim.cdmg
+  const limBal = balanceCrit(2 * limP + limQ, gamma)
+  const limE = basis.baseMastery + ROLL.em * lim.em
+  const limU = (basis.baseRecharge ?? 1) + ROLL.recharge * (lim.recharge ?? 0)
+  const limFu = preset.rechargeModel
+    ? fuOf(limU, limA, basis.baseAtk, preset.rechargeModel) / fuOf(ustar, Astar, basis.baseAtk, preset.rechargeModel)
+    : 1
+  const maxScore = 100 * (limA / Astar) * (critOf(limBal.p, limBal.q) / Cstar) *
+    (reactionOf(limE, preset.reaction) / reactionOf(Estar, preset.reaction)) * limFu
   const reach = 100 * subScore / maxScore
 
+  /* ── 数据分 ── */
   const config = configRatioOf(preset, input)
   const configRatio = config.ratio
   const dmgDefault = preset.dmgDefault
-  /* dBench 与下方 dDefaultBench 同为 defaultBasis 下的 bench，恒相等；显式写出便于核对 */
-  const dDefaultBench = damageOf(panelOf(benchBalanced.rolls, preset.defaultBasis), preset.reaction)
-  const dmgBench = dmgDefault * configRatio * (dBench / dDefaultBench)
-  const dmgYou = dmgDefault * configRatio * (dSub / dDefaultBench)
-  const gearScore = 100 * dmgYou / dmgDefault
 
-  /* panel：玩家真实面板（用 gearBasisFrom 提取的 basis），仅供展示与调试，不参与算分 */
-  const panel = panelOf(rolls, basis)
+  let gearScore: number
+  let dmgYou: number
+  if (input.dmgYou !== undefined && input.dmgYou > 0) {
+    /* 精确口径：D(P) 由引擎给出，数据分就是定义式 */
+    dmgYou = input.dmgYou
+    gearScore = 100 * dmgYou / dmgDefault
+  } else {
+    /* 无引擎近似：G = T·ρ_K·φ(x*)/φ(x0) */
+    const phiStar = Astar * Cstar * reactionOf(Estar, preset.reaction) *
+      (preset.rechargeModel ? fuOf(ustar, Astar, basis.baseAtk, preset.rechargeModel) : 1)
+    const b0 = preset.defaultBasis
+    const p0Raw = b0.baseCpct + beta + ROLL.cpct * t.cpct
+    const q0Raw = b0.baseCdmg + ROLL.cdmg * t.cdmg
+    const bal0 = balanceCrit(2 * p0Raw + q0Raw, b0.baseCpct + beta)
+    const A0 = b0.baseAtk * (1 + b0.atkPct + ROLL.atk * t.atk) + b0.flatAtk
+    const E0 = b0.baseMastery + ROLL.em * t.em
+    const u0 = (b0.baseRecharge ?? 1) + ROLL.recharge * (t.recharge ?? 0)
+    const phi0 = phiOf(t, b0, beta, preset.reaction) *
+      (preset.rechargeModel ? fuOf(u0, A0, b0.baseAtk, preset.rechargeModel) : 1)
+    /* phiOf 用的是未配平的 C，这里换成配平后的 C0 */
+    const phi0Bal = phi0 / critOf(p0Raw, q0Raw) * critOf(bal0.p, bal0.q)
+    gearScore = subScore * configRatio * (phiStar / phi0Bal)
+    dmgYou = dmgDefault * gearScore / 100
+  }
+
+  /* 参考伤害由 T 反推：D(P*) = 100·D(P)/T */
+  const dmgBench = 100 * dmgYou / subScore
+
+  /* 期望 → 暴击：(1+q)/(1+p_eff·q)，用当前面板双爆 */
+  const dmgCrit = dmgYou * (1 + q) / critOf(p, q)
+
+  const benchRolls: Rolls = {
+    atk: t.atk, em: t.em, cpct: t.cpct, cdmg: t.cdmg, recharge: t.recharge
+  }
+  const balanceK = (qRaw - 2 * pRaw) / (4 * ROLL.cpct)
+  const balancedBench: Rolls = {
+    ...benchRolls,
+    cpct: benchRolls.cpct + balanceK,
+    cdmg: benchRolls.cdmg - balanceK
+  }
 
   return {
     subScore, maxScore, reach, gearScore,
-    dmgYou, dmgBench, dmgDefault,
-    panel, benchPanel: benchPanelDefault,
-    balancedBench: benchBalanced.rolls,
-    balanceK: benchBalanced.k,
+    dmgYou, dmgBench, dmgDefault, dmgCrit,
+    panel: panelOf(rolls, basis),
+    scoringRolls: rolls,
+    benchPanel: panelOf(balancedBench, basis),
+    balancedBench,
+    balanceK,
     configRatio,
     resistanceRatio: config.resistanceRatio
   }

@@ -1,17 +1,8 @@
 /*
- * 上游抓取测试 —— 「数据怎么拿回来」这一跳的守门人
- *
- * 和另外几个测试的分工：
- *   enka（本文件）  管「从上游拿到 JSON」：多源并行、什么时候算失败、失败信息够不够看
- *   pipeline       管「拿到之后」：ingest / repo / materialize 有没有把数据搞坏
- *   server         管「接口怎么给」：路由 / 静态文件 / 错误形状
- *   cli            管「命令行跑起来是什么样」
- *
- * 为什么不联网：这里全用假 fetch。真联网会把测试变成「看今天网络通不通」——
- * 上游一抖整套 npm test 就红，而那种红不带任何信息量。真联网验证是人肉做的一次性动作。
- *
- * 断言同样只在失败时打印。
+ * 上游抓取测试：多源并行、失败判定、错误信息、状态页解析。
+ * 全程用假 fetch，不联网；断言只在失败时打印。
  */
+
 import { fetchEnka } from '../src/gateway/enka/enka.fetch.ts'
 import { parseEnkaStatus } from '../src/gateway/enka/enka.status.ts'
 
@@ -86,8 +77,7 @@ console.log('=== 1. 并行打所有源，谁先成功用谁 ===')
 }
 
 {
-  /* 这就是修「3 秒超时把 microgg 砍掉后只剩慢路」的场景：
-     microgg 要回源米游社（实测 6s 起），并行下 enka 先回来，用户不用陪着等 */
+  /* 一个源慢、另一个源先回来时，用先回来的那个 */
   const { fetchImpl } = spy([
     { match: 'microgg', body: { playerInfo: { nickname: '镜像' } }, delay: 200 },
     { match: 'enka', body: { playerInfo: { nickname: '官方' } } }
@@ -109,10 +99,7 @@ console.log('\n=== 2. 一个源报错时，另一个源照样救得回来 ===')
 }
 
 {
-  /* ★ 这次修的核心。microgg 的 424 是「它自己回源失败」
-     （原文："Can't contact the data service. Either the game servers are down..."），
-     不是「玩家没开展柜」——同一时刻 enka 手上往往有数据。
-     老规则把 424 当业务结论直接抛，用户明明开了展柜却看到「未公开」。 */
+  /* microgg 的 424 表示它自己回源失败，不能当业务结论拦住另一个源 */
   const { fetchImpl } = spy([
     { match: 'microgg', status: 424, body: {} },
     { match: 'enka', body: { playerInfo: { nickname: 'enka有数据' } } }
@@ -156,8 +143,7 @@ console.log('\n=== 3. 全失败时的错误信息 ===')
 }
 
 {
-  /* 这次踩的坑：老实现只说一句 `fetch failed`，查了 20 分钟才知道是 TCP 连不上。
-     混合失败（一个网络挂、一个业务答复）时，每个源各自的原因都得在信息里。 */
+  /* 混合失败（一个网络挂、一个业务答复）时，每个源各自的原因都得在信息里 */
   const { fetchImpl } = spy([
     { match: 'microgg', throw: netFail('UND_ERR_CONNECT_TIMEOUT') },
     { match: 'enka', throw: netFail('UND_ERR_HEADERS_TIMEOUT') }
@@ -237,6 +223,28 @@ console.log('\n=== 5. 状态页解析：区服配色 + MicroGG 两服 ===')
   /* 页面没有 MicroGG 段时，两服仍以 unknown 占位，不能凭空消失 */
   const plain = parseEnkaStatus('<p>Enka.Network is up.</p>')
   eq(plain.microggServers.map(s => s.status), ['unknown', 'unknown'], '缺 MicroGG 段时两服兜底 unknown')
+}
+
+{
+  /* 并列主语共用后面的谓语，两服都要跟着同一个状态词判 */
+  const color = (c: string, name: string) => `<b style="color: ${c}">${name}</b>`
+  const html = `<p>For Genshin, ${color('#e67e22', 'euro')}, ${color('#5bb4ef', 'usa')},
+      ${color('#e9c223', 'asia')}, ${color('#75cd69', 'cht')}, ${color('#e74c3c', 'china')},
+      ${color('#ff6f9e', 'bilibili')} seem to be up.</p>
+    <p>${color('#e74c3c', 'china')}, ${color('#ff6f9e', 'bilibili')} are
+      <span class="red">dead</span> <span>(profile.microgg.cn)</span>.</p>`
+  const p = parseEnkaStatus(html)
+  eq(p.microggServers.map(s => s.status), ['down', 'down'], 'china, bilibili are dead → 两服都判挂（不是只挂最后一个）')
+  eq(p.regions.map(r => r.status), ['up', 'up', 'up', 'up', 'up', 'up'], '同一页的官方 6 区仍全在线')
+  eq(p.regions.map(r => r.name), ['euro', 'usa', 'asia', 'cht', 'china', 'bilibili'], '区服顺序照页面原样')
+}
+
+{
+  /* 措辞变化不影响区服解析 */
+  const color = (c: string, name: string) => `<b style="color: ${c}">${name}</b>`
+  const html = `<p>For Genshin, ${color('#e67e22', 'euro')}, ${color('#5bb4ef', 'usa')} are dead.</p>`
+  const p = parseEnkaStatus(html)
+  eq(p.regions.map(r => r.status), ['down', 'down'], '全挂的措辞也能解出区服与状态')
 }
 
 console.log(fail > 0

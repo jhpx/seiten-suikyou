@@ -1,29 +1,12 @@
 /*
- * 词条分 / 数据分 —— 后端计算值与 YSIN 网页实测值对拍
+ * 词条分 / 数据分的计算值对拍。
  *
- * 线上基线来自 2026-11-08 的网页实证（../ysin-math/tools/ysin-data.ts 挂 CDP 走 YSIN 原生引擎，
- *  hook calculator.get 抓四个伤害，逐条记在 docs/YSIN-词条分算法.md §12.4）。
- *  甘雨·融化，副词条 20.7 / 6.7 / 12.6 / 11.7，默认整套 = 阿莫斯 1 精 / 乐团 4 /
- *  攻冰爆 / 90 级 0 命 / 技能 999，school.dText = 62095。
- *
- * 命座这一项在 2026-11-09 补进算法：甘雨 1 命「饮露」让霜华矢命中时敌人冰抗降 15%，
- * 默认小宝冰抗 10% → −5%，抗性乘区 0.9 → 1.025，倍率 1.138889。
- * 它只进数据分（默认整套写死 0 命），词条分上下约掉。线上 0 命 171、1 命 194，
- * 2~6 命与 1 命逐位相同（后面几命不改这个单次伤害数值）。
- *
- * 同一轮还修掉一个真会算错的地方：YSIN v4.8 的 9→10 级倍率是 1.057831，
- * 上游游戏倍率表给 1.058824。单看 171 分辨不出来，但乘上 1.138889 之后
- * 会算出 195 而不是 194。所以 10 级倍率按 YSIN 引擎实测标定（见 preset.ts）。
- *
- * 两组用例分开看，别混：
- *   A 组「独立预测」：只给天赋等级和命座，倍率来自引擎标定 + 抗性公式（纯游戏数据），
- *     词条分、数据分、绝对伤害都是后端自己算出来的，再和线上比。
- *   B 组「公式验算」：只有武器精炼没有独立模型，把线上实测的伤害倍率当输入，
- *     验的是「数据分 = 词条分 × 配置倍率」这条公式，不算独立预测。
- *
- * 已知边界：T5 换主词条会改装备基线（爆伤头 → 攻击头），那条基线数据没从网页读到，
- * 本模块目前把装备基线当输入，所以不覆盖；T6/T7 改的是配平点，同理。
+ * 基线数值来自 schools.csv 的标定与引擎读数；倍率、抗性、命座降抗作为输入，
+ * 词条分、数据分、绝对伤害都由本模块算出后与基线比较。
+ * A 组只给天赋与命座（独立预测）；B 组把伤害倍率作为输入，验的是恒等式。
+ * 已知边界：换主词条会改装备基线，本模块把基线当输入，不覆盖 T5/T6/T7。
  */
+
 import {
   balanceOf,
   computeScores,
@@ -32,10 +15,22 @@ import {
   panelOf,
   reactionOf,
   resistanceOf,
+  type GearBasis,
   type Rolls,
   type ScoreInput
 } from '../src/gateway/ysin/score.ts'
-import { GAN_YU_BASIS, GAN_YU_MELT, FROST_FLAKE_SCALE } from '../src/gateway/ysin/preset.ts'
+import fs from 'node:fs'
+import { presetOf, schoolsFor } from '../src/gateway/ysin/schools.ts'
+import { parseSchoolsCsv, CSV_PATH } from '../src/gateway/ysin/schools-csv.ts'
+import { rollLedgerOf, setPanelBonusOf, withNonArtifact, type StatRoll } from '../src/gateway/ysin/ysin.ts'
+import type { ArtifactDbo } from '../src/repository/dbo/artifact.ts'
+
+/* 基线不再从写死常量的 preset.ts 拿，而是从 schools.csv 读出来、走同一个 presetOf 装配。
+   这样测试跑的就是产品链路上的预设，改 CSV 数据会立刻反映到对拍结果里。 */
+const MELT_SEED = schoolsFor(10000037)!.schools.find(s => s.id === 'ganyuR')!
+const MELT = presetOf(MELT_SEED)
+const BASIS = MELT.defaultBasis
+const SCALE = MELT.talentScale
 
 let failed = 0
 let passed = 0
@@ -66,8 +61,8 @@ function rel (actual: number, expected: number, pct: number, label: string): voi
 
 const YOUR_ROLLS: Rolls = { atk: 20.7, em: 6.7, cpct: 12.6, cdmg: 11.7 }
 const BASE: ScoreInput = {
-  preset: GAN_YU_MELT,
-  basis: GAN_YU_BASIS,
+  preset: MELT,
+  basis: BASIS,
   rolls: YOUR_ROLLS,
   talents: { a: 9, e: 9, q: 9 }
 }
@@ -75,23 +70,26 @@ const BASE: ScoreInput = {
 // ───────────────────────────────────────────── 1. 面板、配平、伤害函数
 console.log('=== 1. 面板 / 配平 / 伤害函数 ===')
 
-const panel = panelOf(YOUR_ROLLS, GAN_YU_BASIS)
+const panel = panelOf(YOUR_ROLLS, BASIS)
 near(panel.atk, 3137.17, 0.01, '你的面板攻击 3137.17')
-near(panel.cpct, 0.6658, 1e-9, '你的暴击率 66.58%')
+/* 面板本身不含技能被动；甘雨重击的 +20% 暴击由 preset.passiveCpct 在评分时叠加，
+   所以这里断言的是真实面板 46.58%，有效暴击 66.58% 在下面的配平里体现 */
+near(panel.cpct, 0.4658, 1e-9, '你的面板暴击率 46.58%（+被动 20% = 66.58%）')
 near(panel.cdmg, 2.2782, 1e-9, '你的爆伤 227.82%')
 eq(panel.mastery, 214, '你的精通 214')
 
-const balanced = balanceOf(GAN_YU_MELT.bench, GAN_YU_BASIS)
+const balanced = balanceOf(MELT.bench, BASIS, MELT.passiveCpct)
 near(balanced.k, 7.621212, 1e-5, '配平搬运 7.6212 条')
 near(balanced.rolls.cpct, 16.621212, 1e-5, '配平后暴击条数 16.6212')
 near(balanced.rolls.cdmg, 1.378788, 1e-5, '配平后爆伤条数 1.3788')
-const benchPanel = panelOf(balanced.rolls, GAN_YU_BASIS)
-near(benchPanel.cpct, 0.7985, 1e-9, '配平后暴击率 79.85%')
-near(benchPanel.cdmg, 2 * 0.7985, 1e-9, '配平后爆伤 = 2 × 暴击率')
-eq(limitOf(GAN_YU_MELT.bench), { atk: 7, em: 5, cpct: 15, cdmg: 15 }, '极限基准 7/5/15/15')
+const benchPanel = panelOf(balanced.rolls, BASIS)
+near(benchPanel.cpct, 0.5985, 1e-9, '配平后面板暴击率 59.85%')
+near(benchPanel.cdmg, 2 * (benchPanel.cpct + (MELT.passiveCpct ?? 0)), 1e-9,
+  '配平后有效爆伤 = 2 × 有效暴击率（59.85% + 被动 20% = 79.85%）')
+eq(limitOf(MELT.bench), { atk: 7, em: 5, cpct: 15, cdmg: 15 }, '极限基准 7/5/15/15')
 near(reactionOf(214, true), 1.36860, 1e-5, 'R(214) = 1.36860')
 eq(reactionOf(214, false), 1, '不打反应时 R 恒为 1')
-near(FROST_FLAKE_SCALE[9] / FROST_FLAKE_SCALE[8], 1.058824, 1e-5, '上游游戏倍率表 9→10 = 1.058824')
+near(SCALE[9] / SCALE[8], 1.058824, 1e-5, '上游游戏倍率表 9→10 = 1.058824')
 near(105983 / 100189, 1.057831, 1e-5, 'YSIN v4.8 实测 9→10 = 1.057831（两者差 0.1%）')
 near(resistanceOf(0.1), 0.9, 1e-9, '小宝冰抗 10% → 抗性乘区 0.9')
 near(resistanceOf(-0.05), 1.025, 1e-9, '1 命降抗 15% → 冰抗 −5% → 抗性乘区 1.025')
@@ -114,14 +112,14 @@ eq(Math.round(atDefault.subScore), 100, '默认配置词条分 100（副词条�
 eq(Math.round(atDefault.gearScore), 100, '默认配置数据分 100')
 
 // ───────────────────────────────────────────── 3. 线上分数对拍
-console.log('\n=== 3. 线上实测对拍（直接跑 node ../ysin-math/tools/ysin-data.ts 可复现）===')
+console.log('\n=== 3. 基准读数对拍 ===')
 
 interface OnlineRow {
   name: string
   talents: { a: number, e: number, q: number }
   /** 命座数，默认 0 */
   cons?: number
-  /** 除技能、命座外的配置倍率。只有武器精炼用得到，由线上 dmgYou 反推，属输入 */
+  /** 除技能、命座外的配置倍率。只有武器精炼用得到，由 dmgYou 反推，属输入 */
   mult?: number
   sub: number
   gear: number
@@ -174,12 +172,11 @@ eq(Math.round(c1.subScore), Math.round(c0.subScore), '1 命不改词条分（抗
 near(c1.resistanceRatio, 1.138889, 1e-6, '1 命的倍率全来自抗性 0.9 → 1.025')
 near(c1.dmgYou / c0.dmgYou, 1.138889, 1e-5, '1 命把分子放大 1.138889 倍')
 
-/* 为什么 10 级倍率必须用 YSIN 实测值标定：单项差 0.1% 取整看不出，复合命座就跨边界 */
-const wrongGear = c1.gearScore * (FROST_FLAKE_SCALE[9] / FROST_FLAKE_SCALE[8]) / (105983 / 100189)
+/* 10 级倍率单项差 0.1% 取整看不出，复合命座就会跨边界 */
+const wrongGear = c1.gearScore * (SCALE[9] / SCALE[8]) / (105983 / 100189)
 eq(Math.round(wrongGear), 195, '误用上游倍率 1.058824 会把 194 算成 195')
 
-/* T5 换主词条：线上 dmgYou=80203、dmgBench=54842、dmgDefault=62095，
-   词条分自己变成 146。本模块没拿到换装后的装备基线，只用线上中间量验恒等式。*/
+/* T5 换主词条会改装备基线，本模块把它当输入，只用中间量验恒等式 */
 const t5Sub = 100 * 80203 / 54842
 const t5Gear = t5Sub * 54842 / 62095
 eq(Math.round(t5Gear), 129, 'T5 主词条 攻/攻/攻：146 × 54842/62095 → 129')
@@ -190,10 +187,128 @@ eq(Math.round(onlyE.gearScore), 161, '只升元素战技：数据分仍是 161')
 eq(onlyE.configRatio, 1, '只升元素战技：配置倍率 = 1')
 
 /* 两边都配平是另一种口径，不该混进 YSIN 分数 */
-const bothBalanced = balanceOf(YOUR_ROLLS, GAN_YU_BASIS)
-const symSub = 100 * damageOf(panelOf(bothBalanced.rolls, GAN_YU_BASIS), true) /
+const bothBalanced = balanceOf(YOUR_ROLLS, BASIS, MELT.passiveCpct)
+const symSub = 100 * damageOf(panelOf(bothBalanced.rolls, BASIS), true) /
   damageOf(benchPanel, true)
-near(symSub, 168.5, 0.5, '对称口径（两侧都配平）约 168.5，与主口径 161 不同')
+near(symSub, 169.1, 0.5, '对称口径（两侧都配平）约 169.1，与主口径 161 不同')
+
+// ───────────────────────────────────────────── 5. 三个角色的基准读数
+/*
+ * 温迪的套装没有对应读数，本地从面板反解词条仍可计算，但不列入断言。
+ * 下面三个流派的基准读数：
+ *   雷电将军·伤害 116 / 123，Q 期望 67498、Q 暴击 109100（词条 36.8）
+ *   甘雨·伤害     126 / 126，两段射期望 50014（词条 35.1）
+ *   甘雨·融化     125 / 150，两段射期望 93193（词条 37.7）
+ *
+ * 这一组钉住三件事：
+ *   ① 传进 computeScores 的 rolls 必须是**圣遗物副词条**，不含武器副词条与套装加成；
+ *      拿整装词条算，甘雨会变成 140 / 161 而不是 126 / 125。
+ *   ② 评分基线要含引擎的隐性加成（甘雨连射 20% 暴击、乐团 80 精通），来自 CSV 的
+ *      「隐性面板加成」列，不是代码里的角色判断。
+ *   ③ 技能等级倍率 / 命座降抗也来自 CSV 的数据列。
+ *
+ * 输入是这三个展柜角色的面板基线与圣遗物词条，全部写死在这里，不依赖网络或数据库。
+ */
+console.log('\n=== 5. 三个角色的基准读数 ===')
+
+interface SiteCase {
+  label: string
+  avatarId: number
+  schoolId: string
+  basis: GearBasis
+  /** 圣遗物副词条：已从面板反解值里扣掉武器副词条与套装 2 件套加成 */
+  rolls: Rolls
+  talents: { a: number, e: number, q: number }
+  cons: number
+  sub: number
+  gear: number
+  dmg: number
+  /** 网站另给的「暴击」那一格，只给了雷神 */
+  crit?: number
+}
+
+const SHOWCASE: SiteCase[] = [
+  {
+    label: '甘雨·伤害', avatarId: 10000037, schoolId: 'ganyu-1',
+    basis: { baseAtk: 942.92, atkPct: 0.9624, flatAtk: 310.8, baseCpct: 0.05, baseCdmg: 1.5056, baseMastery: 80 },
+    rolls: { atk: 10.790548, em: 2.681000, cpct: 12.609091, cdmg: 11.657576 },
+    talents: { a: 10, e: 9, q: 10 }, cons: 1,
+    sub: 126, gear: 126, dmg: 50014
+  },
+  {
+    label: '甘雨·融化', avatarId: 10000037, schoolId: 'ganyuR',
+    basis: { baseAtk: 942.92, atkPct: 0.9624, flatAtk: 310.8, baseCpct: 0.05, baseCdmg: 1.5056, baseMastery: 80 },
+    rolls: { atk: 10.790548, em: 2.681000, cpct: 12.609091, cdmg: 11.657576 },
+    talents: { a: 10, e: 9, q: 10 }, cons: 1,
+    sub: 125, gear: 150, dmg: 93193
+  }
+]
+
+/* 雷神·伤害 要走 f_u 和一次引擎 D(P)，无引擎近似差 1 分，由 test/ysin-miao.ts 覆盖 */
+for (const c of SHOWCASE) {
+  const seed = schoolsFor(c.avatarId)?.schools.find(s => s.id === c.schoolId)
+  if (!seed) { console.log(`[FAIL] ${c.label}：找不到流派 ${c.schoolId}`); failed++; continue }
+  const got = computeScores({
+    preset: presetOf(seed),
+    basis: c.basis,
+    rolls: c.rolls,
+    talents: c.talents,
+    cons: c.cons
+  })
+  eq([Math.round(got.subScore), Math.round(got.gearScore)], [c.sub, c.gear], `${c.label}：词条分 / 数据分`)
+  rel(got.dmgYou, c.dmg, 0.005, `${c.label}：期望伤害`)
+  if (c.crit !== undefined) rel(got.dmgCrit, c.crit, 0.005, `${c.label}：暴击伤害`)
+}
+
+// ───────────────────────────────────────────── 6. 通用性：不认角色、不认流派 id
+console.log('\n=== 6. 通用口径（不按角色 / 流派写死）===')
+
+const stat = (key: string, rolls: number): StatRoll => ({ key, value: 0, rolls, effective: true })
+const four = (setId: number, n = 4): ArtifactDbo[] =>
+  Array.from({ length: n }, () => ({ setId })) as unknown as ArtifactDbo[]
+
+/* 套装 2 件套面板加成从元数据文案里读，任何套装都走同一段代码 */
+near(setPanelBonusOf(four(15020)).recharge ?? 0, 20 / 5.5, 1e-9, '绝缘 4 件：2 件套充能 20% → 3.6364 条')
+near(setPanelBonusOf(four(15003)).mastery ?? 0, 80 / 20, 1e-9, '乐团 4 件：2 件套精通 80 点 → 4 条')
+near(setPanelBonusOf(four(15044)).atk ?? 0, 18 / 5, 1e-9, '风起之日 4 件：2 件套攻击 18% → 3.6 条（新套装无需登记）')
+eq(setPanelBonusOf(four(15020, 1)), {}, '只穿 1 件时 2 件套不生效')
+
+/* 账本：甘雨的阿莫斯 49.62% 攻击 + 乐团 80 精通，从面板反解值里一次扣干净 */
+const ledger = rollLedgerOf(
+  [stat('atk', 20.714548), stat('mastery', 6.681), stat('cpct', 12.609091), stat('cdmg', 11.657576)],
+  { atk: 9.924 }, four(15003)
+)
+near(ledger.artifact.atk, 10.790548, 1e-5, '甘雨：整装攻击 20.71 条 − 阿莫斯 9.924 条 = 圣遗物 10.79 条')
+near(ledger.artifact.mastery, 2.681, 1e-9, '甘雨：整装精通 6.681 条 − 乐团 4 条 = 圣遗物 2.681 条')
+near(ledger.artifact.cpct, 12.609091, 1e-9, '角色被动属引擎隐性加成，不进面板，因此不从词条里扣')
+eq(ledger.artifact.hp, undefined, '账本只记给过的属性，下游用 ?? 0 取')
+
+/* 扣掉的非圣遗物加成挪回基线后，panelOf 应还原玩家真实面板（甘雨 攻击 2669.9 / 精通 133.62） */
+const fullBasis = withNonArtifact(
+  { baseAtk: 942.92, atkPct: 0.4662, flatAtk: 310.8, baseCpct: 0.05, baseCdmg: 1.5056, baseMastery: 0 },
+  ledger.bonus
+)
+const realPanel = panelOf(
+  { atk: ledger.artifact.atk, em: ledger.artifact.mastery, cpct: ledger.artifact.cpct, cdmg: ledger.artifact.cdmg },
+  fullBasis
+)
+near(realPanel.atk, 2669.917, 0.1, '补全基线后攻击面板还原为 2669.9')
+near(realPanel.mastery, 133.62, 0.01, '补全基线后精通面板还原为 133.62')
+
+/* 预设装配：改 id / 名字不该改变任何计算量；CSV 全部流派都能装配出合法预设 */
+const sample = schoolsFor(10000002)!.schools[0]
+eq(presetOf(sample).defaultBasis, presetOf({ ...sample, id: 'anything', name: '随便' }).defaultBasis,
+  'presetOf 不认流派 id / 名字，同一行数据装配结果一致')
+let allPresets = 0
+let badPreset = 0
+for (const ch of parseSchoolsCsv(fs.readFileSync(CSV_PATH, 'utf8')).characters) {
+  for (const seed of ch.schools) {
+    const p = presetOf(seed)
+    if (!(p.dmgDefault > 0) || p.talentScale.length === 0 || !Number.isFinite(p.defaultBasis.baseAtk)) badPreset++
+    allPresets++
+  }
+}
+eq(badPreset, 0, `CSV 全部 ${allPresets} 个流派都能装配出合法预设（无角色特判）`)
 
 console.log(`\n结果：通过 ${passed} 项，失败 ${failed} 项`)
 console.log('未覆盖：T5 换主词条、T6/T7 改输出技能 —— 需要换装后的装备基线与配平点数据，本模块暂把它们当输入。')

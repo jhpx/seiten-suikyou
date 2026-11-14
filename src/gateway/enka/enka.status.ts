@@ -1,18 +1,14 @@
 /*
- * status.enka.network 抓取与解析 —— 主页「数据源是否在线」指示灯的唯一数据源。
+ * status.enka.network 的抓取与解析，供主页「数据源是否在线」指示灯使用。
  *
- * 为什么不自己探活 enka/microgg：这个官方状态页已经把各区分服（含 MicroGG 镜像节点）
- * 算好了，自己逐个打接口既重复造轮子、又给上游添请求。
- * 后端每 5 分钟拉一次（HEALTH_CHECK_INTERVAL_MS），解析完缓存在内存，前端进页面读一次；
- * 点「刷新」时完全不碰状态查询。
+ * 每 5 分钟拉一次（HEALTH_CHECK_INTERVAL_MS / HEALTH_FETCH_TIMEOUT_MS），结果缓存在内存；
+ * 取不到或解析不出一律 unknown。
  *
- * 解析策略：只吃服务端渲染的文本/标签，抽两段状态 + 区服配色。
- *   - 「For Genshin, … seem to be up, while … is dead」= Enka 官方 6 区 → regions；
- *   - 「china is up, while bilibili is dead (profile.microgg.cn)」= MicroGG 镜像 2 服 → microggServers。
- *   两边都叫 china/bilibili，但不是一回事，分开返回，前端用分组标签区分。
- *   配色直接从页面 <b style="color:#xxxxxx"> 抄，上游改色也跟着变。
- * 页面挂了 / 解析不出 → 一律 unknown，不报错、不阻塞。
+ * 解析按 <p> 分段：官方区服取「For Genshin」段，MicroGG 取带 (profile.microgg.cn) 的段。
+ * 每个区服的状态是它后面第一个状态词；配色取自 <b style="color:#xxxxxx">。
  */
+
+import { httpGet } from '../http.ts'
 import { DEFAULT_UA, HEALTH_FETCH_TIMEOUT_MS } from '../../config/constants.ts'
 
 export type StatusName = 'up' | 'down' | 'unknown'
@@ -25,7 +21,7 @@ export interface RegionStatus {
   color: string
 }
 
-/** 主页真正要用的就这两组。早期的「整站总状态 / 两个源的聚合状态」没人消费，不再算。 */
+/** 主页要用的两组区服状态 */
 export interface EnkaStatusPage {
   /** Enka 官方 Genshin 各区分服 */
   regions: RegionStatus[]
@@ -35,7 +31,7 @@ export interface EnkaStatusPage {
 
 const STATUS_URL = 'https://status.enka.network'
 
-/** 页面给每个区服的固定标识色。解析不到时的兜底值（原样抄自状态页）。 */
+/** 解析不到配色时的兜底值 */
 const FALLBACK_COLORS: Record<string, string> = {
   euro: '#e67e22',
   usa: '#5bb4ef',
@@ -45,7 +41,7 @@ const FALLBACK_COLORS: Record<string, string> = {
   bilibili: '#ff6f9e'
 }
 
-/** MicroGG 镜像节点挂的两个服（状态页那段只列这两列）。 */
+/** MicroGG 段的两个服 */
 const MICROGG_SERVERS = ['china', 'bilibili'] as const
 
 const colorOf = (colors: Map<string, string>, name: string): string =>
@@ -60,9 +56,10 @@ export async function fetchEnkaStatus (timeoutMs: number = HEALTH_FETCH_TIMEOUT_
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const res = await fetch(STATUS_URL, {
+    const res = await httpGet(STATUS_URL, {
       signal: ctrl.signal,
-      headers: { 'user-agent': DEFAULT_UA, accept: 'text/html' }
+      headers: { 'user-agent': DEFAULT_UA, accept: 'text/html' },
+      insecureTls: true
     })
     return parseEnkaStatus(await res.text())
   } catch {
@@ -73,69 +70,88 @@ export async function fetchEnkaStatus (timeoutMs: number = HEALTH_FETCH_TIMEOUT_
   }
 }
 
-/** 抄页面里 <b style="color:#xxxxxx">区服名</b> 的配色。 */
-function parseColors (html: string): Map<string, string> {
-  const out = new Map<string, string>()
+/** 按出现顺序取出「彩色加粗的区服名」——区服顺序和配色都照页面原样。 */
+function namedTags (html: string): Array<{ name: string; color: string }> {
+  const out: Array<{ name: string; color: string }> = []
   for (const m of html.matchAll(/<b\s+style="color:\s*(#[0-9a-fA-F]{3,8})"\s*>\s*([^<]+?)\s*<\/b>/g)) {
     const name = m[2].trim().toLowerCase()
-    if (name && !out.has(name)) out.set(name, m[1])
+    if (name) out.push({ name, color: m[1] })
   }
   return out
 }
 
-/** 从一段纯文本里，按「区服名 → 下一个区服名 / 段落尾」切片判 up/down。 */
+/** 抄页面里区服名的配色（同名取第一次，各区颜色一致）。 */
+function parseColors (html: string): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const { name, color } of namedTags(html)) {
+    if (!out.has(name)) out.set(name, color)
+  }
+  return out
+}
+
+/** 纯文本：去标签、去括号补注（(profile.microgg.cn) 里的点会把断句带偏）、收空白。 */
+function plainText (html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+/**
+ * 区服的状态 = 它后面第一个状态词：并列主语共用后面的谓语。
+ * 遇到句号 / 分号就停，跨句的状态词不算这句的谓语，给 unknown。
+ */
+function statusAfter (text: string, from: number): StatusName {
+  const rest = text.slice(from)
+  const hit = /\b(up|dead|down|offline|unknown)\b/i.exec(rest)
+  if (!hit || hit.index === undefined) return 'unknown'
+  const stop = rest.search(/[.;!?]/)
+  if (stop >= 0 && stop < hit.index) return 'unknown'
+  const word = hit[1].toLowerCase()
+  if (word === 'up') return 'up'
+  return word === 'unknown' ? 'unknown' : 'down'
+}
+
+/** 把一段里的每个区服都按「后面第一个状态词」判一次。 */
 function statusesOf (text: string, names: readonly string[]): Map<string, StatusName> {
-  const hits = names
-    .map(name => ({ name, at: text.toLowerCase().indexOf(name) }))
-    .filter(x => x.at >= 0)
-    .sort((a, b) => a.at - b.at)
-  const cut = text.indexOf('(profile')
+  const lower = text.toLowerCase()
   const out = new Map<string, StatusName>()
-  hits.forEach((h, i) => {
-    const end = i + 1 < hits.length ? hits[i + 1].at : (cut > h.at ? cut : text.length)
-    const seg = text.slice(h.at, end)
-    out.set(h.name, /\b(dead|down|offline)\b/i.test(seg) ? 'down' : 'up')
-  })
+  for (const name of names) {
+    const at = lower.indexOf(name)
+    if (at >= 0) out.set(name, statusAfter(lower, at + name.length))
+  }
   return out
 }
 
 /** 纯函数：把页面 HTML 文本解析成结构化状态。抽出来方便单测，不依赖网络。 */
 export function parseEnkaStatus (html: string): EnkaStatusPage {
   const colors = parseColors(html)
-  const text = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
-
-  /* ① Enka 官方 Genshin 区服 */
-  const upSet = new Set<string>()
-  const downSet = new Set<string>()
-  const gi = text.match(
-    /For Genshin,\s*([^.]*?)\s*seem to be up\s*(?:,\s*while\s*([^.]*?)\s*(?:is|are)\s*dead)?/i
-  )
-  if (gi) {
-    for (const part of (gi[1] ?? '').split(/,|\band\b/i)) {
-      const r = part.trim().toLowerCase()
-      if (r) upSet.add(r)
-    }
-    for (const part of (gi[2] ?? '').split(/,|\band\b/i)) {
-      const r = part.trim().toLowerCase()
-      if (r) downSet.add(r)
-    }
-  }
-  const seen = new Set<string>()
-  const regions: RegionStatus[] = []
-  for (const name of [...upSet, ...downSet]) {
-    if (seen.has(name)) continue
-    seen.add(name)
-    regions.push({ name, status: downSet.has(name) ? 'down' : 'up', color: colorOf(colors, name) })
-  }
-
-  /* ② MicroGG 镜像节点的两个服：单独一句「… (profile.microgg.cn)」。
-        先按 <p> 切段再挑，别用跨段贪婪正则（会把前面 For Genshin 那句一起吞进来）。 */
+  /* 先按 <p> 切段：每段是一句独立的状态说明，不能跨段贪心（会把别的游戏/镜像段吞进来）。 */
   const paragraphs = html.match(/<p[^>]*>[\s\S]*?<\/p>/g) ?? []
+
+  /* ① 认「For Genshin」那一段，逐个彩色区服名往后找状态词 */
+  const regions: RegionStatus[] = []
+  const giPara = paragraphs.find(p => /For Genshin/i.test(p))
+  if (giPara) {
+    const lower = plainText(giPara).toLowerCase()
+    const seen = new Set<string>()
+    for (const { name } of namedTags(giPara)) {
+      if (seen.has(name)) continue
+      seen.add(name)
+      const at = lower.indexOf(name)
+      regions.push({
+        name,
+        status: at >= 0 ? statusAfter(lower, at + name.length) : 'unknown',
+        color: colorOf(colors, name)
+      })
+    }
+  }
+
+  /* ② MicroGG 镜像节点的两个服：单独一段，末尾带 (profile.microgg.cn)。
+        这一段常写成「china, bilibili are dead」——两服共用后面一个谓语。 */
   const mgPara = paragraphs.find(p => /profile\.microgg\.cn/i.test(p))
-  const mgText = mgPara
-    ? mgPara.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
-    : ''
-  const mgStatus = statusesOf(mgText, MICROGG_SERVERS)
+  const mgStatus = mgPara ? statusesOf(plainText(mgPara), MICROGG_SERVERS) : new Map<string, StatusName>()
   const microggServers: RegionStatus[] = MICROGG_SERVERS.map(name => ({
     name,
     status: mgStatus.get(name) ?? 'unknown',

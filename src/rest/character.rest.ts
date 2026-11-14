@@ -106,11 +106,11 @@ export const selectRubric = (ctx: ApiContext): Handler => async (c) => {
 
 /** YSIN 独立评分板块：一次返回全流派，切流派不重新请求。
  *  语言要传 —— 流派技能名、天赋槽、属性名都按 locale 给。 */
-export const ysin = (ctx: ApiContext): Handler => (c) => {
+export const ysin = (ctx: ApiContext): Handler => async (c) => {
   const uid = uidParam(c)
   if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
   const avatarId = num(c, 'avatarId')
-  const result = ctx.characters.ysin(uid, avatarId, localeOf(c))
+  const result = await ctx.characters.ysin(uid, avatarId, localeOf(c))
   if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
   if (result.kind === 'no_character') return fail(c, 404, 'no_character', `uid ${uid} 下没有角色 ${avatarId}`)
   return ok(c, result.view)

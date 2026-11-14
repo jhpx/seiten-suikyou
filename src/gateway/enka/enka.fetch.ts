@@ -1,21 +1,16 @@
 /*
- * 按 uid 从上游取原始数据 —— 只负责「把 JSON 拿回来」，字段怎么翻成 dbo 是 enka.convertor.ts 的事。
+ * 按 uid 从上游取原始数据；字段怎么翻成 dbo 是 enka.convertor.ts 的事。
  *
- * 一组源，**同时打，谁先成功用谁**（hedged request）：上游在国内不稳，两条线的耗时曲线叠不起来，
- * 并行的总耗时是 min(两源) —— 代价是每次打扰两个上游，量由限流挡着。
+ * 同时打所有源，谁先成功用谁；全失败才谈错误。424 在两个源上语义不同，
+ * 只有所有源都回同一个非 429 的 4xx 才收敛成一句业务文案（见 summarize）。
  *
- * ⚠️ 424 在两个源上语义不同（enka = 玩家没开展柜，microgg = 它自己回源失败），所以**有一个源成功
- *    就用它，全失败才谈错误**；只有「所有源都是同一个非 429 的 4xx」才收敛成一句业务文案（见 summarize）。
- *    429 例外是因为它说的是「这个源现在忙」，不是对这条请求的答复。
- * ⚠️ 错误信息**不挂源名当硬前缀** —— 那是把个别源的故障说成全局结论。
- *
- * 可调项：ENKA_SOURCE=microgg 只打某个源（排查用）、ENKA_TIMEOUT_MS=15000 改超时
- * （源表、超时、UA 的默认值都在 `config/constants.ts`）。
- * 响应里的 ttl 是上游给的缓存秒数，调用方应该尊重，别硬刷。
+ * 可调项：ENKA_SOURCE 只打某个源（排查用）、ENKA_TIMEOUT_MS 改超时；
+ * 源表、超时、UA 的默认值在 config/constants.ts。响应里的 ttl 是上游给的缓存秒数。
  */
 
 /* 本文件的返回值就是「enka 原始响应」= 领域层那份形状契约（纯类型，剥类型后不留运行时依赖） */
 import type { EnkaPayload } from './enka.dto.ts'
+import { httpGet, type HttpGet } from '../http.ts'
 import { DEFAULT_TIMEOUT_MS, DEFAULT_UA, SOURCES } from '../../config/constants.ts'
 
 /* 上游用 HTTP 状态码表达业务错误，不翻译用户只看到一句「HTTP 424」。
@@ -49,8 +44,8 @@ export interface FetchEnkaOpts {
   timeoutMs?: number
   /** 只打某一个源（排查用），可选值见 SOURCES */
   source?: string
-  /** 替换底层 fetch（测试用） */
-  fetchImpl?: typeof fetch
+  /** 替换底层取数（测试用） */
+  fetchImpl?: HttpGet
 }
 
 /* 试一个源。失败时抛出的 Error 带 source（哪个源）与 status（上游状态码；网络失败没有）。 */
@@ -63,16 +58,17 @@ async function trySource (
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   let res
   try {
-    res = await (fetchImpl || fetch)(source.base + uid, {
+    res = await (fetchImpl || httpGet)(source.base + uid, {
       headers: { 'User-Agent': userAgent || DEFAULT_UA },
-      signal: ctl.signal
+      signal: ctl.signal,
+      insecureTls: true
     })
   } catch (e) {
     const name = (e as { name?: string })?.name
     const msg = name === 'AbortError' ? `超时（${timeoutMs}ms）` : `连不上 —— ${pickCause(e)}`
     throw Object.assign(new Error(msg), { source: source.name })
   } finally {
-    /* ⚠️ 只护到响应头 —— clearTimeout 跑在 res.json() 之前，body 读取不受保护 */
+    /* httpGet 读完整个响应体才 resolve，所以超时覆盖到 body 读取 */
     clearTimeout(timer)
   }
 

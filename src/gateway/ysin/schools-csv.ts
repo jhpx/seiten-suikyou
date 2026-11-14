@@ -1,11 +1,11 @@
 /*
- * YSIN 流派预设的 CSV 读写 —— 单一数据来源就是 schools.csv，后端直接读它。
+ * YSIN 流派预设的 CSV 读写：后端直接读 schools.csv。
  *
- * 列用中文表头 + `#` 注释行说明（见 COLUMNS / NOTES），Excel / WPS / 记事本都能改。
- * 文件顶部两行 `# source:` / `# fetchedAt:` 保留原始出处与时间，仅作排查用。
- *
- * 这个模块不依赖 score.ts 等评分代码，方便 tools/ 下的迁移工具直接复用。
+ * 列用中文表头 + `#` 注释行说明（见 COLUMNS / NOTES），可用表格软件或文本编辑器改。
+ * 文件顶部两行 `# source:` / `# fetchedAt:` 记录原始出处与时间。
+ * 本模块不依赖评分代码，tools/ 下的工具可以直接复用。
  */
+
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,7 +25,30 @@ export interface SchoolSeed {
   /** 当前四维模型装不下的基准条数 */
   extraBench: { hp: number, def: number, recharge: number }
   dmgDefault: number
+  /** 网站的 cPanel：进面板的数值。引擎另有不进面板的隐性加成，见 implicit */
   basis: { baseAtk: number, atkPct: number, flatAtk: number, baseCpct: number, baseCdmg: number, baseMastery: number }
+  /** 引擎隐性面板加成：GearBasis 字段名 → 增量。与角色 id 无关，缺列就是没有 */
+  implicit?: Partial<Record<keyof SchoolSeed['basis'], number>>
+  /** 核心天赋 15 个等级的绝对倍率；缺列用常数（词条分里约掉，只影响数据分） */
+  talentScale?: number[]
+  /** 相对 9 级的倍率覆盖：等级 → 倍率。用于 YSIN 引擎与上游倍率表有偏差的场合 */
+  talentRatio?: Record<number, number>
+  /** 各命座给核心技能的抗性降低，6 项；缺列就是没有 */
+  consShred?: number[]
+  /** miao 真公式的伤害条目下标（calc.js 详情数组下标）；缺列就不走 miao 路径 */
+  entry?: number
+  /** 角色被动给核心技能的额外暴击率（小数），如甘雨 a2 = 0.2；缺列按 0 */
+  passiveCpct?: number
+  /** 充能残差 f_u 的七个参数；没有充能机制的角色留空，f_u ≡ 1 */
+  rechargeModel?: {
+    uBonus: number
+    etaRate: number
+    etaCap: number
+    thetaRate: number
+    thetaFlatRate: number
+    thetaFlatCap: number
+    phi0: number
+  }
   wText: string
   aText: string
 }
@@ -47,35 +70,44 @@ export const COLUMNS = [
   '角色ID', '流派ID', '流派名', '评估对象', '备注', '核心技能', '天赋槽', '是否反应',
   '基准攻击%', '基准精通', '基准暴击率', '基准爆伤', '基准生命%', '基准防御%', '基准充能',
   '默认伤害', '面板白字攻击', '面板攻击%', '面板固定攻击', '面板暴击率', '面板爆伤', '面板精通',
-  '武器', '圣遗物'
+  '武器', '圣遗物',
+  '隐性面板加成', '天赋倍率表', '等级倍率覆盖', '命座降抗',
+  '伤害条目', '被动暴击', '充能转换'
 ] as const
 
-/* 每列的说明，写进 CSV 顶部的 `#` 注释；对齐《YSIN算法数学推导》的符号 / 定义 / 定理 */
+/* 每列的说明，写进 CSV 顶部的 # 注释 */
 export const NOTES: Record<string, string> = {
-  '角色ID': '角色稳定数字 id（游戏 avatarId / enka avatarId，如 甘雨=10000037、空=10000005、荧=10000007）。与语言无关，接口用它当角色主键；纯标识，不参与算分。角色名不进 CSV，显示时按 id 走 i18n',
-  '流派ID': '流派唯一 id，同一角色内不能重复（下拉切换用）；纯标识',
-  '流派名': '流派名称（如 伤害 / 蒸发）；纯标识',
-  '评估对象': '该流派算分的输出技能（论文 §12.2「霜华矢（两段）期望」）。calc=true 流派里它就是分子 dmgYou 对应的那个技能；其余流派仅作标题展示',
+  '角色ID': '角色数字 id，接口用它与 i18n 查名字；纯标识，不参与算分',
+  '流派ID': '流派唯一 id，同一角色内不重复；下拉切换用',
+  '流派名': '流派名称；纯标识',
+  '评估对象': '该流派算分的输出技能；仅作展示',
   '备注': '备注；不参与计算',
-  '核心技能': '网站 core（如 a1 / e2 / c6，论文 §12.2/§12.5）。决定技能列表第 0 项与天赋槽，仅影响标题展示的技能等级，不改变分数',
-  '天赋槽': 'a 普攻 / e 战技 / q 爆发；仅决定标题条显示哪个天赋的等级，不进评分公式（论文无对应变量）',
-  '是否反应': 'true / false，对应论文反应乘区 reaction(em)（§6.3③、A5）。true 时精通才进伤害公式，反应因子才计入词条分 / 数据分',
-  '基准攻击%': 'bench·攻击（论文 D3 默认基准 7 元组第 2 维 / §1.3）。是"正常毕业"的攻击词条数，作为词条分分母 dmgBench 与极限分 dmgLimit 的输入（§12.1 四个数），经 convertMinor 反解成面板后跑引擎；改它平移分母，分数反比变化',
-  '基准精通': 'bench·精通（D3 第 4 维）。同上进入分母；仅当 是否反应=true 才对伤害有贡献（§6.1 不改流派则 6.7 条精通零贡献）',
-  '基准暴击率': 'bench·暴击（D3 第 5 维）。进入词条分分母，并参与双爆配平 balanceOf（T2/D5：按 critValue/4 配平）',
-  '基准爆伤': 'bench·爆伤（D3 第 6 维）。同上，配平的另一侧（critValue = 2·暴击+爆伤，T3 守恒）',
-  '基准生命%': 'bench·生命（D3 第 1 维）。本模型只评攻/精/暴/爆四维，生命归"未计入"，仅占位',
-  '基准防御%': 'bench·防御（D3 第 3 维）。同生命，未计入，仅占位',
-  '基准充能': 'bench·充能（D3 第 7 维）。同未计入（除非该流派 output 含充能，如绝缘四件）',
-  '默认伤害': 'dmgDefault（论文 D7 / §12.1 baseScore）。数据分分母：数据分 = dmgYou / dmgDefault × 100；是"默认整套（默认武器1精/默认主词条/90级/0命/技能999）"的引擎伤害，约掉当前配置；改它等比例缩放数据分',
-  '面板白字攻击': 'defaultBasis·atkBase（论文 §1.1 白字攻 = 角色基础+武器基础）。喂进 panelOf 重建攻击面板（D1），也是双爆配平的基线；决定每点攻击%值多少（T4 边际权重）',
-  '面板攻击%': 'defaultBasis·atkPct（论文 §1.1 atkMain+atkWeapon 折算成小数，0.466=46.6%）。经 panelOf 计入攻击面板，平移攻击因子',
-  '面板固定攻击': 'defaultBasis·atkFlat（论文 羽毛 311，§1.1/D7）。固定攻击主词条，加进面板攻击',
-  '面板暴击率': 'defaultBasis·baseCpct（论文 §1.1 生效暴击率，已含基础5%）。喂进面板 critRate 与双爆配平（D5/T2），决定暴击括号项 1+cpct×cdmg',
-  '面板爆伤': 'defaultBasis·baseCdmg（论文 §1.1 生效爆伤，已含基础50%）。同上，爆伤侧',
-  '面板精通': 'defaultBasis·baseMastery（论文 §1.1 elemMastery）。反应乘区输入；仅 是否反应=true 时生效',
-  '武器': '默认整套武器（如 辰砂之纺锤5精）；展示用，标记 dmgDefault 对应的配装',
-  '圣遗物': '默认整套套装（如 华馆4件）；展示用'
+  '核心技能': '流派核心技能 id（如 a1 / e2 / q）；决定技能列表第 0 项与天赋槽',
+  '天赋槽': 'a 普攻 / e 战技 / q 爆发；只决定标题显示哪个天赋等级',
+  '是否反应': 'true 时精通进伤害公式，反应因子才计入分数',
+  '基准攻击%': '标准词条的攻击条数，作词条分分母',
+  '基准精通': '标准词条的精通条数；仅 是否反应=true 时起作用',
+  '基准暴击率': '标准词条的暴击条数，参与双爆配平',
+  '基准爆伤': '标准词条的爆伤条数，配平另一侧',
+  '基准生命%': '生命条数；本模型只评攻/精/暴/爆四维，仅占位',
+  '基准防御%': '防御条数；同上，仅占位',
+  '基准充能': '充能条数；同上，仅占位',
+  '默认伤害': '默认整套的引擎伤害，数据分分母；数据分 = 当前伤害 / 它 × 100',
+  '面板白字攻击': 'defaultBasis.baseAtk，角色基础攻击 + 武器基础攻击',
+  '面板攻击%': 'defaultBasis.atkPct，主词条与武器攻击% 的小数',
+  '面板固定攻击': 'defaultBasis.flatAtk，羽毛等固定攻击主词条',
+  '面板暴击率': 'defaultBasis.baseCpct，含天生 5% 暴击',
+  '面板爆伤': 'defaultBasis.baseCdmg，含天生 50% 爆伤',
+  '面板精通': 'defaultBasis.baseMastery；仅 是否反应=true 时生效',
+  '武器': '默认整套武器；展示用',
+  '圣遗物': '默认整套套装；展示用',
+  '隐性面板加成': '引擎算伤害时叠上、但不进面板的量，格式 `字段:增量;字段:增量`；字段取 defaultBasis 的六个名字。技能额外暴击写「被动暴击」列，不要写这里',
+  '天赋倍率表': '核心天赋 15 个显示等级的绝对倍率，用 `;` 分隔；缺列按常数 1',
+  '等级倍率覆盖': '相对 9 级的倍率，格式 `等级:倍率;等级:倍率`，可写分式保持精度；优先于天赋倍率表',
+  '命座降抗': '6 个命座各自的敌人抗性降低（小数），用 `;` 分隔；只累加已解锁部分',
+  '伤害条目': '取 calc.js 详情数组的哪一项（从 0 起）；填了才走引擎算当前伤害，留空走近似',
+  '被动暴击': '角色被动给核心技能的额外暴击率（小数）；当前侧与参考侧都叠加，Q 流派写 0 或留空',
+  '充能转换': 'f_u 的七个参数：`uBonus;etaRate;etaCap;thetaRate;thetaFlatRate;thetaFlatCap;phi0`；没有充能机制的角色留空，f_u ≡ 1'
 }
 
 /* ---------- 基础 CSV 解析（支持引号、逗号、换行、双引号转义） ---------- */
@@ -113,19 +145,33 @@ function csvField (v: string): string {
   return v
 }
 
+/* 紧凑格式解析：允许写 105983/100189 这种分式，避免手工四舍五入 */
+function numExpr (s: string): number {
+  const m = /^\s*(-?[\d.]+)\s*\/\s*(-?[\d.]+)\s*$/.exec(s)
+  if (m) return Number(m[1]) / Number(m[2])
+  return Number(s)
+}
+function pairsOf (s: string): Array<[string, number]> {
+  return s.split(';').map(x => x.trim()).filter(Boolean).map(x => {
+    const i = x.indexOf(':')
+    return [x.slice(0, i).trim(), numExpr(x.slice(i + 1))] as [string, number]
+  })
+}
+function listOf (s: string): number[] {
+  return s.split(';').map(x => numExpr(x.trim())).filter(Number.isFinite)
+}
+const IMPLICIT_KEYS = new Set(['baseAtk', 'atkPct', 'flatAtk', 'baseCpct', 'baseCdmg', 'baseMastery'])
+
 /* ---------- 序列化：SchoolsFile → CSV 文本 ---------- */
 
 export function serializeSchoolsCsv (data: SchoolsFile): string {
   const lines: string[] = []
   lines.push('# YSIN 流派预设（手维护源文件，UTF-8 无 BOM）')
   lines.push('# 直接编辑本文件即可维护流派数据；改完重启后端服务生效。')
-  lines.push('# 各列对应《YSIN算法数学推导》的符号 / 定义 / 定理（论文 PDF：')
-  lines.push('#   ../ysin-math/ysin/YSIN算法数学推导.pdf；配套说明见 YSIN-词条分算法.md）。')
-  lines.push('# 记号：Dn=论文定义，Tn=论文定理，§n=章节；bench/rolls/dmgX 等符号与论文一致。')
   lines.push(`# source: ${data.source || 'manual-csv'}`)
   lines.push(`# fetchedAt: ${data.fetchedAt || new Date().toISOString()}`)
   lines.push('#')
-  lines.push('# 列说明（按列顺序；每列都标了它对应论文里的哪个量、用在哪里、怎么影响分数）：')
+  lines.push('# 列说明（按列顺序）：')
   for (const cn of COLUMNS) lines.push(`#   ${cn} = ${NOTES[cn] ?? ''}`)
   lines.push('#')
   lines.push(COLUMNS.join(','))
@@ -138,7 +184,20 @@ export function serializeSchoolsCsv (data: SchoolsFile): string {
         String(s.dmgDefault),
         String(s.basis.baseAtk), String(s.basis.atkPct), String(s.basis.flatAtk),
         String(s.basis.baseCpct), String(s.basis.baseCdmg), String(s.basis.baseMastery),
-        s.wText, s.aText
+        s.wText, s.aText,
+        s.implicit ? Object.entries(s.implicit).map(([k, v]) => `${k}:${v}`).join(';') : '',
+        s.talentScale?.join(';') ?? '',
+        s.talentRatio ? Object.entries(s.talentRatio).map(([k, v]) => `${k}:${v}`).join(';') : '',
+        s.consShred?.join(';') ?? '',
+        s.entry === undefined ? '' : String(s.entry),
+        s.passiveCpct === undefined ? '' : String(s.passiveCpct),
+        s.rechargeModel
+          ? [
+              s.rechargeModel.uBonus, s.rechargeModel.etaRate, s.rechargeModel.etaCap,
+              s.rechargeModel.thetaRate, s.rechargeModel.thetaFlatRate,
+              s.rechargeModel.thetaFlatCap, s.rechargeModel.phi0
+            ].join(';')
+          : ''
       ]
       lines.push(cells.map(c => csvField(String(c))).join(','))
     }
@@ -149,6 +208,37 @@ export function serializeSchoolsCsv (data: SchoolsFile): string {
 /* ---------- 反序列化：CSV 文本 → SchoolsFile ---------- */
 
 const TALENT = new Set(['a', 'e', 'q'])
+
+type EngineCols = Pick<SchoolSeed, 'implicit' | 'talentScale' | 'talentRatio' | 'consShred'>
+
+/** 四列可选标定 → 结构化字段；空列不产生字段，装配时走统一默认值 */
+function engineColsOf (implicit: string, scale: string, ratio: string, shred: string): EngineCols {
+  const out: EngineCols = {}
+  if (implicit) {
+    const m: NonNullable<SchoolSeed['implicit']> = {}
+    for (const [k, v] of pairsOf(implicit)) {
+      if (IMPLICIT_KEYS.has(k) && Number.isFinite(v)) m[k as keyof typeof m] = v
+    }
+    if (Object.keys(m).length) out.implicit = m
+  }
+  if (scale) {
+    const a = listOf(scale)
+    if (a.length) out.talentScale = a
+  }
+  if (ratio) {
+    const m: Record<number, number> = {}
+    for (const [k, v] of pairsOf(ratio)) {
+      const lv = Number(k)
+      if (Number.isInteger(lv) && Number.isFinite(v)) m[lv] = v
+    }
+    if (Object.keys(m).length) out.talentRatio = m
+  }
+  if (shred) {
+    const a = listOf(shred)
+    if (a.length) out.consShred = a
+  }
+  return out
+}
 
 export function parseSchoolsCsv (text: string): SchoolsFile {
   const rawLines = text.split(/\r?\n/)
@@ -207,7 +297,31 @@ export function parseSchoolsCsv (text: string): SchoolsFile {
         baseCpct: num('面板暴击率'), baseCdmg: num('面板爆伤'), baseMastery: num('面板精通')
       },
       wText: cell('武器', rows[r]),
-      aText: cell('圣遗物', rows[r])
+      aText: cell('圣遗物', rows[r]),
+      /* 四列引擎标定都是可选的：缺列 / 空串一律给 undefined，走通用默认值 */
+      ...engineColsOf(
+        cell('隐性面板加成', rows[r]), cell('天赋倍率表', rows[r]),
+        cell('等级倍率覆盖', rows[r]), cell('命座降抗', rows[r])
+      ),
+      /* 缺列 / 空串给 undefined，evaluateCharacter 据此决定是否走引擎 */
+      entry: (() => {
+        const v = cell('伤害条目', rows[r])
+        return v === '' ? undefined : Number(v)
+      })(),
+      passiveCpct: (() => {
+        const v = cell('被动暴击', rows[r])
+        return v === '' ? undefined : Number(v)
+      })(),
+      rechargeModel: (() => {
+        const v = cell('充能转换', rows[r])
+        if (v === '') return undefined
+        const a = listOf(v)
+        if (a.length < 7) return undefined
+        return {
+          uBonus: a[0], etaRate: a[1], etaCap: a[2], thetaRate: a[3],
+          thetaFlatRate: a[4], thetaFlatCap: a[5], phi0: a[6]
+        }
+      })()
     })
   }
   const characters = [...byChar.values()].sort((a, b) => a.id - b.id)
@@ -217,11 +331,11 @@ export function parseSchoolsCsv (text: string): SchoolsFile {
 /* 工具函数：把现有 JSON 文件转成 CSV 并写盘（一次性迁移用） */
 export function jsonFileToCsv (jsonPath: string, csvPath: string): { characters: number, schools: number } {
   const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as SchoolsFile
-  /* 新版以 avatarId 为键；旧版 name/key 形态的 JSON 没有 id，先拒绝，避免写出 undefined */
+  /* JSON 必须带数字角色 id，否则写出 undefined */
   for (const ch of data.characters) {
     const id = Number((ch as { id?: unknown }).id)
     if (!Number.isFinite(id) || id <= 0) {
-      throw new Error('这份 schools.json 没有数字角色 id（旧版 name/key 形态），请先补上 avatarId 再迁移')
+      throw new Error('这份 schools.json 没有数字角色 id，请先补上 avatarId 再迁移')
     }
     ch.id = id
   }

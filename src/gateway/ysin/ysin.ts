@@ -1,71 +1,32 @@
 /*
- * YSIN 词条算法网关 —— 按 YSIN 小程序真实的算法重写，不改动 miao 内核。
+ * YSIN 词条与评分网关：从面板反解词条、拆出圣遗物副词条账本，再交给 score.ts 算分。
  *
- * ── 结论先说：YSIN 算的不是「圣遗物副词条有多少条」 ─────────────────────────────
- * 它算的是「你**整套装备**在某个属性上，扣掉角色天生数值和圣遗物主词条之后，还剩多少个
- * 标准词条」。所以 5 件圣遗物理论上限 45 条，YSIN 却能报出 51.7 —— 因为它把**武器副词条**
- * 和**套装效果**也算进了同一个池子。这一点用甘雨实测可以逐位对上（见文末算例）。
- *
- * ── 单条词条的基准值（一次强化的均值）────────────────────────────────────────
- *   生命% 5 ／ 攻击% 5 ／ 防御% 6.2 ／ 元素精通 20 ／ 暴击率 3.3 ／ 暴击伤害 6.6 ／ 充能 5.5
- * 这组数直接来自 YSIN 自己的源码（词条收益提示里的 case 分支），不是社区传言。
- *
- * ── 每个属性的词条数 ────────────────────────────────────────────────────────
- *   净加成 = 面板总值 − 角色基础值 − 圣遗物主词条
- *   词条数 = 净加成 ÷ 上面那组基准值
- *
- * 三围（生命/攻击/防御）要先把固定值折成百分比，因为面板给的是「白字+绿字」的总和：
- *   净加成% = (面板总三围 − 白字 − 固定值主词条) ÷ 白字 × 100 − 百分比主词条
- * 这样副属性里的小攻击、沙漏上的攻击%、武器上的攻击% 就会落进同一个百分比里。
- *
- * 基础值直接取 miao 的 `Attr.getBase()`：暴击 5、爆伤 50+突破、精通 0、充能 100、三围是白字。
- * 突破加成已经含在里面，不需要另外加。
- *
- * ── 甘雨实测（uid 101242308，阿莫斯之弓）────────────────────────────────────
- *   面板：攻击 2669.917 / 白字 942.92 / 精通 133.62 / 暴击 46.61 / 爆伤 227.5
- *   主词条：羽毛 小攻击 310.8、沙漏 攻击% 46.62、理之冠 爆伤 62.16
- *   攻击 = ((2669.917 − 942.92 − 310.8)/942.92×100 − 46.62)/5 = 20.71
- *   精通 = 133.62 / 20                                        = 6.68
- *   暴击 = (46.61 − 5) / 3.3                                  = 12.61
- *   爆伤 = (227.5 − 88.4 − 62.16) / 6.6                       = 11.66
- *   合计 51.66 → 小程序显示 20.7 / 6.7 / 12.6 / 11.7，总 51.7 ✔
- *
- * 精通 133.62 里有 80 点是套装效果（副词条只有 53.62）——miao 的面板会把套装算进去，
- * 所以只要读面板，这类来源自动就带上了。
- *
- * ── 顺带更正两个常见误解 ────────────────────────────────────────────────────
- * ① 渊星（AbyssalEvaluator）的 `__SUB_STAT_BENEFIT` 把精通记成 19.75，而且**只**扫圣遗物
- *    副词条、不含武器和套装。它跟 YSIN 小程序不是同一套数，照抄渊星会系统性偏低。
- * ② YSIN 的「词条分（毕业值）」是**伤害期望比值**，不是「词条数 ÷ 默认词条数」。
- *
- * ── 词条分的官方口径（网页版帮助页原文，逐字抄）──────────────────────────────
- *    词条分：  [A] = 目前圣遗物 + 目前配置
- *              [B] = 默认圣遗物 + 目前配置        →  A / B × 100
- *    数据分：  [C] = 默认圣遗物 + 默认配置        →  A / C × 100
- *    默认圣遗物 = 18 双爆 + 4 条 + 3×(有效属性数−3) 条 → 3/4/5 有效分别是 22/25/28
- *    默认配置   = 5 星角色 + 专武 + 技能 999
- *    而且「由于不考虑主属性，不合适的主属性不会影响词条分，但会影响数据分」。
- *
- *    关键约束（装备页帮助第 3 条）：
- *      「充能词条一般不会参与评分，因为**不穿绝缘**的情况下，大部分角色充能与伤害无关」
- *    → 默认把充能踢出集合；**穿绝缘 4 件套是例外**，4 件套会把充能效率的 25% 转成元素爆发
- *      增伤，此时充能确实换伤害。实测香菱（绝缘4，19.4 条充能）词条分 120，若把充能全剔掉
- *      只剩 114.8，显然不对；按 5 折计入得 122.3，与实测差 1.9%。
- *
- * ── 为什么本模块给的是近似值 ────────────────────────────────────────────────
- * 精确复现 161 需要 YSIN 自己的伤害引擎（逐角色「流派」的倍率/反应/套装），miao 的
- * calc.js 是另一套模型，跑出来的比值差 5%~15%。所以这里退一步：用「计分词条数 ÷ 默认
- * 条数」当近似，实测 甘雨 167.0 / 小程序 161（+3.7%）、香菱 122.3 / 小程序 120（+1.9%）。
- * 偏差来自伤害的边际递减（攻击条多了会被稀释），不是舍入。要更准只能把 YSIN 的引擎搬过来。
+ * 词条数 = (面板总值 − 角色基础值 − 圣遗物主词条) ÷ 单条基准值；三围先折成百分比。
+ * 反解出的是「整装词条」，含武器副词条与 2 件套加成。算分前扣掉这两份得到 artifact，
+ * 扣掉的 bonus 折进 basis，保证 panelOf(artifact, basis) 仍等于玩家真实面板。
+ * 角色 / 流派的差异都在 schools.csv，这里不按 id 分支。
  */
+
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { ArtisAttr, Weapon as MiaoWeapon } from '../../index.ts'
 import { toMiaoProfile } from '../miao/materialize.ts'
 import { setIdOfItem } from '../../common/names.ts'
 import { usefulAttr } from '../../../vendor/miao/resources/meta-gs/artifact/artis-mark.js'
 import type { CharacterDbo } from '../../repository/dbo/character.ts'
 import type { ArtifactDbo } from '../../repository/dbo/artifact.ts'
-import { computeScores, type GearBasis, type Rolls, type ScoreResult } from './score.ts'
+import { computeScores, ROLL, type GearBasis, type Rolls, type ScoreResult } from './score.ts'
+import { applyCurrentDamage, currentDamageOf } from './score-miao.ts'
 import { presetOf, schoolsFor } from './schools.ts'
+
+/* 套装元数据：YSIN 把 2 件套给面板的加成也算进了「词条」，扣减时要按套装通用地读出来 */
+const SET_DATA_PATH = fileURLToPath(new URL(
+  '../../../vendor/miao/resources/meta-gs/artifact/data.json', import.meta.url))
+interface ArtifactSetMeta {
+  name: string
+  idxs?: Record<string, { id: number }>
+  skills?: Record<string, string>
+}
 
 /* 一次强化的均值 —— YSIN 源码里的「基数」 */
 const ROLL_BASE: Record<string, number> = {
@@ -95,6 +56,119 @@ const WEAPON_KEY: Record<string, string> = {
   cdmg: 'cdmg',
   mastery: 'mastery',
   recharge: 'recharge'
+}
+
+/* 套装 2 件套文案里出现的属性名 → 本模块的 7 项 key。
+   例：「元素充能效率提高20%。」「元素精通提高80点。」「攻击力提高18%。」 */
+const SET_ATTR_KEY: Record<string, string> = {
+  '元素充能效率': 'recharge',
+  '元素精通': 'mastery',
+  '攻击力': 'atk',
+  '暴击率': 'cpct',
+  '暴击伤害': 'cdmg',
+  '生命值': 'hp',
+  '防御力': 'def'
+}
+
+/* enka 的 setId → 套装元数据。enka 与 miao 用两套 id，靠部件 itemId 反查连起来 */
+const SET_BY_ID: Map<number, ArtifactSetMeta> = (() => {
+  const map = new Map<number, ArtifactSetMeta>()
+  const data = JSON.parse(fs.readFileSync(SET_DATA_PATH, 'utf8')) as Record<string, ArtifactSetMeta>
+  for (const set of Object.values(data)) {
+    for (const part of Object.values(set.idxs ?? {})) {
+      const sid = setIdOfItem(part.id)
+      if (sid) map.set(sid, set)
+    }
+  }
+  return map
+})()
+
+/**
+ * 当前装备里生效的 2 件套「面板加成」折算成词条数。
+ *
+ * 通用规则：同一 setId 凑够 2 件就生效一次（4 件也只算 2 件套那一层），
+ * 从元数据的 skills.2 文案里读数值与属性，再除以该属性的一条均值。
+ * 4 件套那种「转增伤」「条件下才触发」的效果不进面板，文案里没有「提高 X」也就不会被解析。
+ */
+export function setPanelBonusOf (artifacts: ArtifactDbo[]): Record<string, number> {
+  const count = new Map<number, number>()
+  for (const a of artifacts || []) {
+    const sid = a.setId ?? setIdOfItem(a.itemId)
+    if (sid) count.set(sid, (count.get(sid) ?? 0) + 1)
+  }
+  const out: Record<string, number> = {}
+  for (const [sid, n] of count) {
+    if (n < 2) continue
+    const text = SET_BY_ID.get(sid)?.skills?.['2'] ?? ''
+    const m = /(.+?)提高\s*([\d.]+)\s*(%|点)/.exec(text)
+    if (!m) continue
+    const key = SET_ATTR_KEY[m[1]]
+    if (!key) continue
+    out[key] = (out[key] ?? 0) + Number(m[2]) / ROLL_BASE[key]
+  }
+  return out
+}
+
+/** 词条账本：把面板反解值拆成「圣遗物副词条」和「其他来源」，全角色同一套算法 */
+export interface RollLedger {
+  /** 面板反解的整装词条（7 项，含武器副词条与套装面板加成） */
+  gross: Record<string, number>
+  /** 非圣遗物来源：武器副词条 + 生效的 2 件套面板加成 */
+  bonus: Record<string, number>
+  /** 圣遗物副词条 = gross − bonus；评分与网站那格「词条」都用它 */
+  artifact: Record<string, number>
+}
+
+export function rollLedgerOf (
+  stats: StatRoll[],
+  weaponByKey: Record<string, number>,
+  artifacts: ArtifactDbo[]
+): RollLedger {
+  const bonus = setPanelBonusOf(artifacts)
+  const gross: Record<string, number> = {}
+  const artifact: Record<string, number> = {}
+  for (const s of stats) {
+    gross[s.key] = s.rolls
+    const nonArtifact = (weaponByKey[s.key] ?? 0) + (bonus[s.key] ?? 0)
+    artifact[s.key] = Math.max(0, s.rolls - nonArtifact)
+    bonus[s.key] = nonArtifact
+  }
+  return { gross, bonus, artifact }
+}
+
+/**
+ * 把刚从词条里扣掉的非圣遗物加成挪回装备基线。
+ *
+ * 这样 basis 与 defaultBasis 是同一种东西：「除圣遗物副词条外的一切面板量」。
+ * computeScores 用 panelOf(圣遗物词条, basis) 就能还原玩家真实面板（暴击伤害那格
+ * 要读真实双爆）；词条分的参考侧也用同一份 basis + 标准词条，不再切到 defaultBasis。
+ * 不挪的话，武器带暴击/爆伤副词条的角色（天空之翼、护摩之杖…）会被少算双爆。
+ */
+export function withNonArtifact (basis: GearBasis, bonus: Record<string, number>): GearBasis {
+  return {
+    ...basis,
+    atkPct: basis.atkPct + (bonus.atk ?? 0) * ROLL.atk,
+    baseCpct: basis.baseCpct + (bonus.cpct ?? 0) * ROLL.cpct,
+    baseCdmg: basis.baseCdmg + (bonus.cdmg ?? 0) * ROLL.cdmg,
+    baseMastery: basis.baseMastery + (bonus.mastery ?? 0) * ROLL.em,
+    /* 充能也要挪回来：F(σ) 的口径是「除圣遗物副词条外的一切面板量」，
+       武器 / 套装给的充能（薙草、绝缘 2 件套）必须计入，否则 f_u 会少算 */
+    baseRecharge: (basis.baseRecharge ?? 1) + (bonus.recharge ?? 0) * ROLL.recharge
+  }
+}
+
+/**
+ * 网站那格「词条 xx.x」：按流派的有效属性，把圣遗物副词条加起来。
+ * 不打反应时精通不产生伤害，网站也不把它计入这一格。
+ */
+function tagTotalOf (artifact: Record<string, number>, effective: Set<string>, reaction: boolean): number {
+  let sum = 0
+  for (const [key, n] of Object.entries(artifact)) {
+    if (!effective.has(key)) continue
+    if (key === 'mastery' && !reaction) continue
+    sum += n
+  }
+  return sum
 }
 
 /* 角色在 usefulAttr 里查不到时的兜底流派（攻暴爆充） */
@@ -137,10 +211,13 @@ export interface CharacterYsin {
   weaponRolls: number
   /** 武器贡献按属性拆开，供「其中武器」列用；没有的属性不给键 */
   weaponByKey: Record<string, number>
-  /** 你的「不含副词条」装备基线：白字、主词条、天生双爆与精通。
-      仅供展示与调试；算分（词条分 / 数据分）走预设的 defaultBasis，不再读这里。
-      详见 gearBasisFrom 与 score.ts computeScores 的注释。 */
+  /** 你的装备基线：白字、主词条、天生双爆，以及武器 / 套装给的一切非圣遗物加成。
+      与 defaultBasis 同口径（「除圣遗物副词条外的全部面板量」），
+      仅供展示真实面板与换算暴击伤害；算分走预设的 defaultBasis。
+      详见 gearBasisFrom / withNonArtifact 与 score.ts computeScores 的注释。 */
   basis: GearBasis
+  /** 整装词条 → 圣遗物副词条 的账本，评分与网站词条格共用 */
+  ledger: RollLedger
   /** 总词条数扣掉武器 —— 只剩圣遗物副词条 + 套装效果，能和 miao 放同一张表比 */
   artifactTotal: number
   /** miao 侧：所有副词条 ÷ 单 roll 最大值，不按角色过滤 */
@@ -149,35 +226,22 @@ export interface CharacterYsin {
   miaoValid: number
   /** miao 侧：被过滤掉的废词条（已 ÷0.85） */
   miaoOnly: number
-  /** 词条分（毕业度）的近似值 —— 口径见 scoreOf 的注释，与小程序有 ±4% 偏差。
-      仅用于「与 miao 条数对照」这类辅助视图；真正的分数请看下方 `scores`。 */
-  score: ScoreBreakdown
   /**
-   * 每个流派**正确**的分数（词条分 / 数据分，与网站逐一核对过的伤害比），key = 流派 id。
-   * 由 score.ts 的 computeScores 算出，不再用条数近似。
+   * 每个流派的分数（词条分 / 数据分），key = 流派 id。
+   * 由 score.ts 的 computeScores 算出，输入是同一份圣遗物副词条账本。
    *
    * 口径边界（与 docs 一致）：
    *  - 词条分：分子分母同配，技能倍率 / 命座 / 精炼全部约掉，对所有流派都精确；
-   *  - 数据分：分母写死默认整套，只有预设带等级倍率表（目前仅甘雨·融化）时才随
-   *    技能等级正确；其余流派默认按 9/9/9 等价配置算，技能等级 ≠ 9 时数据分会偏差。
+   *  - 数据分：分母写死默认整套，预设带天赋倍率表时随技能等级正确变化；
+   *    没带倍率表的流派按 9/9/9 等价配置算，技能等级 ≠ 9 时会有偏差。
    */
   scores: Record<string, ScoreResult>
-}
-
-/** 词条分的中间量，展示层要不要用由调用方决定 */
-export interface ScoreBreakdown {
-  /** 真正参与计分的属性：有效属性里剔掉充能（绝缘 4 件套除外） */
-  counted: string[]
-  /** 参与计分的词条数合计（含武器副词条、充能已折算） */
-  rolls: number
-  /** 默认圣遗物的条数：18 双爆 + 4 + 3×(N−3)，即 22 / 25 / 28 */
-  defaultRolls: number
-  /** rolls ÷ defaultRolls × 100 */
-  value: number
-  /** 是否穿绝缘 4 件套 —— 决定充能算不算进计分 */
-  emblem: boolean
-  /** 参与计分的充能条数（折算前，已扣武器） */
-  rechargeRolls: number
+  /**
+   * 网站那一格「词条 xx.x」，按流派给。与上面的 total 不是一回事：
+   * total 是整装词条，这里是账本里的圣遗物副词条，再按该流派的有效属性求和
+   * （不打反应时精通不算，所以同一角色不同流派会差几条）。
+   */
+  siteTagTotals: Record<string, number>
 }
 
 /* 把 5 件圣遗物的主词条按 key 累加（key 与面板属性同名，如 atkPlus / atk / cdmg） */
@@ -222,8 +286,9 @@ function panelRolls (
 }
 
 /*
- * 把「目前配置」拆成 score.ts 要的装备基线：把副词条那部分从面板里减掉，剩下的
- * 就是白字、主词条、天生双爆和套装精通。
+ * 把「目前配置」拆成 score.ts 要的装备基线：把面板反解出来的那一整份净加成减掉，
+ * 剩下的是白字、主词条与天生双爆。武器副词条 / 套装效果也藏在这份净加成里，
+ * 所以调用方还要用 withNonArtifact 把它们补回来，才是完整的装备基线。
  *
  * 这么减完再交给 panelOf(rolls, basis) 会正好还原 miao 的 attr 面板，因为
  * panelRolls 和 panelOf 用的是同一套公式，只是方向相反：
@@ -247,7 +312,9 @@ function gearBasisFrom (
     flatAtk: main.get('atkPlus') ?? 0,
     baseCpct: ((attr.cpct ?? 0) - (value.get('cpct') ?? 0)) / 100,
     baseCdmg: ((attr.cdmg ?? 0) - (value.get('cdmg') ?? 0)) / 100,
-    baseMastery: (attr.mastery ?? 0) - (value.get('mastery') ?? 0)
+    baseMastery: (attr.mastery ?? 0) - (value.get('mastery') ?? 0),
+    /* 充能：miao 面板是百分数（309.45 表示 309.45%），先扣掉副词条那份，再折成小数 */
+    baseRecharge: ((attr.recharge ?? 100) - (value.get('recharge') ?? 0)) / 100
   }
 }
 
@@ -269,67 +336,7 @@ function weaponRollsOf (character: CharacterDbo, base: Record<string, number>): 
   return out
 }
 
-/* 计分时不看的属性。官方口径：充能与伤害无关，只是循环问题，没有统一标准 —— 但绝缘是例外 */
-const SCORE_EXCLUDE = new Set(['recharge'])
-
-/* 绝缘之旗印的 setId —— 4 件套把「元素充能效率的 25%」换成元素爆发增伤 */
-const EMBLEM_SET_ID = 15020
-
-/*
- * 绝缘 4 件套下充能的折算权重。
- * 理论系数就是 4 件套的 25%，但那只作用在大招区、且要除以增伤基数，实际收益低于面值；
- * 香菱实测（19.4 条充能、词条分 120）反解出来约 0.44，先取整数半权 0.5 → 122.3（+1.9%）。
- * 只有一个实测点，不做更细的拟合；以后拿到更多绝缘角色的分数再校准。
- */
-const EMBLEM_RECHARGE_WEIGHT = 0.5
-
-/* 5 件里至少 4 件是绝缘 —— 只有凑满 4 件套才有「充能换增伤」这条
- *  · setId 优先（人工/模拟件换套装时 itemId 还是原件那一个），没有就从 itemId 推 */
-export function isEmblem4 (artifacts: ArtifactDbo[]): boolean {
-  let n = 0
-  for (const a of artifacts || []) {
-    if ((a.setId ?? setIdOfItem(a.itemId)) === EMBLEM_SET_ID) n++
-  }
-  return n >= 4
-}
-
-/*
- * 默认圣遗物的条数：18 条双爆 + 4 条 + 每多一种有效属性再加 3 条。
- * 3 有效 → 22、4 有效 → 25、5 有效 → 28，和帮助页的「22-28 词条」对上。
- */
-export function defaultRollsOf (effectiveCount: number): number {
-  return 22 + 3 * Math.max(0, effectiveCount - 3)
-}
-
-/*
- * 词条分 = 参与计分的词条数 ÷ 默认条数 × 100。
- * 只做「条数」层面的近似 —— 真正的定义是伤害期望 A/B，攻击/精通多了会被稀释，
- * 这一层递减这里没有，所以和实测差 ±4%（数据点见文件头）。
- *
- * 分子要扣掉武器副词条：A、B 两套都戴着同一把武器，它在伤害比值里是约掉的，
- * 留在分子里会白送几十条（甘雨 阿莫斯 9.9 条攻击，直接多出 40 分）。
- */
-export function scoreOf (stats: StatRoll[], weaponByKey: Record<string, number> = {}, emblem = false): ScoreBreakdown {
-  const counted: string[] = []
-  let rolls = 0
-  let rechargeRolls = 0
-  for (const s of stats) {
-    if (!s.effective) continue
-    if (SCORE_EXCLUDE.has(s.key)) {
-      if (!emblem) continue
-      rechargeRolls = s.rolls - (weaponByKey[s.key] ?? 0)
-      rolls += rechargeRolls * EMBLEM_RECHARGE_WEIGHT
-      counted.push(s.key)
-      continue
-    }
-    counted.push(s.key)
-    rolls += s.rolls - (weaponByKey[s.key] ?? 0)
-  }
-  const defaultRolls = defaultRollsOf(counted.length)
-  return { counted, rolls, defaultRolls, value: rolls / defaultRolls * 100, emblem, rechargeRolls }
-}
-
-export function evaluateCharacter (character: CharacterDbo): CharacterYsin | null {
+export async function evaluateCharacter (character: CharacterDbo): Promise<CharacterYsin | null> {
   const profile = toMiaoProfile(character)
   if (!profile) return null
 
@@ -378,30 +385,42 @@ export function evaluateCharacter (character: CharacterDbo): CharacterYsin | nul
   }
 
   const charName = profile.char.name
-  const basis = gearBasisFrom(attr, base, main, stats)
-  const byKey = new Map(stats.map(s => [s.key, s.rolls]))
+  const ledger = rollLedgerOf(stats, weaponByKey, character.artifacts || [])
+  /* 词条扣掉的那部分要挪回基线，panelOf(圣遗物词条, basis) 才等于玩家真实面板 */
+  const basis = withNonArtifact(gearBasisFrom(attr, base, main, stats), ledger.bonus)
   const talent = (profile.talent || {}) as Record<string, number>
   const talents = { a: talent.a ?? 9, e: talent.e ?? 9, q: talent.q ?? 9 }
 
-  /* 每个流派的正确分数（伤害比）。basis 与 rolls 跟上面完全一致，保证和网站同口径。
-     没有匹配流派时 scores 为空，不影响上面的条数统计。 */
+  /* 分数用账本里的圣遗物副词条；词条分的分子分母都用玩家骨架 basis（当前 vs
+     标准词条），网站那格「词条」也从同一份账本求和，不会再出现两套扣减逻辑。 */
   const scores: Record<string, ScoreResult> = {}
+  const siteTagTotals: Record<string, number> = {}
   const group = schoolsFor(profile.id)
   if (group) {
     const rolls: Rolls = {
-      atk: byKey.get('atk') ?? 0,
-      em: byKey.get('mastery') ?? 0,
-      cpct: byKey.get('cpct') ?? 0,
-      cdmg: byKey.get('cdmg') ?? 0
+      atk: ledger.artifact.atk ?? 0,
+      em: ledger.artifact.mastery ?? 0,
+      cpct: ledger.artifact.cpct ?? 0,
+      cdmg: ledger.artifact.cdmg ?? 0,
+      recharge: ledger.artifact.recharge ?? 0
     }
     for (const seed of group.schools) {
-      scores[seed.id] = computeScores({
-        preset: presetOf(profile.id, seed),
-        basis,
-        rolls,
-        talents,
-        cons: character.cons ?? 0
-      })
+      const preset = presetOf(seed)
+      /* 词条分走闭式：同一骨架 + 标准词条，参考侧不跑引擎 */
+      const base = computeScores({ preset, basis, rolls, talents, cons: character.cons ?? 0 })
+      if (seed.entry !== undefined) {
+        /* 数据分还需要一次当前伤害 D(P)；引擎没算出条目时保留无引擎近似 */
+        const dmg = await currentDamageOf({
+          profile, entry: seed.entry, talentSlot: seed.talentSlot,
+          passiveCpct: seed.passiveCpct ?? 0, consShred: seed.consShred,
+          cons: character.cons ?? 0, enemyRes: preset.enemyRes
+        })
+        scores[seed.id] = dmg ? applyCurrentDamage(base, dmg) : base
+      } else {
+        /* 没有 entry 的流派走无引擎近似 */
+        scores[seed.id] = base
+      }
+      siteTagTotals[seed.id] = tagTotalOf(ledger.artifact, effective, preset.reaction)
     }
   }
 
@@ -414,11 +433,12 @@ export function evaluateCharacter (character: CharacterDbo): CharacterYsin | nul
     weaponRolls,
     weaponByKey,
     basis,
+    ledger,
     artifactTotal: total - weaponRolls,
     miaoEff,
     miaoValid,
     miaoOnly,
-    score: scoreOf(stats, weaponByKey, isEmblem4(character.artifacts || [])),
-    scores
+    scores,
+    siteTagTotals
   }
 }

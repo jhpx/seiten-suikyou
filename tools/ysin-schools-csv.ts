@@ -10,7 +10,7 @@
  *       是否反应非法、重复 id、缺流派名等问题。日常手改 CSV 后跑一下很合适。
  *   node tools/ysin-schools-csv.ts refresh
  *       用当前数据就地重写 CSV 顶部的注释表头（数据本身不动）。改了 schools-csv.ts
- *       里的 NOTES 或注释后跑它，把最新论文对照说明刷进文件。
+ *       里的 NOTES 或注释后跑它，把最新的列说明刷进文件。
  *
  * 注意：本工具只负责「JSON→CSV 迁移」和「体检」。日常维护就是直接改 schools.csv，
  * 后端（src/gateway/ysin/schools.ts）已经直接读它，不需要再生成 JSON。

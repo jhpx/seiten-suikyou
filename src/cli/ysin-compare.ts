@@ -1,29 +1,21 @@
 #!/usr/bin/env node
 /*
- * YSIN vs miao 词条数对照 —— 命令行工具
+ * YSIN vs miao 词条数对照。
  *
- * 把一个账号里每个角色的「有效词条数」按两套口径列出来，但**必须先把口径拉齐**：
- *
- *   miao有效   = 圣遗物副词条 ÷ 单 roll 最大值，再 ÷0.85 换到均值分母（页面「有效词条数」的口径）
- *   YSIN圣遗物 = YSIN 总词条数 − 武器词条，即「圣遗物副词条 + 套装效果」折算出的条数
- *
- * 只有这两列能横着比。YSIN 总词条数把武器也算进去了（阿莫斯之弓 49.6% 攻击 = 9.92 条），
- * 直接跟 miao 比会凭空多出十来条。
- *
- * 剩余差异来自两处，都是算法本身，不是算错：
- *   ① 套装效果：YSIN 从面板读，套装给的 80 精通、18% 攻击都算词条；miao 的 eff 只统计副词条。
- *   ② 小词条：YSIN 按白字折成百分比（一条满值小攻击通常 0.4 条），miao 按小词条自身最大值算（1 条）。
+ * miao有效 = 圣遗物副词条 ÷ 单 roll 最大值 ÷ 0.85；
+ * YSIN圣遗物 = YSIN 总词条数 − 武器词条。只有这两列能横向比较。
  *
  * 用法（数据已在库里时直接离线跑）：
  *   node src/cli/ysin-compare.ts --offline
  *   node src/cli/ysin-compare.ts --offline --uid 101242308
  */
+
 import fs from 'node:fs'
 import { openDb, type Db } from '../config/db.ts'
 import * as repo from '../config/store.ts'
 import { evaluateCharacter } from '../gateway/ysin/ysin.ts'
 import type { CharacterYsin } from '../gateway/ysin/ysin.ts'
-import { presetOf, schoolsFor } from '../gateway/ysin/schools.ts'
+import { schoolsFor } from '../gateway/ysin/schools.ts'
 import { DEFAULT_DB_FILE } from '../config/constants.ts'
 import { parseArgs, argValue } from '../common/util.ts'
 
@@ -46,7 +38,7 @@ async function main () {
     const account = repo.loadAccountWithCharacters(db, uid)
     if (!account?.characters.length) { skipped.push(`uid ${uid}（无角色）`); continue }
     for (const character of account.characters) {
-      const result = evaluateCharacter(character)
+      const result = await evaluateCharacter(character)
       if (!result) { skipped.push(`uid ${uid} 角色 ${character.avatarId}（miao 不认识）`); continue }
       /* 没穿圣遗物的角色两边都是 0，属噪音，挪到跳过列表 */
       if (result.miaoEff === 0 && result.total === 0) {
@@ -89,10 +81,8 @@ const sign = (n: number): string => (n >= 0 ? '+' : '') + n
 function primaryScore (r: CharacterYsin): { school: string, sub: number, gear: number } | null {
   const group = schoolsFor(r.avatarId)
   if (!group || !group.schools.length) return null
-  let pick = group.schools[0]
-  for (const s of group.schools) {
-    if (presetOf(r.avatarId, s).talentRatioOverride) { pick = s; break }
-  }
+  /* 与首页卡片 / 明细页默认选中一致：一律取第一个流派，不看哪个流派做了精确标定 */
+  const pick = group.schools[0]
   const res = r.scores[pick.id]
   if (!res) return null
   return { school: pick.name, sub: res.subScore, gear: res.gearScore }
@@ -130,9 +120,9 @@ function printTable (rows: Row[]) {
   console.log(`\n偏差分布（|YSIN圣遗物−miao有效| / miao有效，共 ${d.n} 个角色）：`)
   console.log(`  ${d.buckets.map(([label, n]) => `${label} ${n} 个`).join('　')}`)
   console.log(`  中位 ${sign(round1(d.median))}%　均值 ${sign(round1(d.avg))}%`)
-  console.log('\n词条分 / 数据分 = score.ts 的 computeScores 直接算的伤害比（与网站逐一核对）：')
-  console.log('  甘雨·融化 0命 10/10/10 → 词条分 161、数据分 171；1命 → 数据分 194。')
-  console.log('  其中数据分只有带等级倍率表的流派（目前仅甘雨·融化）随技能等级正确，其余默认按 9/9/9 算。')
+  console.log('\n词条分 / 数据分 = score.ts 的 computeScores 算的伤害比：')
+  console.log('  雷神·伤害 116 / 123，甘雨·伤害 126 / 126，甘雨·融化 125 / 150；详见 test/ysin-score.ts 第 5 节。')
+  console.log('  账本统一扣掉武器副词条与套装 2 件套加成，技能等级 / 命座降抗进配置倍率。')
 }
 
 function distribution (rows: Row[]) {
@@ -170,14 +160,14 @@ function writeMarkdown (rows: Row[]) {
   lines.push('| **miao有效** | miao 页面「有效词条数」的口径：有效副词条 ÷ 单 roll 最大值，再 ÷0.85 换到均值分母。 |')
   lines.push('| **差 / 偏差%** | `YSIN圣遗物 − miao有效`。 |')
   lines.push('| **无效词条** | 该角色不吃、但装备上确实存在的属性条数（两边都不计入）。 |')
-  lines.push('| **词条分** | score.ts 的 computeScores 直接算的伤害比：`100 × D_default(你的副词条) / D_default(配平后的 bench)`。分子分母都用预设默认整套基线，把当前配置约掉，**只衡量副词条质量**——同一套副词条不管带什么武器 / 套装都给同一分（甘雨·融化基准 161）。倍率、命座、精炼在分子分母约掉，对所有流派精确。 |')
-  lines.push('| **数据分** | 同一引擎算的 `[A]/[C]`，C=默认整套（技能写死 9/9/9、0 命、1 精、默认主词条）。只有带等级倍率表的流派（目前仅甘雨·融化）随技能等级正确，其余默认按 9/9/9 算。 |')
+  lines.push('| **词条分** | `score.ts` 按 `100 × (A/A*) × (C/C*) × (R/R*) × (f_u/f_u*)` 算：分子是当前骨架 + 当前副词条，分母是同一骨架 + 标准词条并配平双爆；骨架因子两侧约掉。副词条账本由 `rollLedgerOf` 从面板反解。 |')
+  lines.push('| **数据分** | `100 × D(你的实际配置) / D(默认整套)`。当前伤害由 miao 算一次，参考伤害由 `D(P*) = 100·D(P)/T` 反推。默认整套为 9 级技能、0 命、1 精。 |')
   lines.push('')
   lines.push('> 剩余偏差来自两处算法差异：① **套装效果** —— YSIN 从面板读，套装给的 80 精通 / 18% 攻击都算词条；miao 的 eff 只统计副词条。② **小词条** —— YSIN 按白字折成百分比（一条满值小攻击通常 0.4 条），miao 按小词条自身最大值算（1 条）。')
   lines.push('>')
-  lines.push('> **词条分 / 数据分** 现在是伤害期望比值，由 score.ts 的 computeScores 算出，与 YSIN 网页版逐一核对：甘雨·融化 0 命 10/10/10 → 词条分 161、数据分 171；1 命 → 数据分 194（1 命降冰抗 15%）。')
+
   lines.push('>')
-  lines.push('> 充能：「充能词条一般不会参与评分，因为**不穿绝缘**的情况下，大部分角色充能与伤害无关」（装备页帮助第 3 条）。**绝缘 4 件套是例外** —— 4 件套把充能的 25% 转成爆发增伤，所以穿绝缘时充能按 5 折计入；香菱 19.4 条充能若全剔掉只有 114.8，与实测 120 对不上。')
+  lines.push('> 充能通过 `f_u` 进入伤害模型；没有这类机制的角色 `f_u ≡ 1`。网站那格「词条」按 `effectiveStatsFor` 的有效属性集合求和。')
   lines.push('')
   lines.push('## 对照表')
   lines.push('')

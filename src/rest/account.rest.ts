@@ -26,10 +26,10 @@ export const detail = (ctx: ApiContext): Handler => (c) => {
  * 账号级 YSIN 分数摘要 —— 首页卡片要一次看全所有角色的分数。
  * 走明细页那条路得每个角色发一次请求，所以这里一次算齐；口径与明细页一致（取第一个流派）。
  */
-export const ysinScores = (ctx: ApiContext): Handler => (c) => {
+export const ysinScores = (ctx: ApiContext): Handler => async (c) => {
   const uid = uidParam(c)
   if (uid === null) return fail(c, 400, 'bad_uid', 'UID 格式不对：应为 9 或 10 位纯数字')
-  const result = ctx.accounts.ysinScores(uid)
+  const result = await ctx.accounts.ysinScores(uid)
   if (result.kind === 'no_data') return fail(c, 404, 'no_data', noData(uid))
   return ok(c, { scores: result.scores })
 }

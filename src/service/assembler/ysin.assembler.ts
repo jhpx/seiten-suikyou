@@ -16,8 +16,10 @@ import { statLabel } from '../artifact.service.ts'
 import type { CharacterDbo } from '../../repository/dbo/character.ts'
 import type { YsinRow, YsinSchoolView, YsinScoreView, YsinView } from '../dto/ysin.dto.ts'
 
-/* 表格四行的顺序，也是 Rolls 的字段顺序。stat 是词条名查表用的键 */
-const ROWS: Array<{ key: keyof Rolls, stat: string }> = [
+/* 表格四行的顺序，也是展示用的四个词条键。stat 是词条名查表用的键。
+   充能只进 f_u（雷神），不进这张四行表，归到「未计入」 */
+type DisplayRollKey = 'atk' | 'em' | 'cpct' | 'cdmg'
+const ROWS: Array<{ key: DisplayRollKey, stat: string }> = [
   { key: 'atk', stat: 'atk' },
   { key: 'em', stat: 'mastery' },
   { key: 'cpct', stat: 'cpct' },
@@ -35,14 +37,14 @@ function skillLabel (zh: string, locale: string): string {
 }
 
 /** 一个角色 → YSIN 板块；没有匹配流派 / 搭不出面板时返回 null */
-export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
+export async function ysinViewOf (ch: CharacterDbo, locale: string): Promise<YsinView | null> {
   const profile = toMiaoProfile(ch)
   if (!profile) return null
   const charName = profile.char.name
   const group = schoolsFor(profile.id)
   if (!group || !group.schools.length) return null
 
-  const ysin = evaluateCharacter(ch)
+  const ysin = await evaluateCharacter(ch)
   if (!ysin) return null
 
   /* 面板上七个属性的词条数，按 key 查 */
@@ -65,7 +67,7 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
   }
 
   const schools: YsinSchoolView[] = group.schools.map(seed => {
-    const preset = presetOf(profile.id, seed)
+    const preset = presetOf(seed)
     /* 分数由网关 evaluateCharacter 用同一份 basis / rolls / preset 预先算好，
        这里直接取，避免两条计算路径出现漂移。详见 ysin.ts 的 scores 字段。 */
     const result = ysin.scores[seed.id]
@@ -92,11 +94,13 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
       subScore: result.subScore,
       gearScore: result.gearScore,
       benchTotal,
+      tagTotal: ysin.siteTagTotals[seed.id] ?? 0,
       rows,
       uncounted,
       dmgYou: result.dmgYou,
       dmgBench: result.dmgBench,
       dmgDefault: result.dmgDefault,
+      dmgCrit: result.dmgCrit,
       wText: seed.wText,
       aText: seed.aText
     }
@@ -105,7 +109,8 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
   return {
     charName,
     total: ysin.total,
-    counted: ysin.score.rolls,
+    /* 兼容字段：整装有效词条扣掉武器副词条，口径与角色 / 套装无关，界面不显示它 */
+    counted: ysin.artifactTotal,
     schools,
     current: schools[0]?.id ?? ''
   }
@@ -119,9 +124,9 @@ export function ysinViewOf (ch: CharacterDbo, locale: string): YsinView | null {
  * 没有适用流派（网站没有这个角色的流派数据）或 miao 不认识这个角色 → 两个分数都是 null，
  * 前端画破折号。这里不做任何换算，也不共用 miao 的评级。
  */
-export function ysinScoreOf (ch: CharacterDbo): YsinScoreView {
+export async function ysinScoreOf (ch: CharacterDbo): Promise<YsinScoreView> {
   const avatarId = ch.avatarId!
-  const ysin = evaluateCharacter(ch)
+  const ysin = await evaluateCharacter(ch)
   const seed = ysin ? schoolsFor(avatarId)?.schools[0] : null
   const result = seed ? ysin?.scores[seed.id] : null
   return {

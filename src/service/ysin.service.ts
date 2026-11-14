@@ -13,10 +13,10 @@ import { loadOneCharacter, notFound } from './character.service.ts'
 import { ysinScoreOf, ysinViewOf } from './assembler/ysin.assembler.ts'
 import type { AccountYsinResult, YsinResult } from './dto/ysin.dto.ts'
 
-export function characterYsin (db: Db, uid: number, avatarId: number, locale: string): YsinResult {
+export async function characterYsin (db: Db, uid: number, avatarId: number, locale: string): Promise<YsinResult> {
   const character = loadOneCharacter(db, uid, avatarId)
   if (!character) return notFound(db, uid, avatarId)
-  return { kind: 'ok', view: ysinViewOf(character, locale) }
+  return { kind: 'ok', view: await ysinViewOf(character, locale) }
 }
 
 /**
@@ -25,8 +25,9 @@ export function characterYsin (db: Db, uid: number, avatarId: number, locale: st
  * 口径与明细页一致：取第一个流派的词条分 / 数据分，没有适用流派的两个分数是 null。
  * 分数保持全精度，格式化留给展示层。
  */
-export function accountYsinScores (db: Db, uid: number): AccountYsinResult {
+export async function accountYsinScores (db: Db, uid: number): Promise<AccountYsinResult> {
   const account = repo.loadAccountWithCharacters(db, uid)
   if (!account) return { kind: 'no_data' }
-  return { kind: 'ok', scores: (account.characters || []).map(ysinScoreOf) }
+  const scores = await Promise.all((account.characters || []).map(ysinScoreOf))
+  return { kind: 'ok', scores }
 }
